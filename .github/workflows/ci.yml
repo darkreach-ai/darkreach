@@ -160,9 +160,16 @@ jobs:
           restore-keys: ${{ runner.os }}-cargo-
       - name: Apply migrations
         run: |
+          psql "$TEST_DATABASE_URL" -q -c "CREATE EXTENSION IF NOT EXISTS pgcrypto;"
           for f in supabase/migrations/*.sql; do
-            sed -e '/ALTER PUBLICATION/d' -e '/ENABLE ROW LEVEL SECURITY/d' -e '/^CREATE POLICY/d' "$f" \
-              | psql "$TEST_DATABASE_URL" -q 2>&1 || true
+            # Skip auth-dependent migration (requires Supabase auth.users)
+            [[ "$f" == *026_user_profiles* ]] && continue
+            perl -0777 -pe '
+              s/CREATE POLICY[^;]*;//gs;
+              s/DROP POLICY[^;]*;//gs;
+              s/^.*ALTER PUBLICATION.*$//gm;
+              s/^.*ENABLE ROW LEVEL SECURITY.*$//gm;
+            ' "$f" | psql "$TEST_DATABASE_URL" -q 2>&1 || true
           done
       - name: Run CLI tests (no DB)
         run: cargo test --test cli_tests -- help unknown factorial_missing kbn_missing palindromic_missing database_url

@@ -39,7 +39,7 @@ RUN mkdir src && echo 'fn main() {}' > src/main.rs \
 COPY src/ src/
 # Touch main.rs so cargo rebuilds it (not the cached dummy)
 RUN touch src/main.rs src/lib.rs \
-    && cargo build --release
+    && cargo build --release --lib --bins
 
 # ── Stage 2: Runtime ─────────────────────────────────────────────
 FROM debian:bookworm-slim AS runtime
