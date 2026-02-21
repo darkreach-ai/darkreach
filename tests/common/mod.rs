@@ -14,7 +14,7 @@
 //! # Architecture
 //!
 //! ```text
-//! ensure_schema() ──[Once]──> run_migrations()   (one-time DDL setup)
+//! ensure_schema() ──[OnceCell]──> run_migrations()   (one-time DDL setup)
 //!       |
 //! setup_test_db() ──────────> truncate_all_tables()  (per-test DML reset)
 //!       |                         |
@@ -23,7 +23,7 @@
 //!   Database instance
 //! ```
 //!
-//! The `Once` guard in `ensure_schema` means migrations run exactly once per
+//! The `OnceCell` guard in `ensure_schema` means migrations run exactly once per
 //! `cargo test` invocation, regardless of how many tests call `setup_test_db`.
 //! Table truncation runs before every individual test to guarantee isolation.
 //!
@@ -46,7 +46,7 @@
 #![allow(dead_code)]
 
 use std::path::PathBuf;
-use std::sync::Once;
+use tokio::sync::OnceCell;
 
 /// Returns the test database URL from the `TEST_DATABASE_URL` environment variable.
 ///
@@ -72,29 +72,25 @@ pub fn has_test_db() -> bool {
 
 /// One-time schema initialization guard.
 ///
-/// `std::sync::Once` ensures `run_migrations` executes at most once per process,
+/// `tokio::sync::OnceCell` ensures `run_migrations` executes at most once per process,
 /// even when multiple `#[tokio::test]` functions run concurrently or sequentially.
 /// This avoids redundant DDL operations and "table already exists" errors.
-static SCHEMA_INIT: Once = Once::new();
+/// Unlike `std::sync::Once`, this is fully async and won't deadlock on
+/// tokio's `current_thread` runtime (the default for `#[tokio::test]`).
+static SCHEMA_INIT: OnceCell<()> = OnceCell::const_new();
 
 /// Runs all database migrations exactly once per test suite invocation.
 ///
-/// Uses `std::thread::spawn` with the current tokio runtime handle to avoid
-/// "cannot start a runtime from within a runtime" panics when called from
-/// `#[tokio::test]` contexts. The `Once` guard ensures migrations execute
-/// at most once per process.
-pub fn ensure_schema() {
-    SCHEMA_INIT.call_once(|| {
-        let handle = tokio::runtime::Handle::current();
-        std::thread::spawn(move || {
-            handle.block_on(async {
-                let pool = sqlx::PgPool::connect(&test_db_url()).await.unwrap();
-                run_migrations(&pool).await;
-            });
+/// Fully async — safe to call from `#[tokio::test]` contexts regardless of
+/// runtime flavor (`current_thread` or `multi_thread`). The `OnceCell` guard
+/// ensures migrations execute at most once per process.
+pub async fn ensure_schema() {
+    SCHEMA_INIT
+        .get_or_init(|| async {
+            let pool = sqlx::PgPool::connect(&test_db_url()).await.unwrap();
+            run_migrations(&pool).await;
         })
-        .join()
-        .unwrap();
-    });
+        .await;
 }
 
 /// Creates a fresh, empty test database connection with schema guaranteed.
@@ -113,7 +109,7 @@ pub fn ensure_schema() {
 /// Panics if the database connection fails. This is acceptable in a test context
 /// since a missing database means the test environment is misconfigured.
 pub async fn setup_test_db() -> darkreach::db::Database {
-    ensure_schema();
+    ensure_schema().await;
     let db = darkreach::db::Database::connect(&test_db_url())
         .await
         .expect("Failed to connect to test database");
