@@ -28,7 +28,7 @@ const columns = [
         href: "https://github.com/darkreach-ai/darkreach",
         external: true,
       },
-      { label: "Discord", href: "#" },
+      { label: "Discord", href: "https://discord.gg/2Khf4t8M33", external: true },
       { label: "Leaderboard", href: "/leaderboard" },
       { label: "Contributing", href: "/docs/contributing" },
     ],

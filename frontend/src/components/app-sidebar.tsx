@@ -17,6 +17,7 @@ import {
   Trophy,
   User,
   Zap,
+  MessageCircle,
 } from "lucide-react";
 import { useWs } from "@/contexts/websocket-context";
 import { useAuth } from "@/contexts/auth-context";
@@ -135,6 +136,14 @@ export function AppSidebar() {
                       <BookOpen />
                       <span>Docs</span>
                     </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild tooltip="Discord">
+                    <a href="https://discord.gg/2Khf4t8M33" target="_blank" rel="noopener noreferrer">
+                      <MessageCircle />
+                      <span>Discord</span>
+                    </a>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               </SidebarMenu>
@@ -315,6 +324,14 @@ export function AppSidebar() {
                 <BookOpen />
                 <span>Docs</span>
               </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild tooltip="Discord">
+              <a href="https://discord.gg/2Khf4t8M33" target="_blank" rel="noopener noreferrer">
+                <MessageCircle />
+                <span>Discord</span>
+              </a>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
