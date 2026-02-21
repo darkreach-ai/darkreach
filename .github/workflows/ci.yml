@@ -160,12 +160,16 @@ jobs:
           restore-keys: ${{ runner.os }}-cargo-
       - name: Prepare test database
         run: psql "$TEST_DATABASE_URL" -q -c "CREATE EXTENSION IF NOT EXISTS pgcrypto;"
+      - name: Build all test binaries
+        run: cargo test --no-run --test db_integration --test api_integration --test security_tests --test cli_tests
       - name: Run CLI tests (no DB)
         run: cargo test --test cli_tests -- help unknown factorial_missing kbn_missing palindromic_missing database_url
       - name: Run DB integration tests
         run: cargo test --test db_integration -- --test-threads=1
+        timeout-minutes: 10
       - name: Run API integration tests
         run: cargo test --test api_integration -- --test-threads=1
+        timeout-minutes: 5
       - name: Run security tests
         run: cargo test --test security_tests -- --test-threads=1
       - name: Run CLI search tests
