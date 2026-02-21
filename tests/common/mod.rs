@@ -79,17 +79,21 @@ static SCHEMA_INIT: Once = Once::new();
 
 /// Runs all database migrations exactly once per test suite invocation.
 ///
-/// Creates a temporary Tokio runtime to execute the async migration runner
-/// synchronously inside the `Once::call_once` closure. Subsequent calls are
-/// no-ops. This is safe because DDL (CREATE TABLE, etc.) is idempotent after
-/// the first successful run within a test database lifecycle.
+/// Uses `std::thread::spawn` with the current tokio runtime handle to avoid
+/// "cannot start a runtime from within a runtime" panics when called from
+/// `#[tokio::test]` contexts. The `Once` guard ensures migrations execute
+/// at most once per process.
 pub fn ensure_schema() {
     SCHEMA_INIT.call_once(|| {
-        let rt = tokio::runtime::Runtime::new().unwrap();
-        rt.block_on(async {
-            let pool = sqlx::PgPool::connect(&test_db_url()).await.unwrap();
-            run_migrations(&pool).await;
-        });
+        let handle = tokio::runtime::Handle::current();
+        std::thread::spawn(move || {
+            handle.block_on(async {
+                let pool = sqlx::PgPool::connect(&test_db_url()).await.unwrap();
+                run_migrations(&pool).await;
+            });
+        })
+        .join()
+        .unwrap();
     });
 }
 
