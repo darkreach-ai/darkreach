@@ -37,6 +37,8 @@ RUN mkdir src && echo 'fn main() {}' > src/main.rs \
     && rm -rf src
 
 COPY src/ src/
+COPY benches/ benches/
+COPY tests/ tests/
 # Touch main.rs so cargo rebuilds it (not the cached dummy)
 RUN touch src/main.rs src/lib.rs \
     && cargo build --release --lib --bins

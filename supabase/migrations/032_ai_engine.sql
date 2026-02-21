@@ -63,7 +63,9 @@ CREATE INDEX IF NOT EXISTS idx_ai_engine_decisions_form
 
 -- Cost observations view for the LEARN phase OLS fitting.
 -- Aggregates timing data from completed work blocks.
-CREATE OR REPLACE VIEW cost_observations AS
+-- DROP first because column names changed from migration 029's version.
+DROP VIEW IF EXISTS cost_observations;
+CREATE VIEW cost_observations AS
 SELECT
     sj.search_type AS form,
     -- Estimate digits from range midpoint using the search type
