@@ -48,17 +48,19 @@ pub(super) async fn handler_api_searches_create(
 
     match state
         .db
-        .create_search_job(&search_type, &params_json, range_start, range_end, block_size)
+        .create_search_job(
+            &search_type,
+            &params_json,
+            range_start,
+            range_end,
+            block_size,
+        )
         .await
     {
         Ok(job_id) => {
             info!(
                 job_id,
-                search_type,
-                range_start,
-                range_end,
-                block_size,
-                "search job created"
+                search_type, range_start, range_end, block_size, "search job created"
             );
             (
                 StatusCode::CREATED,

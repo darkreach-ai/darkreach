@@ -102,6 +102,45 @@ pub fn resolve_sieve_limit(sieve_limit: u64, candidate_bits: u64, n_range: u64) 
     }
 }
 
+/// Compute optimal sieve depth using empirical timing data from cost calibrations.
+///
+/// Uses the GIMPS crossover heuristic: continue sieving while the marginal cost
+/// of the sieve per prime `p` is less than the expected test cost saving:
+///
+/// ```text
+/// T_sieve(p) < T_test / p
+/// ```
+///
+/// where `T_sieve(p) ≈ sqrt(p)` operations (BSGS sieve cost), and `T_test` is
+/// the empirical seconds-per-candidate from the cost calibration table.
+///
+/// `test_secs`: measured seconds per candidate from cost calibrations
+/// `n_range`: number of candidates being sieved (amortizes BSGS setup)
+///
+/// Returns recommended sieve limit (capped at 10^9).
+pub fn calibrated_sieve_depth(test_secs: f64, n_range: u64) -> u64 {
+    if test_secs <= 0.0 || n_range == 0 {
+        return SIEVE_LIMIT;
+    }
+
+    // Convert test_secs to "operation units" for comparison with sieve cost.
+    // Assume ~1 billion operations/sec on modern hardware, so:
+    //   T_test_ops = test_secs * 1e9
+    //
+    // Crossover condition: sqrt(p) / n_range < T_test_ops / p
+    //   (sieve cost per candidate per prime vs. test cost eliminated per prime)
+    //   Rearranging: p^1.5 < T_test_ops * n_range
+    //   So: optimal_p = (T_test_ops * n_range)^(2/3)
+    let ops_per_sec: f64 = 1e9;
+    let test_ops = test_secs * ops_per_sec;
+    let budget = test_ops * (n_range as f64).max(1.0);
+
+    let depth = budget.powf(2.0 / 3.0) as u64;
+
+    // Clamp to [1M, 1B]
+    depth.clamp(1_000_000, 1_000_000_000)
+}
+
 /// Generate all primes up to `limit` using a wheel-30 sieve.
 ///
 /// Uses a mod-30 wheel to store only numbers coprime to {2,3,5}, reducing
@@ -1034,6 +1073,75 @@ mod tests {
         // sieve_limit=0 should auto-tune
         let depth = resolve_sieve_limit(0, 10_000, 10000);
         assert!(depth >= 1_000_000);
+    }
+
+    // ── Calibrated Sieve Depth ────────────────────────────────────────
+
+    /// With expensive candidates (10s each) and a large range (10K candidates),
+    /// calibrated sieve should go deeper than the 10M default.
+    #[test]
+    fn calibrated_sieve_depth_expensive_candidates() {
+        let depth = calibrated_sieve_depth(10.0, 10_000);
+        assert!(
+            depth > SIEVE_LIMIT,
+            "expensive candidates should push sieve deeper than default 10M, got {}",
+            depth
+        );
+    }
+
+    /// With cheap candidates (0.001s each) and a small range, calibrated sieve
+    /// should stay at the minimum (1M).
+    #[test]
+    fn calibrated_sieve_depth_cheap_candidates() {
+        let depth = calibrated_sieve_depth(0.001, 100);
+        assert_eq!(
+            depth, 1_000_000,
+            "cheap candidates should use minimum sieve depth"
+        );
+    }
+
+    /// Zero/negative test_secs should fall back to the default sieve limit.
+    #[test]
+    fn calibrated_sieve_depth_zero_test_secs() {
+        assert_eq!(calibrated_sieve_depth(0.0, 1000), SIEVE_LIMIT);
+        assert_eq!(calibrated_sieve_depth(-1.0, 1000), SIEVE_LIMIT);
+    }
+
+    /// Zero range should fall back to default.
+    #[test]
+    fn calibrated_sieve_depth_zero_range() {
+        assert_eq!(calibrated_sieve_depth(1.0, 0), SIEVE_LIMIT);
+    }
+
+    /// Very expensive candidates (1000s each) should not exceed 1B cap.
+    #[test]
+    fn calibrated_sieve_depth_capped_at_1b() {
+        let depth = calibrated_sieve_depth(1000.0, 1_000_000);
+        assert!(
+            depth <= 1_000_000_000,
+            "should be capped at 1B, got {}",
+            depth
+        );
+    }
+
+    /// Depth should increase monotonically with test cost.
+    #[test]
+    fn calibrated_sieve_depth_monotonic_with_cost() {
+        let d1 = calibrated_sieve_depth(0.1, 10_000);
+        let d2 = calibrated_sieve_depth(1.0, 10_000);
+        let d3 = calibrated_sieve_depth(10.0, 10_000);
+        assert!(
+            d1 <= d2,
+            "depth should increase with cost: {} <= {}",
+            d1,
+            d2
+        );
+        assert!(
+            d2 <= d3,
+            "depth should increase with cost: {} <= {}",
+            d2,
+            d3
+        );
     }
 
     // ── BitSieve (Packed u64 Bitmap) ───────────────────────────────────

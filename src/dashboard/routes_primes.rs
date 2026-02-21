@@ -26,13 +26,10 @@ use std::sync::Arc;
 /// Replaces `supabase.rpc("get_stats")`. Returns total prime count,
 /// per-form counts, and largest prime info. Reads from the
 /// `mv_dashboard_stats` materialized view when available.
-pub(super) async fn handler_api_stats(
-    State(state): State<Arc<AppState>>,
-) -> impl IntoResponse {
-    let result: Result<serde_json::Value, _> =
-        sqlx::query_scalar("SELECT get_stats()")
-            .fetch_one(state.db.read_pool())
-            .await;
+pub(super) async fn handler_api_stats(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    let result: Result<serde_json::Value, _> = sqlx::query_scalar("SELECT get_stats()")
+        .fetch_one(state.db.read_pool())
+        .await;
     match result {
         Ok(json) => Json(json).into_response(),
         Err(e) => (
@@ -108,10 +105,9 @@ pub(super) async fn handler_api_distribution(
 pub(super) async fn handler_api_leaderboard(
     State(state): State<Arc<AppState>>,
 ) -> impl IntoResponse {
-    let result: Result<serde_json::Value, _> =
-        sqlx::query_scalar("SELECT get_form_leaderboard()")
-            .fetch_one(state.db.read_pool())
-            .await;
+    let result: Result<serde_json::Value, _> = sqlx::query_scalar("SELECT get_form_leaderboard()")
+        .fetch_one(state.db.read_pool())
+        .await;
     match result {
         Ok(json) => Json(json).into_response(),
         Err(e) => (
@@ -147,7 +143,10 @@ pub(super) async fn handler_api_primes_list(
     let limit = params.limit.unwrap_or(50).min(1000);
     let offset = params.offset.unwrap_or(0);
     let tags = params.tags.map(|t| {
-        t.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect()
+        t.split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect()
     });
     let filter = crate::db::PrimeFilter {
         form: params.form,
@@ -173,6 +172,29 @@ pub(super) async fn handler_api_primes_list(
         }))
         .into_response(),
         (Err(e), _) | (_, Err(e)) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": e.to_string()})),
+        )
+            .into_response(),
+    }
+}
+
+/// `GET /api/stats/tags` — Tag distribution across all primes.
+///
+/// Returns `[{tag, count}]` pairs from the `tags` column, ordered by
+/// frequency descending. Used by the dashboard tag distribution chart.
+pub(super) async fn handler_api_tag_distribution(
+    State(state): State<Arc<AppState>>,
+) -> impl IntoResponse {
+    match state.db.get_tag_distribution().await {
+        Ok(rows) => {
+            let data: Vec<serde_json::Value> = rows
+                .into_iter()
+                .map(|(tag, count)| serde_json::json!({"tag": tag, "count": count}))
+                .collect();
+            Json(serde_json::json!(data)).into_response()
+        }
+        Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({"error": e.to_string()})),
         )

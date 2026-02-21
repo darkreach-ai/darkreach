@@ -68,15 +68,8 @@ fn decode_jwt(token: &str) -> Result<SupabaseClaims, String> {
 ///
 /// Call this from handlers that need optional auth. For required auth,
 /// use the `RequireAdmin` extractor instead.
-pub async fn extract_auth_user(
-    state: &Arc<AppState>,
-    parts: &Parts,
-) -> Option<AuthUser> {
-    let auth_header = parts
-        .headers
-        .get(header::AUTHORIZATION)?
-        .to_str()
-        .ok()?;
+pub async fn extract_auth_user(state: &Arc<AppState>, parts: &Parts) -> Option<AuthUser> {
+    let auth_header = parts.headers.get(header::AUTHORIZATION)?.to_str().ok()?;
 
     let token = auth_header.strip_prefix("Bearer ")?;
     let claims = decode_jwt(token).ok()?;

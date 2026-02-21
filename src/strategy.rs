@@ -177,10 +177,7 @@ pub async fn survey(db: &Database) -> Result<Survey> {
     let total_cores: u32 = workers.iter().map(|w| w.cores as u32).sum();
 
     // Count idle workers: those whose search_type is empty or "idle"
-    let busy_workers = active_jobs
-        .iter()
-        .filter(|j| j.status == "running")
-        .count() as u32;
+    let busy_workers = active_jobs.iter().filter(|j| j.status == "running").count() as u32;
     let idle_workers = worker_count.saturating_sub(busy_workers.min(worker_count));
 
     Ok(Survey {
@@ -197,10 +194,7 @@ pub async fn survey(db: &Database) -> Result<Survey> {
 // ── Score ────────────────────────────────────────────────────────
 
 /// Score all 12 forms against the current survey data.
-pub fn score_forms(
-    survey: &Survey,
-    config: &crate::db::StrategyConfigRow,
-) -> Vec<FormScore> {
+pub fn score_forms(survey: &Survey, config: &crate::db::StrategyConfigRow) -> Vec<FormScore> {
     let mut scores: Vec<FormScore> = Vec::with_capacity(ALL_FORMS.len());
 
     for &form in ALL_FORMS {
@@ -240,7 +234,7 @@ pub fn score_forms(
             .find(|y| y.form == form)
             .map(|y| y.yield_rate)
             .unwrap_or(0.001); // Default: assume low but non-zero yield
-        // Normalize: log scale to handle wide range (1e-8 to 1e-1)
+                               // Normalize: log scale to handle wide range (1e-8 to 1e-1)
         let yield_score = ((yr * 1e6).ln().max(0.0) / 15.0).min(1.0);
 
         // 3. Cost efficiency: yield per compute second
@@ -301,7 +295,11 @@ pub fn score_forms(
     }
 
     // Sort by total score descending
-    scores.sort_by(|a, b| b.total.partial_cmp(&a.total).unwrap_or(std::cmp::Ordering::Equal));
+    scores.sort_by(|a, b| {
+        b.total
+            .partial_cmp(&a.total)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     scores
 }
 
@@ -503,10 +501,7 @@ pub fn decide(
 // ── Execute ─────────────────────────────────────────────────────
 
 /// Execute a single strategy decision: log it and perform the action.
-pub async fn execute_decision(
-    db: &Database,
-    decision: &StrategyDecision,
-) -> Result<()> {
+pub async fn execute_decision(db: &Database, decision: &StrategyDecision) -> Result<()> {
     let mut project_id = None;
     let mut search_job_id = None;
 
@@ -792,10 +787,7 @@ mod tests {
         assert!(config.project.name.contains("kbn"));
         assert_eq!(config.target.range_start, Some(1001));
         assert!(config.strategy.auto_strategy);
-        assert_eq!(
-            config.budget.as_ref().unwrap().max_cost_usd,
-            Some(25.0)
-        );
+        assert_eq!(config.budget.as_ref().unwrap().max_cost_usd, Some(25.0));
     }
 
     #[test]
@@ -832,7 +824,11 @@ mod tests {
         assert_eq!(scores.len(), 12);
         // All forms should have some score (coverage_gap = 1.0, record_gap = 1.0)
         for s in &scores {
-            assert!(s.total >= 0.0, "Score for {} should be non-negative", s.form);
+            assert!(
+                s.total >= 0.0,
+                "Score for {} should be non-negative",
+                s.form
+            );
         }
     }
 

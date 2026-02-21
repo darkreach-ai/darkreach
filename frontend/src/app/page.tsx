@@ -31,6 +31,8 @@ import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 import { DiscoveryTimeline } from "@/components/charts/discovery-timeline";
 import { DigitDistribution } from "@/components/charts/digit-distribution";
+import { TagDistribution } from "@/components/charts/tag-distribution";
+import { useTagDistribution } from "@/hooks/use-prime-verification";
 import { NewSearchDialog } from "@/components/new-search-dialog";
 import { InsightCards } from "@/components/insight-cards";
 import { FormLeaderboard } from "@/components/form-leaderboard";
@@ -145,6 +147,7 @@ export default function Dashboard() {
   const { timeline } = useTimeline();
   const { distribution } = useDistribution();
   const { entries: leaderboardEntries } = useFormLeaderboard();
+  const { tags: tagDistributionData } = useTagDistribution();
 
   const [newSearchOpen, setNewSearchOpen] = useState(false);
   const [addServerOpen, setAddServerOpen] = useState(false);
@@ -445,8 +448,11 @@ export default function Dashboard() {
           <DiscoveryTimeline data={timeline} />
         </div>
 
-        {/* Digit distribution full width */}
-        <DigitDistribution data={distribution} />
+        {/* Digit distribution + Tag distribution side by side */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <DigitDistribution data={distribution} />
+          <TagDistribution data={tagDistributionData} />
+        </div>
       </section>
 
       <PrimesTable stats={stats} />

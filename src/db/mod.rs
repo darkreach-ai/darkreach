@@ -33,12 +33,14 @@
 //! via `tokio::runtime::Handle::block_on`. This is safe because Rayon threads
 //! are not Tokio tasks — they won't deadlock the executor.
 
-pub mod ai_engine;
 mod agents;
+pub mod ai_engine;
 mod calibrations;
 mod jobs;
 mod memory;
 mod observability;
+pub mod operators;
+pub mod prime_verification;
 mod primes;
 mod projects;
 mod records;
@@ -46,7 +48,6 @@ mod releases;
 mod roles;
 mod schedules;
 pub mod strategy;
-pub mod operators;
 pub mod trust;
 /// Backward compatibility re-export.
 pub mod volunteers {
@@ -54,19 +55,22 @@ pub mod volunteers {
 }
 mod user_profiles;
 mod workers;
-pub use user_profiles::UserProfile;
 pub use ai_engine::{
     AiEngineDecisionRow, AiEngineStateRow, DecisionOutcomeCandidate, DecisionWithOutcome,
     WorkerSpeedRow,
 };
-pub use strategy::{FormYieldRateRow, StrategyConfigRow, StrategyDecisionRow};
-pub use trust::{NodeReliability, VerificationBlock, VerificationOutcome, WorkBlockWithCheckpoint};
 pub use observability::{
     MetricPoint, MetricSample, MetricSeries, SystemLogEntry, SystemLogRow, WorkerRateRow,
+};
+pub use prime_verification::{
+    PrimeVerificationQueueStats, PrimeVerificationResultRow, PrimeVerificationTask,
 };
 pub use releases::{
     WorkerReleaseAdoptionRow, WorkerReleaseChannelRow, WorkerReleaseEventRow, WorkerReleaseRow,
 };
+pub use strategy::{FormYieldRateRow, StrategyConfigRow, StrategyDecisionRow};
+pub use trust::{NodeReliability, VerificationBlock, VerificationOutcome, WorkBlockWithCheckpoint};
+pub use user_profiles::UserProfile;
 
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
@@ -493,7 +497,12 @@ impl Database {
             Err(_) => None,
         };
 
-        Ok(Database { pool, read_pool, max_connections: max_conn, redis })
+        Ok(Database {
+            pool,
+            read_pool,
+            max_connections: max_conn,
+            redis,
+        })
     }
 
     /// Get a reference to the underlying connection pool.

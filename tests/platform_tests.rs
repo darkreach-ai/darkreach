@@ -65,7 +65,16 @@ fn test_current_os_is_known() {
 #[test]
 fn test_current_arch_is_known() {
     let arch = std::env::consts::ARCH;
-    let known = ["x86_64", "x86", "aarch64", "arm", "mips", "mips64", "powerpc64", "s390x"];
+    let known = [
+        "x86_64",
+        "x86",
+        "aarch64",
+        "arm",
+        "mips",
+        "mips64",
+        "powerpc64",
+        "s390x",
+    ];
     assert!(
         known.contains(&arch),
         "Arch '{}' is not in the known set: {:?}",
@@ -82,10 +91,7 @@ fn test_current_arch_is_known() {
 fn test_cpu_model_not_empty() {
     // Replicate the operator.rs cpu_model() logic since it's private
     let model = get_cpu_model();
-    assert!(
-        !model.is_empty(),
-        "CPU model should not be empty"
-    );
+    assert!(!model.is_empty(), "CPU model should not be empty");
     // On real hardware, "unknown" means the detection failed
     // We allow it but warn — in CI containers /proc/cpuinfo may be absent
     if model == "unknown" {
@@ -136,10 +142,7 @@ fn test_hostname_not_empty() {
         .expect("hostname should be valid UTF-8")
         .trim()
         .to_string();
-    assert!(
-        !hostname.is_empty(),
-        "System hostname should not be empty"
-    );
+    assert!(!hostname.is_empty(), "System hostname should not be empty");
 }
 
 // ============================================================================
@@ -230,7 +233,11 @@ fn test_checkpoint_path_with_unicode() {
     checkpoint::save(&path, &cp).unwrap();
     let loaded = checkpoint::load(&path).expect("Should load checkpoint from Unicode path");
     match loaded {
-        checkpoint::Checkpoint::Palindromic { digit_count, half_value, .. } => {
+        checkpoint::Checkpoint::Palindromic {
+            digit_count,
+            half_value,
+            ..
+        } => {
             assert_eq!(digit_count, 7);
             assert_eq!(half_value, "1234");
         }
@@ -255,7 +262,10 @@ fn test_config_dir_creation_nested() {
         .join("f");
 
     std::fs::create_dir_all(&deep_path).unwrap();
-    assert!(deep_path.exists(), "Deeply nested directory should be created");
+    assert!(
+        deep_path.exists(),
+        "Deeply nested directory should be created"
+    );
     assert!(deep_path.is_dir(), "Path should be a directory");
 
     // Verify we can write a file inside the deepest directory
@@ -389,11 +399,7 @@ fn test_pfgw_detection() {
     use darkreach::pfgw;
 
     // Initialize with permissive settings (min_digits=0, no specific binary path)
-    pfgw::init(
-        0,
-        None,
-        std::time::Duration::from_secs(30),
-    );
+    pfgw::init(0, None, std::time::Duration::from_secs(30));
 
     // Test with a known small prime: 7! + 1 = 5041 = 71 * 71 (composite)
     let candidate = Integer::from(Integer::factorial(7)) + 1u32;
@@ -423,11 +429,7 @@ fn test_prst_detection() {
     use rug::ops::Pow;
 
     // Initialize with permissive settings
-    prst::init(
-        0,
-        None,
-        std::time::Duration::from_secs(30),
-    );
+    prst::init(0, None, std::time::Duration::from_secs(30));
 
     // Test with a known Proth prime: 3*2^2 + 1 = 13
     let candidate = Integer::from(3u32) * Integer::from(2u32).pow(2u32) + 1u32;
@@ -451,9 +453,7 @@ fn test_prst_detection() {
 /// (`tar -xzf <archive> -C <dir>`). Without tar, workers cannot auto-update.
 #[test]
 fn test_tar_available() {
-    let output = std::process::Command::new("tar")
-        .arg("--version")
-        .output();
+    let output = std::process::Command::new("tar").arg("--version").output();
 
     match output {
         Ok(o) => {
@@ -477,13 +477,9 @@ fn test_hostname_command_available() {
         .output()
         .expect("hostname command should be available");
 
-    assert!(
-        output.status.success(),
-        "hostname command should succeed"
-    );
+    assert!(output.status.success(), "hostname command should succeed");
 
-    let hostname = String::from_utf8(output.stdout)
-        .expect("hostname should be valid UTF-8");
+    let hostname = String::from_utf8(output.stdout).expect("hostname should be valid UTF-8");
     assert!(
         !hostname.trim().is_empty(),
         "hostname should produce non-empty output"
@@ -599,8 +595,8 @@ fn test_gmp_thread_safety() {
 
     // Known primes up to 101
     let known_primes: Vec<u32> = vec![
-        2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83,
-        89, 97, 101,
+        2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89,
+        97, 101,
     ];
 
     // Run 100 parallel primality tests across rayon's thread pool
@@ -636,7 +632,11 @@ fn test_large_sieve_allocation() {
     let limit = 10_000_000;
     let sieve_bits = sieve::BitSieve::new_all_set(limit);
 
-    assert_eq!(sieve_bits.len(), limit, "Sieve should have requested length");
+    assert_eq!(
+        sieve_bits.len(),
+        limit,
+        "Sieve should have requested length"
+    );
     assert!(!sieve_bits.is_empty(), "Sieve should not be empty");
 
     // Verify first and last bits are set
@@ -775,8 +775,8 @@ fn test_checkpoint_large_state() {
         checkpoint::save(&path, cp)
             .unwrap_or_else(|e| panic!("Failed to save {} checkpoint: {}", name, e));
 
-        let loaded = checkpoint::load(&path)
-            .unwrap_or_else(|| panic!("Failed to load {} checkpoint", name));
+        let loaded =
+            checkpoint::load(&path).unwrap_or_else(|| panic!("Failed to load {} checkpoint", name));
 
         // Verify round-trip by re-serializing
         let original_json = serde_json::to_string(cp).unwrap();
@@ -807,12 +807,7 @@ fn test_batch_generation_memory_bounded() {
 
     // Verify the primes are sorted (invariant of the sieve)
     for w in primes.windows(2) {
-        assert!(
-            w[0] < w[1],
-            "Primes should be sorted: {} >= {}",
-            w[0],
-            w[1]
-        );
+        assert!(w[0] < w[1], "Primes should be sorted: {} >= {}", w[0], w[1]);
     }
 
     // Verify first and last values
@@ -852,10 +847,7 @@ fn test_rayon_thread_count_matches_system() {
         cpu_count
     );
 
-    eprintln!(
-        "rayon threads: {}, CPU cores: {}",
-        rayon_threads, cpu_count
-    );
+    eprintln!("rayon threads: {}, CPU cores: {}", rayon_threads, cpu_count);
 }
 
 /// Test 25: Parallel primality testing via rayon must produce correct results
@@ -1047,10 +1039,14 @@ fn test_concurrent_stop_flag_access() {
 
     // All threads should complete without panicking
     for handle in writer_handles {
-        handle.join().expect("Writer thread should complete without panic");
+        handle
+            .join()
+            .expect("Writer thread should complete without panic");
     }
     for handle in reader_handles {
-        let (_true_count, _false_count) = handle.join().expect("Reader thread should complete without panic");
+        let (_true_count, _false_count) = handle
+            .join()
+            .expect("Reader thread should complete without panic");
     }
 
     // The final flag state should be a valid boolean (trivially true for AtomicBool)

@@ -822,7 +822,10 @@ async fn operator_register_endpoint() {
     )
     .await;
     assert_eq!(status, StatusCode::CREATED);
-    assert!(json.get("api_key").is_some(), "Response should contain api_key");
+    assert!(
+        json.get("api_key").is_some(),
+        "Response should contain api_key"
+    );
     assert_eq!(json["username"], "api_test_user");
 
     // Duplicate registration returns 409 Conflict

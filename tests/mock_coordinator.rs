@@ -258,7 +258,6 @@ struct MockState {
     register_counter: u64,
 
     // ── Request logs ────────────────────────────────────────────
-
     /// All `POST /api/v1/register` payloads received.
     registrations: Vec<RecordedRegistration>,
 
@@ -643,7 +642,11 @@ async fn handle_worker_register(
         auth_token: Some(token),
     };
 
-    state.lock().unwrap().worker_registrations.push(registration);
+    state
+        .lock()
+        .unwrap()
+        .worker_registrations
+        .push(registration);
 
     (StatusCode::OK, Json(serde_json::json!({"ok": true})))
 }
@@ -725,10 +728,7 @@ async fn handle_work(
                 "block_end": wa.block_end,
             })),
         ),
-        None => (
-            StatusCode::NO_CONTENT,
-            Json(serde_json::json!(null)),
-        ),
+        None => (StatusCode::NO_CONTENT, Json(serde_json::json!(null))),
     }
 }
 
@@ -863,7 +863,10 @@ mod tests {
         assert_eq!(resp.status(), 201);
 
         let json: serde_json::Value = resp.json().await.unwrap();
-        assert!(json["api_key"].as_str().unwrap().starts_with("test-api-key-mock-"));
+        assert!(json["api_key"]
+            .as_str()
+            .unwrap()
+            .starts_with("test-api-key-mock-"));
         assert_eq!(json["username"].as_str().unwrap(), "alice");
 
         // Verify the registration was recorded.

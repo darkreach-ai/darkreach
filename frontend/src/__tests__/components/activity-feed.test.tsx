@@ -45,6 +45,7 @@ function makePrime(overrides: Partial<PrimeRecord> = {}): PrimeRecord {
     verified_at: null,
     verification_method: null,
     verification_tier: null,
+    tags: ["factorial"],
     ...overrides,
   };
 }

@@ -157,7 +157,10 @@ pub fn search(
     let sieve_limit = sieve::resolve_sieve_limit(sieve_limit, candidate_bits, n_range);
 
     let sieve_primes = sieve::generate_primes(sieve_limit);
-    info!(prime_count = sieve_primes.len(), sieve_limit, "sieve initialized");
+    info!(
+        prime_count = sieve_primes.len(),
+        sieve_limit, "sieve initialized"
+    );
     info!(search_count, start, end, "testing primes in range");
 
     // Determine resume point from checkpoint

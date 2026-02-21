@@ -1110,8 +1110,16 @@ mod tests {
     fn context_files_all_domains_have_paths() {
         for &(domain, path) in CONTEXT_FILES {
             assert!(!domain.is_empty(), "Domain name should not be empty");
-            assert!(!path.is_empty(), "Path should not be empty for domain {}", domain);
-            assert!(path.ends_with(".md"), "Context file should be .md: {}", path);
+            assert!(
+                !path.is_empty(),
+                "Path should not be empty for domain {}",
+                domain
+            );
+            assert!(
+                path.ends_with(".md"),
+                "Context file should be .md: {}",
+                path
+            );
         }
     }
 
@@ -1120,7 +1128,11 @@ mod tests {
     fn roadmap_files_all_domains_have_paths() {
         for &(domain, path) in ROADMAP_FILES {
             assert!(!domain.is_empty());
-            assert!(path.ends_with(".md"), "Roadmap file should be .md: {}", path);
+            assert!(
+                path.ends_with(".md"),
+                "Roadmap file should be .md: {}",
+                path
+            );
         }
     }
 
@@ -1129,8 +1141,14 @@ mod tests {
     #[test]
     fn detect_domains_case_insensitive() {
         let domains = detect_domains("SIEVE optimization", "DEPLOY to production");
-        assert!(domains.contains(&"engine"), "Should detect 'SIEVE' case-insensitively");
-        assert!(domains.contains(&"deploy"), "Should detect 'DEPLOY' case-insensitively");
+        assert!(
+            domains.contains(&"engine"),
+            "Should detect 'SIEVE' case-insensitively"
+        );
+        assert!(
+            domains.contains(&"deploy"),
+            "Should detect 'DEPLOY' case-insensitively"
+        );
     }
 
     // ── Exhaustive Keyword Coverage ───────────────────────────────
@@ -1141,10 +1159,32 @@ mod tests {
     #[test]
     fn detect_domains_all_engine_keywords() {
         let keywords = [
-            "sieve", "primality", "factorial", "kbn", "gmp", "rug", "proof",
-            "algorithm", "palindromic", "proth", "llr", "pocklington", "montgomery",
-            "morrison", "repunit", "wagstaff", "cullen", "woodall", "carol", "kynea",
-            "twin", "sophie", "germain", "fermat", "primorial", "near_repdigit",
+            "sieve",
+            "primality",
+            "factorial",
+            "kbn",
+            "gmp",
+            "rug",
+            "proof",
+            "algorithm",
+            "palindromic",
+            "proth",
+            "llr",
+            "pocklington",
+            "montgomery",
+            "morrison",
+            "repunit",
+            "wagstaff",
+            "cullen",
+            "woodall",
+            "carol",
+            "kynea",
+            "twin",
+            "sophie",
+            "germain",
+            "fermat",
+            "primorial",
+            "near_repdigit",
             "near-repdigit",
         ];
         for kw in &keywords {
@@ -1161,8 +1201,19 @@ mod tests {
     #[test]
     fn detect_domains_all_frontend_keywords() {
         let keywords = [
-            "react", "next.js", "nextjs", "component", "dashboard", "chart",
-            "ui", "tailwind", "frontend", "recharts", "shadcn", "page.tsx", "hook",
+            "react",
+            "next.js",
+            "nextjs",
+            "component",
+            "dashboard",
+            "chart",
+            "ui",
+            "tailwind",
+            "frontend",
+            "recharts",
+            "shadcn",
+            "page.tsx",
+            "hook",
         ];
         for kw in &keywords {
             let domains = detect_domains(kw, "");
@@ -1178,8 +1229,18 @@ mod tests {
     #[test]
     fn detect_domains_all_server_keywords() {
         let keywords = [
-            "api", "websocket", "axum", "database", "postgres", "coordination",
-            "fleet", "worker", "endpoint", "rest", "sqlx", "migration",
+            "api",
+            "websocket",
+            "axum",
+            "database",
+            "postgres",
+            "coordination",
+            "fleet",
+            "worker",
+            "endpoint",
+            "rest",
+            "sqlx",
+            "migration",
         ];
         for kw in &keywords {
             let domains = detect_domains(kw, "");
@@ -1309,7 +1370,10 @@ mod tests {
     #[test]
     fn default_timeout_secs_constant() {
         assert!(DEFAULT_TIMEOUT_SECS > 0);
-        assert_eq!(DEFAULT_TIMEOUT_SECS, 1800, "Default timeout should be 30 minutes");
+        assert_eq!(
+            DEFAULT_TIMEOUT_SECS, 1800,
+            "Default timeout should be 30 minutes"
+        );
     }
 
     /// ROADMAP_MAX_LINES must be bounded to prevent injecting excessively

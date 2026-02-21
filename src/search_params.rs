@@ -397,9 +397,17 @@ mod tests {
     /// block generation. Each form extracts its primary iteration variable.
     #[test]
     fn range_returns_valid_bounds() {
-        let p = SearchParams::Factorial { start: 10, end: 200 };
+        let p = SearchParams::Factorial {
+            start: 10,
+            end: 200,
+        };
         assert_eq!(p.range(), (10, 200));
-        let p = SearchParams::Kbn { k: 3, base: 2, min_n: 100, max_n: 5000 };
+        let p = SearchParams::Kbn {
+            k: 3,
+            base: 2,
+            min_n: 100,
+            max_n: 5000,
+        };
         assert_eq!(p.range(), (100, 5000));
     }
 
@@ -417,7 +425,10 @@ mod tests {
     /// Validates the exact CLI argument sequence for factorial searches.
     #[test]
     fn to_args_factorial_format() {
-        let p = SearchParams::Factorial { start: 10, end: 200 };
+        let p = SearchParams::Factorial {
+            start: 10,
+            end: 200,
+        };
         let args = p.to_args();
         assert_eq!(args[0], "factorial");
         assert_eq!(args[1], "--start");
@@ -430,7 +441,12 @@ mod tests {
     /// which have 4 parameters (k, base, min_n, max_n).
     #[test]
     fn to_args_kbn_format() {
-        let p = SearchParams::Kbn { k: 3, base: 2, min_n: 100, max_n: 5000 };
+        let p = SearchParams::Kbn {
+            k: 3,
+            base: 2,
+            min_n: 100,
+            max_n: 5000,
+        };
         let args = p.to_args();
         assert_eq!(args[0], "kbn");
         assert_eq!(args[1], "--k");
@@ -452,15 +468,24 @@ mod tests {
     /// subcommand, not "cullen_woodall" (underscored serde tag).
     #[test]
     fn to_args_cullen_woodall_uses_hyphenated_subcommand() {
-        let p = SearchParams::CullenWoodall { min_n: 1, max_n: 100 };
+        let p = SearchParams::CullenWoodall {
+            min_n: 1,
+            max_n: 100,
+        };
         let args = p.to_args();
-        assert_eq!(args[0], "cullen-woodall", "CLI subcommand should be hyphenated");
+        assert_eq!(
+            args[0], "cullen-woodall",
+            "CLI subcommand should be hyphenated"
+        );
     }
 
     /// CarolKynea must generate "carol-kynea" as the CLI subcommand.
     #[test]
     fn to_args_carol_kynea_uses_hyphenated_subcommand() {
-        let p = SearchParams::CarolKynea { min_n: 1, max_n: 100 };
+        let p = SearchParams::CarolKynea {
+            min_n: 1,
+            max_n: 100,
+        };
         let args = p.to_args();
         assert_eq!(args[0], "carol-kynea");
     }
@@ -468,7 +493,12 @@ mod tests {
     /// SophieGermain must generate "sophie-germain" as the CLI subcommand.
     #[test]
     fn to_args_sophie_germain_uses_hyphenated_subcommand() {
-        let p = SearchParams::SophieGermain { k: 1, base: 2, min_n: 2, max_n: 100 };
+        let p = SearchParams::SophieGermain {
+            k: 1,
+            base: 2,
+            min_n: 2,
+            max_n: 100,
+        };
         let args = p.to_args();
         assert_eq!(args[0], "sophie-germain");
     }
@@ -476,7 +506,11 @@ mod tests {
     /// GenFermat must generate "gen-fermat" and "--fermat-exp" (hyphenated).
     #[test]
     fn to_args_gen_fermat_uses_hyphenated_subcommand() {
-        let p = SearchParams::GenFermat { fermat_exp: 3, min_base: 2, max_base: 1000 };
+        let p = SearchParams::GenFermat {
+            fermat_exp: 3,
+            min_base: 2,
+            max_base: 1000,
+        };
         let args = p.to_args();
         assert_eq!(args[0], "gen-fermat");
         assert_eq!(args[1], "--fermat-exp");
@@ -489,7 +523,11 @@ mod tests {
     fn range_all_variants_start_le_end() {
         for p in all_variants() {
             let (start, end) = p.range();
-            assert!(start <= end, "range start > end for {:?}", p.search_type_name());
+            assert!(
+                start <= end,
+                "range start > end for {:?}",
+                p.search_type_name()
+            );
         }
     }
 
@@ -499,7 +537,11 @@ mod tests {
     /// Work blocks iterate over digit counts, not candidate values.
     #[test]
     fn range_palindromic_uses_digits() {
-        let p = SearchParams::Palindromic { base: 10, min_digits: 3, max_digits: 99 };
+        let p = SearchParams::Palindromic {
+            base: 10,
+            min_digits: 3,
+            max_digits: 99,
+        };
         assert_eq!(p.range(), (3, 99));
     }
 
@@ -507,14 +549,21 @@ mod tests {
     /// Fermat exponent. Work blocks iterate over candidate bases.
     #[test]
     fn range_gen_fermat_uses_base() {
-        let p = SearchParams::GenFermat { fermat_exp: 2, min_base: 10, max_base: 10000 };
+        let p = SearchParams::GenFermat {
+            fermat_exp: 2,
+            min_base: 10,
+            max_base: 10000,
+        };
         assert_eq!(p.range(), (10, 10000));
     }
 
     /// Wagstaff range uses exponent bounds, not the Wagstaff number values.
     #[test]
     fn range_wagstaff_uses_exp() {
-        let p = SearchParams::Wagstaff { min_exp: 3, max_exp: 500 };
+        let p = SearchParams::Wagstaff {
+            min_exp: 3,
+            max_exp: 500,
+        };
         assert_eq!(p.range(), (3, 500));
     }
 
@@ -524,7 +573,12 @@ mod tests {
     /// stored in both the search job and individual work blocks.
     #[test]
     fn clone_preserves_values() {
-        let p = SearchParams::Kbn { k: 7, base: 3, min_n: 50, max_n: 999 };
+        let p = SearchParams::Kbn {
+            k: 7,
+            base: 3,
+            min_n: 50,
+            max_n: 999,
+        };
         let cloned = p.clone();
         let json1 = serde_json::to_string(&p).unwrap();
         let json2 = serde_json::to_string(&cloned).unwrap();
@@ -545,15 +599,39 @@ mod tests {
     /// palindromic=2 (2 digit counts per block), kbn=10000 (exponent range).
     #[test]
     fn default_block_size_specific_values() {
-        assert_eq!(SearchParams::Factorial { start: 1, end: 100 }.default_block_size(), 100);
-        assert_eq!(SearchParams::Palindromic { base: 10, min_digits: 1, max_digits: 9 }.default_block_size(), 2);
-        assert_eq!(SearchParams::Kbn { k: 3, base: 2, min_n: 1, max_n: 1000 }.default_block_size(), 10_000);
+        assert_eq!(
+            SearchParams::Factorial { start: 1, end: 100 }.default_block_size(),
+            100
+        );
+        assert_eq!(
+            SearchParams::Palindromic {
+                base: 10,
+                min_digits: 1,
+                max_digits: 9
+            }
+            .default_block_size(),
+            2
+        );
+        assert_eq!(
+            SearchParams::Kbn {
+                k: 3,
+                base: 2,
+                min_n: 1,
+                max_n: 1000
+            }
+            .default_block_size(),
+            10_000
+        );
     }
 
     /// Validates the exact CLI argument sequence for repunit searches.
     #[test]
     fn to_args_repunit_format() {
-        let p = SearchParams::Repunit { base: 10, min_n: 2, max_n: 50 };
+        let p = SearchParams::Repunit {
+            base: 10,
+            min_n: 2,
+            max_n: 50,
+        };
         let args = p.to_args();
         assert_eq!(args[0], "repunit");
         assert_eq!(args[1], "--base");
@@ -574,9 +652,11 @@ mod tests {
             let args = p.to_args();
             let flag_args = &args[1..]; // skip subcommand
             assert_eq!(
-                flag_args.len() % 2, 0,
+                flag_args.len() % 2,
+                0,
                 "Flags for {} should come in pairs, got {}",
-                p.search_type_name(), flag_args.len()
+                p.search_type_name(),
+                flag_args.len()
             );
         }
     }

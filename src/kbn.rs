@@ -612,8 +612,7 @@ pub fn search(
     let sieve_primes = sieve::generate_primes(sieve_limit);
     info!(
         prime_count = sieve_primes.len(),
-        sieve_limit,
-        "Sieve initialized"
+        sieve_limit, "Sieve initialized"
     );
 
     let resume_from = match checkpoint::load(checkpoint_path) {
@@ -650,8 +649,14 @@ pub fn search(
         plus_survivors = bsgs_plus_survivors,
         minus_survivors = bsgs_minus_survivors,
         total_range,
-        plus_pct = format_args!("{:.1}", bsgs_plus_survivors as f64 / total_range as f64 * 100.0),
-        minus_pct = format_args!("{:.1}", bsgs_minus_survivors as f64 / total_range as f64 * 100.0),
+        plus_pct = format_args!(
+            "{:.1}",
+            bsgs_plus_survivors as f64 / total_range as f64 * 100.0
+        ),
+        minus_pct = format_args!(
+            "{:.1}",
+            bsgs_minus_survivors as f64 / total_range as f64 * 100.0
+        ),
         "BSGS sieve complete"
     );
 
@@ -789,11 +794,7 @@ pub fn search(
                     max_n: Some(max_n),
                 },
             )?;
-            info!(
-                n = block_end,
-                sieved_out = total_sieved,
-                "Checkpoint saved"
-            );
+            info!(n = block_end, sieved_out = total_sieved, "Checkpoint saved");
             last_checkpoint = Instant::now();
         }
 

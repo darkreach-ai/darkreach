@@ -841,13 +841,19 @@ mod tests {
 
         // No batched notification yet (that requires flush)
         let msg2 = receiver.try_recv();
-        assert!(msg2.is_err(), "Batched notification should not appear before flush");
+        assert!(
+            msg2.is_err(),
+            "Batched notification should not appear before flush"
+        );
 
         bus.flush();
 
         // After flush, the batched notification is broadcast
         let msg3 = receiver.try_recv();
-        assert!(msg3.is_ok(), "Batched notification should be broadcast after flush");
+        assert!(
+            msg3.is_ok(),
+            "Batched notification should be broadcast after flush"
+        );
         let json_str3 = msg3.unwrap();
         assert!(json_str3.contains("\"type\":\"notification\""));
         assert!(json_str3.contains("factorial"));
@@ -937,7 +943,7 @@ mod tests {
 
         let since = bus.recent_events_since(first_id, 100);
         assert_eq!(since.len(), 2); // second, third
-        // Results should be in ascending order
+                                    // Results should be in ascending order
         assert!(since[0].id < since[1].id);
         assert!(since[0].message.contains("second"));
         assert!(since[1].message.contains("third"));

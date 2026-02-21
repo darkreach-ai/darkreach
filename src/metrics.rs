@@ -311,7 +311,13 @@ mod tests {
         let mut sys = System::new_all();
         sys.refresh_all();
         let m = collect(&sys);
-        assert!(m.memory_total_gb > 0.0, "Total memory should be > 0 on real hardware");
-        assert!(m.disk_total_gb > 0.0, "Total disk should be > 0 on real hardware");
+        assert!(
+            m.memory_total_gb > 0.0,
+            "Total memory should be > 0 on real hardware"
+        );
+        assert!(
+            m.disk_total_gb > 0.0,
+            "Total disk should be > 0 on real hardware"
+        );
     }
 }

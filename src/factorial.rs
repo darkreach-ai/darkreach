@@ -47,9 +47,9 @@ use std::path::Path;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Instant;
-use tracing::info;
 #[cfg(feature = "flint")]
 use tracing::debug;
+use tracing::info;
 
 use crate::checkpoint::{self, Checkpoint};
 use crate::db::Database;
@@ -152,8 +152,7 @@ pub fn search(
     let sieve_primes = sieve::generate_primes(sieve_limit);
     info!(
         prime_count = sieve_primes.len(),
-        sieve_limit,
-        "sieve initialized"
+        sieve_limit, "sieve initialized"
     );
 
     let resume_from = match checkpoint::load(checkpoint_path) {
@@ -399,7 +398,10 @@ pub fn search(
     checkpoint::clear(checkpoint_path);
     info!(sieved_out, "factorial sieve elimination complete");
     if wilson_eliminated > 0 {
-        info!(wilson_eliminated, "Wilson's theorem eliminated n!+1 candidates");
+        info!(
+            wilson_eliminated,
+            "Wilson's theorem eliminated n!+1 candidates"
+        );
     }
     Ok(())
 }

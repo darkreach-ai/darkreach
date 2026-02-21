@@ -128,14 +128,29 @@ async fn insert_duplicate_expression_ignored() {
     require_db!();
     let db = setup().await;
 
-    db.insert_prime("factorial", "5! + 1", 3, "{}", "deterministic", None, &["factorial"])
-        .await
-        .unwrap();
+    db.insert_prime(
+        "factorial",
+        "5! + 1",
+        3,
+        "{}",
+        "deterministic",
+        None,
+        &["factorial"],
+    )
+    .await
+    .unwrap();
 
     // insert_prime_ignore should not error on duplicate
-    db.insert_prime_ignore("factorial", "5! + 1", 3, "{}", "probabilistic", &["factorial"])
-        .await
-        .unwrap();
+    db.insert_prime_ignore(
+        "factorial",
+        "5! + 1",
+        3,
+        "{}",
+        "probabilistic",
+        &["factorial"],
+    )
+    .await
+    .unwrap();
 
     let primes = db
         .get_primes_filtered(10, 0, &PrimeFilter::default())
@@ -164,9 +179,17 @@ async fn filter_primes_by_form() {
     db.insert_prime("kbn", "3*2^5+1", 2, "{}", "det", None, &["kbn"])
         .await
         .unwrap();
-    db.insert_prime("palindromic", "10301", 5, "{}", "det", None, &["palindromic"])
-        .await
-        .unwrap();
+    db.insert_prime(
+        "palindromic",
+        "10301",
+        5,
+        "{}",
+        "det",
+        None,
+        &["palindromic"],
+    )
+    .await
+    .unwrap();
 
     let filter = PrimeFilter {
         form: Some("factorial".into()),
@@ -195,9 +218,17 @@ async fn filter_primes_by_digit_range() {
     db.insert_prime("kbn", "3*2^100+1", 31, "{}", "det", None, &["kbn"])
         .await
         .unwrap();
-    db.insert_prime("palindromic", "10301", 5, "{}", "det", None, &["palindromic"])
-        .await
-        .unwrap();
+    db.insert_prime(
+        "palindromic",
+        "10301",
+        5,
+        "{}",
+        "det",
+        None,
+        &["palindromic"],
+    )
+    .await
+    .unwrap();
 
     let filter = PrimeFilter {
         min_digits: Some(4),
@@ -220,12 +251,28 @@ async fn filter_primes_search_text() {
     require_db!();
     let db = setup().await;
 
-    db.insert_prime("factorial", "73! + 1", 106, "{}", "det", None, &["factorial"])
-        .await
-        .unwrap();
-    db.insert_prime("factorial", "73! - 1", 106, "{}", "det", None, &["factorial"])
-        .await
-        .unwrap();
+    db.insert_prime(
+        "factorial",
+        "73! + 1",
+        106,
+        "{}",
+        "det",
+        None,
+        &["factorial"],
+    )
+    .await
+    .unwrap();
+    db.insert_prime(
+        "factorial",
+        "73! - 1",
+        106,
+        "{}",
+        "det",
+        None,
+        &["factorial"],
+    )
+    .await
+    .unwrap();
     db.insert_prime("kbn", "3*2^5+1", 2, "{}", "det", None, &["kbn"])
         .await
         .unwrap();
@@ -297,9 +344,17 @@ async fn paginate_primes() {
     let db = setup().await;
 
     for i in 1..=5 {
-        db.insert_prime("factorial", &format!("{}! + 1", i), i, "{}", "det", None, &["factorial"])
-            .await
-            .unwrap();
+        db.insert_prime(
+            "factorial",
+            &format!("{}! + 1", i),
+            i,
+            "{}",
+            "det",
+            None,
+            &["factorial"],
+        )
+        .await
+        .unwrap();
     }
 
     // Page 1: limit 2, offset 0
@@ -1968,13 +2023,11 @@ async fn operator_stale_block_reclaim() {
         .expect("Should claim a block");
 
     // Artificially age the claimed_at to simulate a stale block
-    sqlx::query(
-        "UPDATE work_blocks SET claimed_at = NOW() - INTERVAL '25 hours' WHERE id = $1",
-    )
-    .bind(block.block_id)
-    .execute(db.pool())
-    .await
-    .unwrap();
+    sqlx::query("UPDATE work_blocks SET claimed_at = NOW() - INTERVAL '25 hours' WHERE id = $1")
+        .bind(block.block_id)
+        .execute(db.pool())
+        .await
+        .unwrap();
 
     // Reclaim stale blocks with 24-hour timeout (86400 seconds)
     let reclaimed = db.reclaim_stale_operator_blocks(86400).await.unwrap();
@@ -2159,7 +2212,9 @@ async fn project_phase_status_transitions() {
     assert!(project.started_at.is_none());
 
     // Transition to active
-    db.update_project_status(project_id, "active").await.unwrap();
+    db.update_project_status(project_id, "active")
+        .await
+        .unwrap();
     let project = db
         .get_project_by_slug("phase-transition-test")
         .await

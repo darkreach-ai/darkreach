@@ -52,7 +52,11 @@ impl Database {
                 let spc = secs_per_candidate(search_type, avg_digits, false);
                 let candidates_per_block = block_size as f64;
                 let est = (spc * candidates_per_block).ceil() as i32;
-                if est > 0 { Some(est) } else { None }
+                if est > 0 {
+                    Some(est)
+                } else {
+                    None
+                }
             } else {
                 None
             }
@@ -281,10 +285,7 @@ impl Database {
     }
 
     /// Get details of a completed work block for verification queue.
-    pub async fn get_work_block_details(
-        &self,
-        block_id: i64,
-    ) -> Result<Option<WorkBlockDetails>> {
+    pub async fn get_work_block_details(&self, block_id: i64) -> Result<Option<WorkBlockDetails>> {
         let row = sqlx::query_as::<_, WorkBlockDetails>(
             "SELECT id AS block_id, block_start, block_end,
                     COALESCE(tested, 0) AS tested,

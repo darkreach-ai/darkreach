@@ -167,7 +167,9 @@ impl Database {
     /// Returns true if TimescaleDB continuous aggregates handle rollups.
     /// When true, manual rollup and prune methods become no-ops.
     fn timescaledb_enabled() -> bool {
-        std::env::var("TIMESCALEDB").map(|v| v == "true" || v == "1").unwrap_or(false)
+        std::env::var("TIMESCALEDB")
+            .map(|v| v == "true" || v == "1")
+            .unwrap_or(false)
     }
 
     pub async fn rollup_metrics_hour(&self, hour_start: DateTime<Utc>) -> Result<()> {
@@ -517,6 +519,19 @@ impl Database {
             .execute(&self.pool)
             .await?;
         sqlx::query("REFRESH MATERIALIZED VIEW CONCURRENTLY mv_form_leaderboard")
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    /// Refresh the `worker_speed` materialized view used by the AI engine
+    /// for fleet rebalancing decisions.
+    ///
+    /// Called every 5 minutes from the dashboard background loop (more frequent
+    /// than the hourly housekeeping since worker speed data changes with each
+    /// completed work block).
+    pub async fn refresh_worker_speed_view(&self) -> Result<()> {
+        sqlx::query("REFRESH MATERIALIZED VIEW CONCURRENTLY worker_speed")
             .execute(&self.pool)
             .await?;
         Ok(())

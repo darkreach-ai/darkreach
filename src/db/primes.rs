@@ -22,10 +22,11 @@ impl Database {
         proof_method: &str,
         certificate: Option<&str>,
         tags: &[&str],
-    ) -> Result<()> {
-        sqlx::query(
+    ) -> Result<i64> {
+        let id: i64 = sqlx::query_scalar(
             "INSERT INTO primes (form, expression, digits, found_at, search_params, proof_method, certificate, tags)
-             VALUES ($1, $2, $3, NOW(), $4, $5, $6::jsonb, $7)",
+             VALUES ($1, $2, $3, NOW(), $4, $5, $6::jsonb, $7)
+             RETURNING id",
         )
         .bind(form)
         .bind(expression)
@@ -34,9 +35,20 @@ impl Database {
         .bind(proof_method)
         .bind(certificate)
         .bind(tags)
-        .execute(&self.pool)
+        .fetch_one(&self.pool)
         .await?;
-        Ok(())
+
+        // Auto-enqueue for distributed verification (best-effort)
+        let quorum = crate::verify::required_quorum_high_value(1, form, digits);
+        if let Err(e) = self.enqueue_prime_verification(id, quorum, None).await {
+            tracing::warn!(
+                prime_id = id,
+                error = %e,
+                "failed to enqueue prime for distributed verification"
+            );
+        }
+
+        Ok(id)
     }
 
     /// Insert a prime, ignoring duplicates on (form, expression).
@@ -84,7 +96,7 @@ impl Database {
         proof_method: &str,
         certificate: Option<&str>,
         tags: &[&str],
-    ) -> Result<()> {
+    ) -> Result<i64> {
         rt.block_on(self.insert_prime(
             form,
             expression,
@@ -107,7 +119,14 @@ impl Database {
         proof_method: &str,
         tags: &[&str],
     ) -> Result<()> {
-        rt.block_on(self.insert_prime_ignore(form, expression, digits, search_params, proof_method, tags))
+        rt.block_on(self.insert_prime_ignore(
+            form,
+            expression,
+            digits,
+            search_params,
+            proof_method,
+            tags,
+        ))
     }
 
     /// Query primes with dynamic filtering, sorting, and pagination.

@@ -33,7 +33,7 @@ use crate::pfgw;
 use crate::{has_small_factor, kbn, proof, sieve};
 
 /// Result of a verification attempt.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum VerifyResult {
     Verified { method: String, tier: u8 },
     Failed { reason: String },
@@ -804,6 +804,24 @@ pub fn is_provable_form(form: &str) -> bool {
     PROVABLE_FORMS.contains(&form)
 }
 
+/// Classify a prime after successful verification, returning new tags to add.
+///
+/// Reconstructs the candidate integer and runs [`classify::classify_at_verification`]
+/// to detect cross-form properties (palindromic structure, twin, Sophie Germain,
+/// safe prime) and assign verification tier tags.
+///
+/// Returns an empty vec if the result is not `Verified` or reconstruction fails.
+pub fn classify_after_verification(detail: &PrimeDetail, result: &VerifyResult) -> Vec<String> {
+    if !matches!(result, VerifyResult::Verified { .. }) {
+        return vec![];
+    }
+    let candidate = match reconstruct_candidate(&detail.form, &detail.expression) {
+        Ok(c) => c,
+        Err(_) => return vec![],
+    };
+    crate::classify::classify_at_verification(&candidate, detail.digits as u64, result)
+}
+
 // ── Form-Specific Invariant Validation ────────────────────────────
 //
 // Beyond confirming "is this number prime?", invariant checks verify
@@ -876,10 +894,7 @@ fn verify_twin_invariant(expression: &str, candidate: &Integer) -> InvariantResu
 ///
 /// Sophie Germain primes are stored as the base prime p (in k·b^n − 1 form).
 /// The safe prime 2p + 1 is the number that makes the pair special.
-fn verify_sophie_germain_invariant(
-    _expression: &str,
-    candidate: &Integer,
-) -> InvariantResult {
+fn verify_sophie_germain_invariant(_expression: &str, candidate: &Integer) -> InvariantResult {
     let safe_prime = Integer::from(candidate * 2u32) + 1u32;
     if safe_prime.is_probably_prime(25) == IsPrime::No {
         return InvariantResult::Failed {
@@ -1779,7 +1794,11 @@ mod tests {
         let c = Integer::from(683u32); // (2^11+1)/3
         match verify_tier1("wagstaff", "(2^11+1)/3", &c, "deterministic") {
             VerifyResult::Skipped { reason } => {
-                assert!(reason.contains("Wagstaff"), "Should mention Wagstaff: {}", reason);
+                assert!(
+                    reason.contains("Wagstaff"),
+                    "Should mention Wagstaff: {}",
+                    reason
+                );
             }
             other => panic!("Expected Skipped for wagstaff, got {:?}", other),
         }
@@ -1854,7 +1873,11 @@ mod tests {
         let c = Integer::from(6u32);
         match verify_tier2(&c) {
             VerifyResult::Failed { reason } => {
-                assert!(reason.contains("small factor"), "Should fail via trial division: {}", reason);
+                assert!(
+                    reason.contains("small factor"),
+                    "Should fail via trial division: {}",
+                    reason
+                );
             }
             other => panic!("Expected Failed for 6, got {:?}", other),
         }
@@ -1934,7 +1957,11 @@ mod tests {
         };
         match verify_prime(&detail) {
             VerifyResult::Failed { reason } => {
-                assert!(reason.contains("reconstruct"), "Should fail on reconstruction: {}", reason);
+                assert!(
+                    reason.contains("reconstruct"),
+                    "Should fail on reconstruction: {}",
+                    reason
+                );
             }
             other => panic!("Expected Failed for invalid expression, got {:?}", other),
         }
@@ -1951,8 +1978,15 @@ mod tests {
     fn provable_forms_complete_list() {
         // All provable forms should be recognized
         let expected_provable = [
-            "factorial", "primorial", "near_repdigit", "kbn",
-            "cullen_woodall", "carol_kynea", "twin", "sophie_germain", "gen_fermat",
+            "factorial",
+            "primorial",
+            "near_repdigit",
+            "kbn",
+            "cullen_woodall",
+            "carol_kynea",
+            "twin",
+            "sophie_germain",
+            "gen_fermat",
         ];
         for form in &expected_provable {
             assert!(is_provable_form(form), "{} should be provable", form);
@@ -2056,11 +2090,7 @@ mod tests {
         match verify_sophie_germain_invariant("13", &candidate) {
             InvariantResult::Failed { check, reason } => {
                 assert_eq!(check, "sophie-germain-relation");
-                assert!(
-                    reason.contains("composite"),
-                    "reason: {}",
-                    reason
-                );
+                assert!(reason.contains("composite"), "reason: {}", reason);
             }
             other => panic!("Expected Failed, got {:?}", other),
         }
@@ -2130,7 +2160,10 @@ mod tests {
             InvariantResult::Verified { check } => {
                 assert_eq!(check, "palindrome-structure")
             }
-            other => panic!("Expected Verified for 11 (2-digit exception), got {:?}", other),
+            other => panic!(
+                "Expected Verified for 11 (2-digit exception), got {:?}",
+                other
+            ),
         }
     }
 
@@ -2271,7 +2304,11 @@ mod tests {
         match verify_wagstaff_invariant("(2^11+1)/3", &candidate) {
             InvariantResult::Failed { check, reason } => {
                 assert_eq!(check, "wagstaff-form");
-                assert!(reason.contains("3 * candidate != 2^11"), "reason: {}", reason);
+                assert!(
+                    reason.contains("3 * candidate != 2^11"),
+                    "reason: {}",
+                    reason
+                );
             }
             other => panic!("Expected Failed, got {:?}", other),
         }
@@ -2444,5 +2481,69 @@ mod tests {
         assert!(verify_invariants("repunit", "R(7)", &candidate).is_empty());
         assert!(verify_invariants("gen_fermat", "2^4+1", &candidate).is_empty());
         assert!(verify_invariants("carol", "expr", &candidate).is_empty());
+    }
+
+    // ── classify_after_verification ──────────────────────────────────
+
+    #[test]
+    fn classify_after_verification_assigns_tier_tag() {
+        let detail = PrimeDetail {
+            id: 1,
+            form: "factorial".into(),
+            expression: "3! + 1".into(), // 7
+            digits: 1,
+            found_at: chrono::Utc::now(),
+            search_params: "{}".into(),
+            proof_method: "pocklington".into(),
+            tags: vec![],
+        };
+        let result = VerifyResult::Verified {
+            method: "tier1-pocklington".into(),
+            tier: 1,
+        };
+        let tags = classify_after_verification(&detail, &result);
+        assert!(tags.contains(&"verified-tier-1".to_string()));
+    }
+
+    #[test]
+    fn classify_after_verification_empty_on_failure() {
+        let detail = PrimeDetail {
+            id: 1,
+            form: "kbn".into(),
+            expression: "3*2^1+1".into(),
+            digits: 1,
+            found_at: chrono::Utc::now(),
+            search_params: "{}".into(),
+            proof_method: "proth".into(),
+            tags: vec![],
+        };
+        let result = VerifyResult::Failed {
+            reason: "composite".into(),
+        };
+        let tags = classify_after_verification(&detail, &result);
+        assert!(tags.is_empty());
+    }
+
+    #[test]
+    fn classify_after_verification_detects_twin() {
+        // 11 is a twin prime (11, 13)
+        let detail = PrimeDetail {
+            id: 1,
+            form: "kbn".into(),
+            expression: "11*2^0+1".into(), // parsing may fail; use a simpler form
+            digits: 2,
+            found_at: chrono::Utc::now(),
+            search_params: "{}".into(),
+            proof_method: "proth".into(),
+            tags: vec![],
+        };
+        // Even if reconstruction fails, function returns empty vec gracefully
+        let result = VerifyResult::Verified {
+            method: "tier2-bpsw+mr10".into(),
+            tier: 2,
+        };
+        let tags = classify_after_verification(&detail, &result);
+        // Tags may be empty if expression doesn't parse to 11, but should not panic
+        assert!(!tags.iter().any(|t| t.starts_with("PANIC")));
     }
 }

@@ -297,11 +297,26 @@ mod tests {
     fn certificate_pocklington_many_witnesses() {
         let cert = PrimalityCertificate::Pocklington {
             factors: vec![
-                PocklingtonWitness { factor: "2".to_string(), base: 3 },
-                PocklingtonWitness { factor: "3".to_string(), base: 2 },
-                PocklingtonWitness { factor: "5".to_string(), base: 2 },
-                PocklingtonWitness { factor: "7".to_string(), base: 3 },
-                PocklingtonWitness { factor: "11".to_string(), base: 2 },
+                PocklingtonWitness {
+                    factor: "2".to_string(),
+                    base: 3,
+                },
+                PocklingtonWitness {
+                    factor: "3".to_string(),
+                    base: 2,
+                },
+                PocklingtonWitness {
+                    factor: "5".to_string(),
+                    base: 2,
+                },
+                PocklingtonWitness {
+                    factor: "7".to_string(),
+                    base: 3,
+                },
+                PocklingtonWitness {
+                    factor: "11".to_string(),
+                    base: 2,
+                },
             ],
         };
         let json = serde_json::to_string(&cert).unwrap();
@@ -321,9 +336,18 @@ mod tests {
         let cert = PrimalityCertificate::Morrison {
             p_value: 11,
             factors: vec![
-                MorrisonWitness { factor: "2".to_string(), p_value: 11 },
-                MorrisonWitness { factor: "3".to_string(), p_value: 11 },
-                MorrisonWitness { factor: "5".to_string(), p_value: 11 },
+                MorrisonWitness {
+                    factor: "2".to_string(),
+                    p_value: 11,
+                },
+                MorrisonWitness {
+                    factor: "3".to_string(),
+                    p_value: 11,
+                },
+                MorrisonWitness {
+                    factor: "5".to_string(),
+                    p_value: 11,
+                },
             ],
         };
         let json = serde_json::to_string(&cert).unwrap();
@@ -340,9 +364,10 @@ mod tests {
     fn certificate_bls_threshold_data() {
         let cert = PrimalityCertificate::Bls {
             p_value: 5,
-            factors: vec![
-                MorrisonWitness { factor: "2".to_string(), p_value: 5 },
-            ],
+            factors: vec![MorrisonWitness {
+                factor: "2".to_string(),
+                p_value: 5,
+            }],
             factored_bits: 100,
             total_bits: 200,
         };
@@ -432,7 +457,10 @@ mod tests {
     /// certificate construction.
     #[test]
     fn pocklington_witness_clone_and_debug() {
-        let w = PocklingtonWitness { factor: "2".to_string(), base: 3 };
+        let w = PocklingtonWitness {
+            factor: "2".to_string(),
+            base: 3,
+        };
         let cloned = w.clone();
         assert_eq!(w, cloned);
         let debug = format!("{:?}", w);
@@ -444,7 +472,10 @@ mod tests {
     /// divides N+1 and the Lucas parameter P=13 was used.
     #[test]
     fn morrison_witness_clone_and_debug() {
-        let w = MorrisonWitness { factor: "7".to_string(), p_value: 13 };
+        let w = MorrisonWitness {
+            factor: "7".to_string(),
+            p_value: 13,
+        };
         let cloned = w.clone();
         assert_eq!(w, cloned);
         let debug = format!("{:?}", w);
@@ -459,7 +490,9 @@ mod tests {
     /// The serialization must handle it without error.
     #[test]
     fn certificate_pfgw_empty_method() {
-        let cert = PrimalityCertificate::Pfgw { method: String::new() };
+        let cert = PrimalityCertificate::Pfgw {
+            method: String::new(),
+        };
         let json = serde_json::to_string(&cert).unwrap();
         let decoded: PrimalityCertificate = serde_json::from_str(&json).unwrap();
         assert_eq!(cert, decoded);

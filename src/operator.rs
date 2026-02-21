@@ -866,7 +866,10 @@ mod tests {
         let art: WorkerReleaseArtifact = serde_json::from_str(json).unwrap();
         assert_eq!(art.os, "linux");
         assert_eq!(art.arch, "x86_64");
-        assert_eq!(art.sig_url, Some("https://example.com/darkreach-linux-x86_64.tar.gz.sig".to_string()));
+        assert_eq!(
+            art.sig_url,
+            Some("https://example.com/darkreach-linux-x86_64.tar.gz.sig".to_string())
+        );
     }
 
     /// Artifacts without a signature URL must deserialize with sig_url=None.

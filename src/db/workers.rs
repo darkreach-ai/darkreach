@@ -262,25 +262,13 @@ impl Database {
             workers.push(WorkerRow {
                 worker_id: map.get("worker_id").cloned().unwrap_or_default(),
                 hostname: map.get("hostname").cloned().unwrap_or_default(),
-                cores: map
-                    .get("cores")
-                    .and_then(|s| s.parse().ok())
-                    .unwrap_or(0),
+                cores: map.get("cores").and_then(|s| s.parse().ok()).unwrap_or(0),
                 search_type: map.get("search_type").cloned().unwrap_or_default(),
                 search_params: map.get("search_params").cloned().unwrap_or_default(),
-                tested: map
-                    .get("tested")
-                    .and_then(|s| s.parse().ok())
-                    .unwrap_or(0),
-                found: map
-                    .get("found")
-                    .and_then(|s| s.parse().ok())
-                    .unwrap_or(0),
+                tested: map.get("tested").and_then(|s| s.parse().ok()).unwrap_or(0),
+                found: map.get("found").and_then(|s| s.parse().ok()).unwrap_or(0),
                 current: map.get("current").cloned().unwrap_or_default(),
-                checkpoint: map
-                    .get("checkpoint")
-                    .filter(|s| !s.is_empty())
-                    .cloned(),
+                checkpoint: map.get("checkpoint").filter(|s| !s.is_empty()).cloned(),
                 metrics: metrics_val,
                 registered_at: last_hb,
                 last_heartbeat: last_hb,

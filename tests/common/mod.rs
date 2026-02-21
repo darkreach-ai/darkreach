@@ -183,8 +183,30 @@ pub async fn truncate_all_tables(pool: &sqlx::PgPool) {
                        operator_credits, operator_trust, operator_nodes, operators,
                        cost_calibration,
                        metric_rollups_daily, metric_rollups_hourly, metric_samples, system_logs,
+                       strategy_decisions, strategy_config,
+                       node_block_results, verification_queue,
+                       ai_engine_decisions, ai_engine_state,
+                       prime_verification_queue, prime_verification_summary,
                        work_blocks, search_jobs, workers, primes
          CASCADE",
+    )
+    .execute(pool)
+    .await
+    .unwrap();
+
+    // Re-seed strategy_config singleton row (from migration 027).
+    sqlx::raw_sql("INSERT INTO strategy_config DEFAULT VALUES")
+        .execute(pool)
+        .await
+        .unwrap();
+
+    // Re-seed ai_engine_state singleton row (from migration 032).
+    sqlx::raw_sql(
+        "INSERT INTO ai_engine_state (scoring_weights, cost_model_version) VALUES ('{
+            \"record_gap\": 0.20, \"yield_rate\": 0.15, \"cost_efficiency\": 0.20,
+            \"opportunity_density\": 0.15, \"fleet_fit\": 0.10, \"momentum\": 0.10,
+            \"competition\": 0.10
+        }'::jsonb, 0)",
     )
     .execute(pool)
     .await
@@ -274,8 +296,18 @@ pub async fn truncate_all_tables(pool: &sqlx::PgPool) {
 /// 23. `023_volunteer_worker_release_tracking.sql` -- Per-worker release version tracking
 /// 24. `024_metric_rollups_daily.sql` -- Daily metric rollup materialization
 /// 25. `025_operator_rename.sql` -- Rename volunteers -> operators (terminology change)
+/// 26. `027_strategy_engine.sql` -- Strategy config + decision audit trail
+/// 27. `028_network_scaling.sql` -- Block progress, verification queue, batch claiming
+/// 28. `029_security_hardening.sql` -- RLS on 22 tables, function search_path fixes
+/// 29. `030_materialized_views.sql` -- Dashboard stats + leaderboard materialized views
+/// 30. `031_timescaledb_hypertables.sql` -- TimescaleDB (conditional, safe to skip)
+/// 31. `032_ai_engine.sql` -- AI engine state + decision audit trail
+/// 32. `033_ai_engine_phase6.sql` -- Component scores + worker speed view
+/// 33. `033_prime_tags.sql` -- Multi-classification tags on primes
+/// 34. `034_prime_verification_queue.sql` -- Distributed prime verification
 ///
 /// Note: Migration `003` is intentionally absent (superseded by later migrations).
+/// Migration `026` is skipped (requires Supabase auth.users table).
 ///
 /// # Supabase compatibility
 ///
@@ -314,6 +346,16 @@ async fn run_migrations(pool: &sqlx::PgPool) {
         "supabase/migrations/023_volunteer_worker_release_tracking.sql",
         "supabase/migrations/024_metric_rollups_daily.sql",
         "supabase/migrations/025_operator_rename.sql",
+        // 026 skipped: user_profiles requires Supabase auth.users table
+        "supabase/migrations/027_strategy_engine.sql",
+        "supabase/migrations/028_network_scaling.sql",
+        "supabase/migrations/029_security_hardening.sql",
+        "supabase/migrations/030_materialized_views.sql",
+        "supabase/migrations/031_timescaledb_hypertables.sql",
+        "supabase/migrations/032_ai_engine.sql",
+        "supabase/migrations/033_ai_engine_phase6.sql",
+        "supabase/migrations/033_prime_tags.sql",
+        "supabase/migrations/034_prime_verification_queue.sql",
     ];
 
     for file in &migration_files {
@@ -345,13 +387,35 @@ async fn run_migrations(pool: &sqlx::PgPool) {
 /// without Supabase's auth layer, so these statements would cause errors.
 /// Stripping them lets us reuse the same migration files for both environments.
 fn clean_migration_sql(sql: &str) -> String {
-    sql.lines()
-        .filter(|line| {
-            let t = line.trim();
-            !t.starts_with("ALTER PUBLICATION")
-                && !t.contains("ENABLE ROW LEVEL SECURITY")
-                && !t.starts_with("CREATE POLICY")
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
+    let mut lines = Vec::new();
+    let mut in_policy = false;
+
+    for line in sql.lines() {
+        let t = line.trim();
+
+        // Skip Supabase-specific directives
+        if t.starts_with("ALTER PUBLICATION") || t.contains("ENABLE ROW LEVEL SECURITY") {
+            continue;
+        }
+
+        // Skip CREATE POLICY / DROP POLICY (may span multiple lines)
+        if t.starts_with("CREATE POLICY") || t.starts_with("DROP POLICY") {
+            if !t.ends_with(';') {
+                in_policy = true;
+            }
+            continue;
+        }
+
+        // Skip continuation lines of a multi-line policy statement
+        if in_policy {
+            if t.ends_with(';') {
+                in_policy = false;
+            }
+            continue;
+        }
+
+        lines.push(line);
+    }
+
+    lines.join("\n")
 }

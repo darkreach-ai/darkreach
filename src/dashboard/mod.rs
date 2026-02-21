@@ -13,19 +13,19 @@ mod routes_health;
 mod routes_jobs;
 mod routes_notifications;
 mod routes_observability;
+mod routes_operator;
+mod routes_prime_verification;
+mod routes_primes;
 mod routes_projects;
 mod routes_releases;
+mod routes_schedules;
 mod routes_searches;
 mod routes_status;
 mod routes_strategy;
 mod routes_verify;
-mod routes_operator;
-mod routes_primes;
-mod routes_schedules;
 mod websocket;
 
 use crate::{agent, ai_engine, db, events, fleet, metrics, project, prom_metrics, verify};
-use tracing::{info, warn, Instrument};
 use anyhow::Result;
 use axum::extract::Request;
 use axum::http::{HeaderValue, StatusCode};
@@ -42,6 +42,7 @@ use tower_http::limit::RequestBodyLimitLayer;
 use tower_http::services::ServeDir;
 use tower_http::timeout::TimeoutLayer;
 use tower_http::trace::TraceLayer;
+use tracing::{info, warn, Instrument};
 
 use std::path::Path;
 use std::sync::Arc;
@@ -128,11 +129,7 @@ impl AppState {
             .collect()
     }
 
-    pub fn with_db(
-        db: db::Database,
-        database_url: &str,
-        checkpoint_path: PathBuf,
-    ) -> Arc<Self> {
+    pub fn with_db(db: db::Database, database_url: &str, checkpoint_path: PathBuf) -> Arc<Self> {
         Arc::new(AppState {
             db,
             database_url: database_url.to_string(),
@@ -147,7 +144,7 @@ impl AppState {
     }
 }
 
-pub(super) fn gethostname() -> String {
+pub fn gethostname() -> String {
     std::env::var("HOSTNAME")
         .or_else(|_| std::env::var("HOST"))
         .or_else(|_| sysinfo::System::host_name().ok_or(std::env::VarError::NotPresent))
@@ -194,7 +191,9 @@ async fn metrics_middleware(
     let mut response = response;
     response.headers_mut().insert(
         "x-request-id",
-        request_id.parse().unwrap_or_else(|_| HeaderValue::from_static("unknown")),
+        request_id
+            .parse()
+            .unwrap_or_else(|_| HeaderValue::from_static("unknown")),
     );
     response
 }
@@ -464,12 +463,34 @@ pub fn build_router(state: Arc<AppState>, static_dir: Option<&Path>) -> Router {
             get(routes_primes::handler_api_leaderboard),
         )
         .route(
-            "/api/primes",
-            get(routes_primes::handler_api_primes_list),
+            "/api/stats/tags",
+            get(routes_primes::handler_api_tag_distribution),
         )
+        .route("/api/primes", get(routes_primes::handler_api_primes_list))
         .route(
             "/api/primes/{id}",
             get(routes_primes::handler_api_prime_get),
+        )
+        .route(
+            "/api/primes/{id}/verifications",
+            get(routes_prime_verification::handler_prime_verifications),
+        )
+        // Distributed prime verification queue
+        .route(
+            "/api/prime-verification/stats",
+            get(routes_prime_verification::handler_stats),
+        )
+        .route(
+            "/api/prime-verification/claim",
+            post(routes_prime_verification::handler_claim),
+        )
+        .route(
+            "/api/prime-verification/{id}/submit",
+            post(routes_prime_verification::handler_submit),
+        )
+        .route(
+            "/api/prime-verification/reclaim",
+            post(routes_prime_verification::handler_reclaim),
         )
         // Schedule CRUD API (Phase 6: replaces Supabase table access)
         .route(
@@ -491,10 +512,7 @@ pub fn build_router(state: Arc<AppState>, static_dir: Option<&Path>) -> Router {
             "/api/records/refresh",
             post(routes_projects::handler_api_records_refresh),
         )
-        .route(
-            "/api/auth/profile",
-            get(routes_auth::handler_api_profile),
-        )
+        .route("/api/auth/profile", get(routes_auth::handler_api_profile))
         .route("/api/auth/me", get(routes_auth::handler_api_me))
         .route("/healthz", get(routes_health::handler_healthz))
         .route("/readyz", get(routes_health::handler_readyz))
@@ -613,6 +631,7 @@ pub async fn run(
         let mut last_worker_sample = std::time::Instant::now() - Duration::from_secs(120);
         let mut last_housekeeping = std::time::Instant::now() - Duration::from_secs(3600);
         let mut last_reliability_refresh = std::time::Instant::now() - Duration::from_secs(300);
+        let mut last_worker_speed_refresh = std::time::Instant::now() - Duration::from_secs(300);
         let mut last_event_id: u64 = 0;
         let mut last_tick = std::time::Instant::now();
         let mut event_counts = std::collections::HashMap::<String, i64>::new();
@@ -719,10 +738,7 @@ pub async fn run(
                             }
                         } else {
                             // Trusted or provable form: mark verified directly
-                            if let Err(e) = prune_state
-                                .db
-                                .mark_block_verified(block.block_id)
-                                .await
+                            if let Err(e) = prune_state.db.mark_block_verified(block.block_id).await
                             {
                                 warn!(
                                     block_id = block.block_id,
@@ -746,6 +762,15 @@ pub async fn run(
                 // Node reliability is computed on-the-fly via SQL function,
                 // so no explicit refresh needed. This is a placeholder for
                 // future batch refresh of materialized reliability data.
+            }
+
+            // Refresh worker_speed materialized view every 5 minutes
+            // (more frequent than hourly housekeeping since work blocks complete often)
+            if last_worker_speed_refresh.elapsed() >= Duration::from_secs(300) {
+                last_worker_speed_refresh = std::time::Instant::now();
+                if let Err(e) = prune_state.db.refresh_worker_speed_view().await {
+                    warn!(error = %e, "failed to refresh worker_speed view");
+                }
             }
 
             let fleet_workers = prune_state.get_workers_from_pg().await;
@@ -835,15 +860,27 @@ pub async fn run(
             // Connection pool stats
             let pool_size = prune_state.db.pool().size();
             let pool_idle = prune_state.db.pool().num_idle();
-            prune_state.prom_metrics.db_pool_active.set((pool_size as i64) - (pool_idle as i64));
+            prune_state
+                .prom_metrics
+                .db_pool_active
+                .set((pool_size as i64) - (pool_idle as i64));
             prune_state.prom_metrics.db_pool_idle.set(pool_idle as i64);
-            prune_state.prom_metrics.db_pool_max.set(prune_state.db.max_connections() as i64);
+            prune_state
+                .prom_metrics
+                .db_pool_max
+                .set(prune_state.db.max_connections() as i64);
 
             // Read replica pool stats
             let read_pool_size = prune_state.db.read_pool().size();
             let read_pool_idle = prune_state.db.read_pool().num_idle();
-            prune_state.prom_metrics.db_read_pool_active.set((read_pool_size as i64) - (read_pool_idle as i64));
-            prune_state.prom_metrics.db_read_pool_idle.set(read_pool_idle as i64);
+            prune_state
+                .prom_metrics
+                .db_read_pool_active
+                .set((read_pool_size as i64) - (read_pool_idle as i64));
+            prune_state
+                .prom_metrics
+                .db_read_pool_idle
+                .set(read_pool_idle as i64);
 
             if let Ok(jobs) = prune_state.db.get_search_jobs().await {
                 let active = jobs.iter().filter(|j| j.status == "running").count();
@@ -1304,14 +1341,23 @@ pub async fn run(
                 let result =
                     tokio::task::spawn_blocking(move || verify::verify_prime(&prime_clone)).await;
                 match result {
-                    Ok(verify::VerifyResult::Verified { method, tier }) => {
+                    Ok(ref vr @ verify::VerifyResult::Verified { ref method, tier }) => {
                         info!(prime_id = prime.id, expression = %prime.expression, method = %method, tier, "auto-verified prime");
                         if let Err(e) = verify_state
                             .db
-                            .mark_verified(prime.id, &method, tier as i16)
+                            .mark_verified(prime.id, method, tier as i16)
                             .await
                         {
                             warn!(prime_id = prime.id, error = %e, "failed to mark prime verified");
+                        }
+                        let new_tags = verify::classify_after_verification(prime, vr);
+                        if !new_tags.is_empty() {
+                            let tag_refs: Vec<&str> = new_tags.iter().map(|s| s.as_str()).collect();
+                            if let Err(e) =
+                                verify_state.db.add_prime_tags(prime.id, &tag_refs).await
+                            {
+                                warn!(prime_id = prime.id, error = %e, "failed to add verification tags");
+                            }
                         }
                     }
                     Ok(verify::VerifyResult::Failed { reason }) => {
@@ -1331,6 +1377,21 @@ pub async fn run(
                         warn!(prime_id = prime.id, error = %e, "auto-verify task panicked");
                     }
                 }
+            }
+        }
+    });
+
+    // Background task: reclaim stale prime verification tasks (5min interval)
+    let pv_state = Arc::clone(&state);
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(300));
+        interval.tick().await;
+        loop {
+            interval.tick().await;
+            match pv_state.db.reclaim_stale_prime_verifications(600).await {
+                Ok(n) if n > 0 => info!(count = n, "reclaimed stale prime verification tasks"),
+                Err(e) => warn!(error = %e, "failed to reclaim stale prime verifications"),
+                _ => {}
             }
         }
     });
@@ -1393,7 +1454,13 @@ pub async fn run(
                         .update_agent_budget_spending(tokens, cost)
                         .await;
                 }
-                info!(task_id = c.task_id, status = status_str, tokens, cost, "agent task finished");
+                info!(
+                    task_id = c.task_id,
+                    status = status_str,
+                    tokens,
+                    cost,
+                    "agent task finished"
+                );
                 if let Ok(Some(completed_task)) = agent_state.db.get_agent_task(c.task_id).await {
                     if let Some(parent_id) = completed_task.parent_task_id {
                         if status_str == "failed" {
@@ -1406,7 +1473,10 @@ pub async fn run(
                                         .await
                                         .unwrap_or(0);
                                     if cancelled > 0 {
-                                        info!(parent_id, cancelled, "agent: cancelled pending siblings");
+                                        info!(
+                                            parent_id,
+                                            cancelled, "agent: cancelled pending siblings"
+                                        );
                                     }
                                 }
                             }
@@ -1594,8 +1664,14 @@ mod tests {
 
     #[test]
     fn normalize_path_collapses_numeric_ids() {
-        assert_eq!(normalize_path("/api/search_jobs/42"), "/api/search_jobs/:id");
-        assert_eq!(normalize_path("/api/primes/12345/verify"), "/api/primes/:id/verify");
+        assert_eq!(
+            normalize_path("/api/search_jobs/42"),
+            "/api/search_jobs/:id"
+        );
+        assert_eq!(
+            normalize_path("/api/primes/12345/verify"),
+            "/api/primes/:id/verify"
+        );
     }
 
     #[test]

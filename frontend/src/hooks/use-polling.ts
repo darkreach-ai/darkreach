@@ -29,6 +29,8 @@ import type {
   AgentInfo,
   ProjectSummary,
   RecordSummary,
+  AiEngineData,
+  StrategyWsData,
 } from "./use-websocket";
 
 const POLL_INTERVAL_MS = 4000;
@@ -46,6 +48,8 @@ export function usePolling(): WsData {
   const [runningAgents, setRunningAgents] = useState<AgentInfo[]>([]);
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [records, setRecords] = useState<RecordSummary[]>([]);
+  const [aiEngine, setAiEngine] = useState<AiEngineData | null>(null);
+  const [strategy, setStrategy] = useState<StrategyWsData | null>(null);
   const [connected, setConnected] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval>>(undefined);
 
@@ -70,6 +74,8 @@ export function usePolling(): WsData {
         if (data.running_agents) setRunningAgents(data.running_agents);
         if (data.projects) setProjects(data.projects);
         if (data.records) setRecords(data.records);
+        if (data.ai_engine) setAiEngine(data.ai_engine);
+        if (data.strategy) setStrategy(data.strategy);
         setCoordinator(data.coordinator ?? null);
       }
     } catch {
@@ -101,6 +107,8 @@ export function usePolling(): WsData {
     projects,
     records,
     lastPrimeFound: null,
+    aiEngine,
+    strategy,
     connected,
     sendMessage,
   };

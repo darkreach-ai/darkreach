@@ -31,6 +31,7 @@ export interface PrimeRecord {
   verified_at: string | null;
   verification_method: string | null;
   verification_tier: number | null;
+  tags: string[];
 }
 
 export interface PrimeDetail {
@@ -45,6 +46,7 @@ export interface PrimeDetail {
   verified_at: string | null;
   verification_method: string | null;
   verification_tier: number | null;
+  tags: string[];
 }
 
 export interface PrimeFilter {
@@ -54,6 +56,7 @@ export interface PrimeFilter {
   max_digits?: number;
   sort_by?: string;
   sort_dir?: string;
+  tags?: string[];
 }
 
 export interface PrimesData {
@@ -94,6 +97,7 @@ export function usePrimes() {
       if (filter?.max_digits) params.set("max_digits", String(filter.max_digits));
       if (filter?.sort_by) params.set("sort_by", filter.sort_by);
       if (filter?.sort_dir) params.set("sort_dir", filter.sort_dir);
+      if (filter?.tags?.length) params.set("tags", filter.tags.join(","));
 
       try {
         const res = await fetch(`${API_BASE}/api/primes?${params.toString()}`);
@@ -129,6 +133,7 @@ export function usePrimes() {
     if (filter.max_digits) params.set("max_digits", String(filter.max_digits));
     if (filter.sort_by) params.set("sort_by", filter.sort_by);
     if (filter.sort_dir) params.set("sort_dir", filter.sort_dir);
+    if (filter.tags?.length) params.set("tags", filter.tags.join(","));
 
     try {
       const res = await fetch(`${API_BASE}/api/primes?${params.toString()}`);
@@ -168,6 +173,7 @@ export function usePrimes() {
     if (filter.max_digits) params.set("max_digits", String(filter.max_digits));
     if (filter.sort_by) params.set("sort_by", filter.sort_by);
     if (filter.sort_dir) params.set("sort_dir", filter.sort_dir);
+    if (filter.tags?.length) params.set("tags", filter.tags.join(","));
 
     try {
       const res = await fetch(`${API_BASE}/api/primes?${params.toString()}`);

@@ -29,6 +29,8 @@ import {
 } from "lucide-react";
 import { usePrimes, type PrimeFilter, type PrimeRecord } from "@/hooks/use-primes";
 import { useStats } from "@/hooks/use-stats";
+import { useTagDistribution } from "@/hooks/use-prime-verification";
+import { TagChip } from "@/components/tag-chip";
 import {
   API_BASE,
   formLabels,
@@ -122,9 +124,12 @@ export default function BrowsePage() {
     isInitialLoading,
   } = usePrimes();
 
+  const { tags: allTags } = useTagDistribution();
+
   const [searchInput, setSearchInput] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [formFilter, setFormFilter] = useState("");
+  const [tagFilter, setTagFilter] = useState<string[]>([]);
   const [minDigits, setMinDigits] = useState("");
   const [maxDigits, setMaxDigits] = useState("");
   const [sort, setSort] = useState<SortState>({ column: "found_at", dir: "desc" });
@@ -211,14 +216,15 @@ export default function BrowsePage() {
     if (debouncedSearch) f.search = debouncedSearch;
     if (parsedMinDigits && parsedMinDigits > 0) f.min_digits = parsedMinDigits;
     if (parsedMaxDigits && parsedMaxDigits > 0) f.max_digits = parsedMaxDigits;
+    if (tagFilter.length > 0) f.tags = tagFilter;
     return f;
-  }, [formFilter, debouncedSearch, parsedMinDigits, parsedMaxDigits, sort]);
+  }, [formFilter, debouncedSearch, parsedMinDigits, parsedMaxDigits, sort, tagFilter]);
 
   // Fetch on filter/sort change
   useEffect(() => {
     if (!initialized || digitsError) return;
     resetAndFetch(buildFilter());
-  }, [debouncedSearch, formFilter, minDigits, maxDigits, sort, digitsError, buildFilter, resetAndFetch, initialized]);
+  }, [debouncedSearch, formFilter, tagFilter, minDigits, maxDigits, sort, digitsError, buildFilter, resetAndFetch, initialized]);
 
   // Infinite scroll observer
   useEffect(() => {
@@ -260,12 +266,13 @@ export default function BrowsePage() {
   }
 
   // Filters
-  const hasActiveFilters = !!(formFilter || debouncedSearch || minDigits || maxDigits);
+  const hasActiveFilters = !!(formFilter || debouncedSearch || minDigits || maxDigits || tagFilter.length > 0);
 
   function clearFilters() {
     setSearchInput("");
     setDebouncedSearch("");
     setFormFilter("");
+    setTagFilter([]);
     setMinDigits("");
     setMaxDigits("");
   }
@@ -326,6 +333,13 @@ export default function BrowsePage() {
       key: "max",
       label: `\u2264 ${numberWithCommas(Number(maxDigits))} digits`,
       onClear: () => setMaxDigits(""),
+    });
+  }
+  for (const tag of tagFilter) {
+    filterPills.push({
+      key: `tag-${tag}`,
+      label: tag,
+      onClear: () => setTagFilter((prev) => prev.filter((t) => t !== tag)),
     });
   }
 
@@ -430,6 +444,39 @@ export default function BrowsePage() {
               className="w-[90px] h-8 text-sm"
             />
           </div>
+
+          {/* Tag filter */}
+          {allTags.length > 0 && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="h-8 text-sm">
+                  Tags{tagFilter.length > 0 && ` (${tagFilter.length})`}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="max-h-60 overflow-y-auto">
+                {allTags.map((t) => (
+                  <DropdownMenuItem
+                    key={t.tag}
+                    onClick={() => {
+                      setTagFilter((prev) =>
+                        prev.includes(t.tag) ? prev.filter((x) => x !== t.tag) : [...prev, t.tag]
+                      );
+                    }}
+                    className="flex items-center justify-between gap-3"
+                  >
+                    <span className="flex items-center gap-2">
+                      <span className={cn(
+                        "size-3 rounded-sm border",
+                        tagFilter.includes(t.tag) ? "bg-primary border-primary" : "border-muted-foreground/30"
+                      )} />
+                      {t.tag}
+                    </span>
+                    <span className="text-xs text-muted-foreground tabular-nums">{t.count}</span>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
 
           {/* Result count */}
           {!isInitialLoading && total > 0 && (
@@ -574,14 +621,24 @@ export default function BrowsePage() {
                   </span>
                 </TableCell>
                 <TableCell>
-                  <Link
-                    href={`/docs?doc=${formToSlug(prime.form)}`}
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <Badge variant="outline" className="cursor-pointer hover:bg-secondary/50 font-normal">
-                      {formLabels[prime.form] ?? prime.form}
-                    </Badge>
-                  </Link>
+                  <div className="flex items-center gap-1 flex-wrap">
+                    <Link
+                      href={`/docs?doc=${formToSlug(prime.form)}`}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <Badge variant="outline" className="cursor-pointer hover:bg-secondary/50 font-normal">
+                        {formLabels[prime.form] ?? prime.form}
+                      </Badge>
+                    </Link>
+                    {prime.tags?.slice(0, 3).map((tag) => (
+                      <TagChip key={tag} tag={tag} />
+                    ))}
+                    {prime.tags?.length > 3 && (
+                      <span className="text-[10px] text-muted-foreground">
+                        +{prime.tags.length - 3}
+                      </span>
+                    )}
+                  </div>
                 </TableCell>
                 <TableCell className="text-right tabular-nums text-muted-foreground">
                   {numberWithCommas(prime.digits)}

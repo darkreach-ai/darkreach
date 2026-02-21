@@ -44,6 +44,8 @@ export const defaultWsData: WsData = {
   projects: [],
   records: [],
   lastPrimeFound: null,
+  aiEngine: null,
+  strategy: null,
   connected: true,
   sendMessage: () => {},
 };

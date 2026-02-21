@@ -43,7 +43,7 @@ mod inner {
             unsafe {
                 let mut result = Integer::new();
                 // fmpz_get_mpz copies the value into an mpz_t
-                fmpz_get_mpz(result.as_raw_mut(), self.as_ptr());
+                fmpz_get_mpz(result.as_raw_mut().as_mut_ptr(), self.as_ptr());
                 result
             }
         }

@@ -281,10 +281,7 @@ async fn test_claim_work_returns_assignment() {
 /// available. `claim_work` should return `Ok(None)` rather than an error.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_claim_work_returns_204_no_content() {
-    let app = Router::new().route(
-        "/api/v1/work",
-        get(|| async { StatusCode::NO_CONTENT }),
-    );
+    let app = Router::new().route("/api/v1/work", get(|| async { StatusCode::NO_CONTENT }));
     let (url, handle) = start_mock_server(app).await;
     let config = test_config(&url);
 
@@ -393,10 +390,7 @@ async fn test_claim_work_sends_capabilities() {
     assert!(p.ram_gb.is_some(), "ram_gb parameter should be present");
     assert!(p.os.is_some(), "os parameter should be present");
     assert!(p.arch.is_some(), "arch parameter should be present");
-    assert!(
-        p.has_gpu.is_some(),
-        "has_gpu parameter should be present"
-    );
+    assert!(p.has_gpu.is_some(), "has_gpu parameter should be present");
 
     handle.abort();
 }
@@ -428,10 +422,7 @@ fn test_claim_work_assignment_all_search_types() {
             "wagstaff",
             serde_json::json!({"min_exp": 3, "max_exp": 100}),
         ),
-        (
-            "carol_kynea",
-            serde_json::json!({"min_n": 1, "max_n": 100}),
-        ),
+        ("carol_kynea", serde_json::json!({"min_n": 1, "max_n": 100})),
         (
             "twin",
             serde_json::json!({"k": 3, "base": 2, "min_n": 1, "max_n": 1000}),
@@ -611,10 +602,7 @@ async fn test_submit_result_server_error() {
     };
 
     let result = darkreach::operator::submit_result(&config, &submission);
-    assert!(
-        result.is_err(),
-        "submit_result should fail on 500 response"
-    );
+    assert!(result.is_err(), "submit_result should fail on 500 response");
 
     handle.abort();
 }
@@ -890,7 +878,8 @@ fn test_search_params_to_args_all_11_forms() {
             params.search_type_name()
         );
         assert_eq!(
-            args[0], *expected_cmd,
+            args[0],
+            *expected_cmd,
             "Subcommand mismatch for {}",
             params.search_type_name()
         );
@@ -942,7 +931,8 @@ fn test_search_params_range_extraction() {
     for (params, expected) in all_search_params().iter().zip(expected_ranges.iter()) {
         let range = params.range();
         assert_eq!(
-            range, *expected,
+            range,
+            *expected,
             "Range mismatch for {}: got {:?}, expected {:?}",
             params.search_type_name(),
             range,
@@ -1024,13 +1014,8 @@ fn test_search_params_invalid_form_error() {
 #[test]
 fn test_search_params_json_roundtrip() {
     for params in all_search_params() {
-        let json = serde_json::to_string(&params).unwrap_or_else(|e| {
-            panic!(
-                "Failed to serialize {}: {}",
-                params.search_type_name(),
-                e
-            )
-        });
+        let json = serde_json::to_string(&params)
+            .unwrap_or_else(|e| panic!("Failed to serialize {}: {}", params.search_type_name(), e));
 
         let parsed: SearchParams = serde_json::from_str(&json).unwrap_or_else(|e| {
             panic!(
@@ -1044,7 +1029,8 @@ fn test_search_params_json_roundtrip() {
         // Re-serialize and compare to verify lossless round-trip
         let json2 = serde_json::to_string(&parsed).unwrap();
         assert_eq!(
-            json, json2,
+            json,
+            json2,
             "JSON round-trip mismatch for {}: '{}' != '{}'",
             params.search_type_name(),
             json,

@@ -660,10 +660,7 @@ mod tests {
         // P-1 should find at least one factor (might find 5*7=35 if both smooth at same B1)
         let n = Integer::from(5u64 * 7 * 10007);
         let factor = p1_stage1(&n, 100);
-        assert!(
-            factor.is_some(),
-            "P-1 should find a factor of 5*7*10007"
-        );
+        assert!(factor.is_some(), "P-1 should find a factor of 5*7*10007");
         let f = factor.unwrap();
         assert!(n.is_divisible(&f), "factor should divide n");
         assert!(f > 1u32, "factor should be non-trivial");

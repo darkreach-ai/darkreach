@@ -86,8 +86,7 @@ pub fn search(
     info!(k, k2, base, min_n, max_n, "Sophie Germain search started");
     info!(
         prime_count = sieve_primes.len(),
-        sieve_limit,
-        "sieve initialized"
+        sieve_limit, "sieve initialized"
     );
 
     let resume_from = match checkpoint::load(checkpoint_path) {
@@ -110,12 +109,24 @@ pub fn search(
     info!(sieve_min_n, "sieve active");
 
     // Sieve for p = k*b^n - 1
-    info!(k, base, from = resume_from, to = max_n, "running sieve for p=k*b^n-1");
+    info!(
+        k,
+        base,
+        from = resume_from,
+        to = max_n,
+        "running sieve for p=k*b^n-1"
+    );
     let (_plus_surv_k, minus_surv_k) =
         kbn::bsgs_sieve(resume_from, max_n, k, base, &sieve_primes, sieve_min_n);
 
     // Sieve for 2p+1 = 2k*b^n - 1
-    info!(k = k2, base, from = resume_from, to = max_n, "running sieve for 2p+1=2k*b^n-1");
+    info!(
+        k = k2,
+        base,
+        from = resume_from,
+        to = max_n,
+        "running sieve for 2p+1=2k*b^n-1"
+    );
     let (_plus_surv_k2, minus_surv_k2) =
         kbn::bsgs_sieve(resume_from, max_n, k2, base, &sieve_primes, sieve_min_n);
 
@@ -269,7 +280,10 @@ pub fn search(
                     max_n: Some(max_n),
                 },
             )?;
-            info!(n = block_end, "stop requested by coordinator, checkpoint saved");
+            info!(
+                n = block_end,
+                "stop requested by coordinator, checkpoint saved"
+            );
             return Ok(());
         }
 

@@ -7,8 +7,8 @@
 use anyhow::Result;
 use darkreach::{
     carol_kynea, cullen_woodall, db, events, factorial, gen_fermat, kbn, near_repdigit,
-    palindromic, pg_worker, primorial, progress, project, repunit, sophie_germain, twin, verify,
-    wagstaff, CoordinationClient,
+    palindromic, pg_worker, primorial, progress, project, repunit, sieve, sophie_germain, twin,
+    verify, wagstaff, CoordinationClient,
 };
 use std::sync::Arc;
 use tracing::{info, info_span, warn};
@@ -59,7 +59,12 @@ pub fn run_search(cli: &Cli) -> Result<()> {
         &search_params,
     );
 
-    sync_progress_to_atomics(&progress, &pg_client.tested, &pg_client.found, &pg_client.current);
+    sync_progress_to_atomics(
+        &progress,
+        &pg_client.tested,
+        &pg_client.found,
+        &pg_client.current,
+    );
 
     let heartbeat_handle = Some(pg_client.start_heartbeat());
 
@@ -131,7 +136,8 @@ fn search_type_for(cmd: &Commands) -> &'static str {
         | Commands::Verify { .. }
         | Commands::Project { .. }
         | Commands::Register { .. }
-        | Commands::Run => {
+        | Commands::Run
+        | Commands::VerifyWorker { .. } => {
             unreachable!()
         }
     }
@@ -181,7 +187,8 @@ fn search_params_for(cmd: &Commands) -> String {
         | Commands::Verify { .. }
         | Commands::Project { .. }
         | Commands::Register { .. }
-        | Commands::Run => {
+        | Commands::Run
+        | Commands::VerifyWorker { .. } => {
             unreachable!()
         }
     }
@@ -397,7 +404,8 @@ fn dispatch_search(
         | Commands::Verify { .. }
         | Commands::Project { .. }
         | Commands::Register { .. }
-        | Commands::Run => {
+        | Commands::Run
+        | Commands::VerifyWorker { .. } => {
             unreachable!()
         }
     }
@@ -496,9 +504,7 @@ pub fn run_work_loop(
         let available = rt_handle
             .block_on(db.get_available_block_count(search_job_id))
             .unwrap_or(10);
-        let workers = rt_handle
-            .block_on(db.count_active_workers())
-            .unwrap_or(1);
+        let workers = rt_handle.block_on(db.count_active_workers()).unwrap_or(1);
         (available / workers.max(1)).clamp(1, 3) as i32
     };
     let mut pending_blocks: std::collections::VecDeque<db::WorkBlockWithCheckpoint> =
@@ -512,9 +518,8 @@ pub fn run_work_loop(
 
         // Batch claim blocks when the local queue is empty
         if pending_blocks.is_empty() {
-            let blocks = rt_handle.block_on(
-                db.claim_work_blocks(search_job_id, &worker_id, batch_size),
-            )?;
+            let blocks =
+                rt_handle.block_on(db.claim_work_blocks(search_job_id, &worker_id, batch_size))?;
             if blocks.is_empty() {
                 info!("No more blocks available, work complete");
                 break;
@@ -597,12 +602,7 @@ pub fn run_work_loop(
                     found as i64,
                 ))?;
                 blocks_completed += 1;
-                info!(
-                    block_id = block.block_id,
-                    tested,
-                    found,
-                    "Block completed"
-                );
+                info!(block_id = block.block_id, tested, found, "Block completed");
             }
             Err(e) => {
                 warn!(block_id = block.block_id, error = %e, "Block failed");
@@ -645,6 +645,23 @@ fn run_search_block(
     let start = block_start as u64;
     let end = block_end as u64;
     let eb: Option<&events::EventBus> = None;
+
+    // Adaptive sieve depth: if sl==0 (auto) and we have cost calibration data,
+    // use empirical timing to compute a better sieve depth than the theoretical estimate.
+    let sl = if sl == 0 {
+        // Check if job params specify a sieve_limit (set by AI engine)
+        if let Some(job_sl) = params.get("sieve_limit").and_then(|v| v.as_u64()) {
+            if job_sl > 0 {
+                job_sl
+            } else {
+                calibrated_sieve_from_db(search_type, params, start, end, db, rt_handle)
+            }
+        } else {
+            calibrated_sieve_from_db(search_type, params, start, end, db, rt_handle)
+        }
+    } else {
+        sl
+    };
 
     match search_type {
         "factorial" => factorial::search(
@@ -837,6 +854,108 @@ fn run_search_block(
     }
 }
 
+/// Look up cost calibration data from the DB and compute a calibrated sieve depth.
+///
+/// Uses the empirical `secs_per_candidate` from the `cost_calibration` table
+/// to feed `sieve::calibrated_sieve_depth()`. Returns 0 (triggering the
+/// theoretical auto-tuning fallback) if no calibration data is available.
+fn calibrated_sieve_from_db(
+    search_type: &str,
+    params: &serde_json::Value,
+    start: u64,
+    end: u64,
+    db: &Arc<db::Database>,
+    rt_handle: &tokio::runtime::Handle,
+) -> u64 {
+    let calibration = rt_handle
+        .block_on(db.get_cost_calibration(search_type))
+        .ok()
+        .flatten();
+
+    let Some(cal) = calibration else {
+        return 0; // no calibration data → fall back to theoretical auto_sieve_depth
+    };
+
+    // Estimate digit count for the midpoint of the block range
+    let mid = (start + end) / 2;
+    let digits_estimate = estimate_digits_for_form(search_type, params, mid);
+    if digits_estimate == 0 {
+        return 0;
+    }
+
+    // Compute secs_per_candidate using calibrated power-law: a * (digits/1000)^b
+    let d = digits_estimate as f64 / 1000.0;
+    let test_secs = cal.coeff_a * d.powf(cal.coeff_b);
+
+    let n_range = end.saturating_sub(start) + 1;
+    let depth = sieve::calibrated_sieve_depth(test_secs, n_range);
+    info!(
+        form = search_type,
+        digits = digits_estimate,
+        test_secs = format!("{:.4}", test_secs),
+        calibrated_depth = depth,
+        "adaptive sieve: using calibrated depth"
+    );
+    depth
+}
+
+/// Estimate digit count for a candidate at position `n` in the given search form.
+fn estimate_digits_for_form(search_type: &str, params: &serde_json::Value, n: u64) -> u64 {
+    match search_type {
+        "factorial" => {
+            // Stirling: log10(n!) ≈ n*log10(n/e) + 0.5*log10(2πn)
+            if n < 2 {
+                return 1;
+            }
+            let nf = n as f64;
+            let log10_factorial = nf * (nf / std::f64::consts::E).log10()
+                + 0.5 * (2.0 * std::f64::consts::PI * nf).log10();
+            log10_factorial.ceil() as u64
+        }
+        "primorial" => {
+            // Prime number theorem: log10(p#) ≈ p * log10(e)
+            let p = n as f64;
+            (p * std::f64::consts::E.log10()).ceil() as u64
+        }
+        "kbn" | "twin" | "sophie_germain" => {
+            let base = params.get("base").and_then(|v| v.as_u64()).unwrap_or(2) as f64;
+            let k = params.get("k").and_then(|v| v.as_u64()).unwrap_or(1) as f64;
+            ((n as f64) * base.log10() + k.log10().max(0.0)).ceil() as u64
+        }
+        "cullen_woodall" => {
+            // n*2^n±1: digits ≈ n*log10(2) + log10(n)
+            let nf = n as f64;
+            (nf * 2.0_f64.log10() + nf.log10().max(0.0)).ceil() as u64
+        }
+        "wagstaff" => {
+            // (2^p+1)/3: digits ≈ p*log10(2)
+            ((n as f64) * 2.0_f64.log10()).ceil() as u64
+        }
+        "carol_kynea" => {
+            // (2^n±1)²-2: digits ≈ 2*n*log10(2)
+            (2.0 * (n as f64) * 2.0_f64.log10()).ceil() as u64
+        }
+        "palindromic" | "near_repdigit" => {
+            // n IS the digit count (min_digits..max_digits range)
+            n
+        }
+        "repunit" => {
+            let base = params.get("base").and_then(|v| v.as_u64()).unwrap_or(10) as f64;
+            ((n as f64) * base.log10()).ceil() as u64
+        }
+        "gen_fermat" => {
+            // b^(2^fermat_exp)+1, n is the base value
+            let fermat_exp = params
+                .get("fermat_exp")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(1);
+            let power = 1u64 << fermat_exp;
+            ((n as f64).log10() * power as f64).ceil() as u64
+        }
+        _ => 0,
+    }
+}
+
 // ── Verification ────────────────────────────────────────────────
 
 /// Run the verify subcommand.
@@ -909,6 +1028,11 @@ pub fn run_verify(
                     prime.id, expr_display, t1, t2, method
                 );
                 rt.block_on(db.mark_verified(prime.id, method, *tier as i16))?;
+                let new_tags = verify::classify_after_verification(prime, &result);
+                if !new_tags.is_empty() {
+                    let tag_refs: Vec<&str> = new_tags.iter().map(|s| s.as_str()).collect();
+                    rt.block_on(db.add_prime_tags(prime.id, &tag_refs))?;
+                }
                 verified += 1;
             }
             verify::VerifyResult::Failed { reason } => {
@@ -1158,7 +1282,7 @@ pub fn run_register(server: &str, username: &str, email: &str) -> Result<()> {
 
 /// Run the operator work loop (claim → compute → submit → repeat).
 pub fn run_operator(cli: &Cli) -> Result<()> {
-    use darkreach::{progress, operator};
+    use darkreach::{operator, progress};
 
     let config = operator::load_config()?;
     operator::register_worker(&config)?;
@@ -1290,10 +1414,8 @@ pub fn run_operator(cli: &Cli) -> Result<()> {
 
         let prog = progress::Progress::new();
         let reporter = prog.start_reporter();
-        let checkpoint = std::path::PathBuf::from(format!(
-            "operator_block_{}.checkpoint",
-            assignment.block_id
-        ));
+        let checkpoint =
+            std::path::PathBuf::from(format!("operator_block_{}.checkpoint", assignment.block_id));
 
         let span = info_span!(
             "search_block",
@@ -1355,6 +1477,164 @@ pub fn run_operator(cli: &Cli) -> Result<()> {
     Ok(())
 }
 
+// ── Verify Worker ───────────────────────────────────────────────
+
+/// Run a prime verification worker loop.
+///
+/// Polls the `prime_verification_queue` for tasks, reconstructs candidates,
+/// runs the 3-tier `verify_prime()` pipeline, and submits results. Exits
+/// after `max_verifications` (0 = unlimited) or when the queue stays empty.
+pub async fn run_verify_worker(
+    db: &db::Database,
+    worker_id: &str,
+    poll_interval: u64,
+    max_verifications: u64,
+) -> Result<()> {
+    use darkreach::verify;
+
+    eprintln!(
+        "Verify worker '{}' starting (poll={}s, max={})",
+        worker_id,
+        poll_interval,
+        if max_verifications == 0 {
+            "unlimited".to_string()
+        } else {
+            max_verifications.to_string()
+        }
+    );
+
+    let mut completed: u64 = 0;
+
+    loop {
+        // Reclaim stale tasks before claiming
+        match db.reclaim_stale_prime_verifications(600).await {
+            Ok(n) if n > 0 => eprintln!("Reclaimed {} stale verification tasks", n),
+            Err(e) => eprintln!("Warning: failed to reclaim stale tasks: {}", e),
+            _ => {}
+        }
+
+        // Claim next task
+        let task = match db.claim_prime_verification(worker_id).await {
+            Ok(Some(t)) => t,
+            Ok(None) => {
+                // Queue is empty, sleep and retry
+                tokio::time::sleep(std::time::Duration::from_secs(poll_interval)).await;
+                continue;
+            }
+            Err(e) => {
+                eprintln!("Error claiming task: {}", e);
+                tokio::time::sleep(std::time::Duration::from_secs(poll_interval)).await;
+                continue;
+            }
+        };
+
+        eprintln!(
+            "Verifying prime {} ({} {} digits): {}",
+            task.prime_id, task.form, task.digits, task.expression
+        );
+
+        // Construct PrimeDetail for verify_prime()
+        let prime_detail = db::PrimeDetail {
+            id: task.prime_id,
+            form: task.form.clone(),
+            expression: task.expression.clone(),
+            digits: task.digits,
+            found_at: chrono::Utc::now(),
+            search_params: task.search_params.clone(),
+            proof_method: task.proof_method.clone(),
+            tags: vec![],
+        };
+        let classify_detail = prime_detail.clone();
+
+        // Run verification in a blocking task
+        let result = tokio::task::spawn_blocking(move || verify::verify_prime(&prime_detail)).await;
+
+        match result {
+            Ok(ref vr) => {
+                let result_json = serde_json::to_value(vr).ok();
+                match vr {
+                    verify::VerifyResult::Verified { method, tier } => {
+                        eprintln!("  VERIFIED (tier={}, method={})", tier, method);
+                        let quorum_met = db
+                            .submit_prime_verification(
+                                task.task_id,
+                                worker_id,
+                                *tier as i16,
+                                method,
+                                result_json.as_ref(),
+                                true,
+                                None,
+                            )
+                            .await?;
+                        if quorum_met {
+                            eprintln!(
+                                "  Quorum met for prime {} — tagged verified-distributed",
+                                task.prime_id
+                            );
+                        }
+                        let new_tags = verify::classify_after_verification(&classify_detail, vr);
+                        if !new_tags.is_empty() {
+                            let tag_refs: Vec<&str> = new_tags.iter().map(|s| s.as_str()).collect();
+                            db.add_prime_tags(task.prime_id, &tag_refs).await?;
+                        }
+                    }
+                    verify::VerifyResult::Failed { reason } => {
+                        eprintln!("  FAILED: {}", reason);
+                        db.submit_prime_verification(
+                            task.task_id,
+                            worker_id,
+                            0,
+                            "failed",
+                            result_json.as_ref(),
+                            false,
+                            Some(reason),
+                        )
+                        .await?;
+                    }
+                    verify::VerifyResult::Skipped { reason } => {
+                        eprintln!("  SKIPPED: {}", reason);
+                        db.submit_prime_verification(
+                            task.task_id,
+                            worker_id,
+                            0,
+                            "skipped",
+                            result_json.as_ref(),
+                            false,
+                            Some(reason),
+                        )
+                        .await?;
+                    }
+                }
+            }
+            Err(e) => {
+                eprintln!("  PANIC: {}", e);
+                db.submit_prime_verification(
+                    task.task_id,
+                    worker_id,
+                    0,
+                    "panic",
+                    None,
+                    false,
+                    Some(&format!("Verification panicked: {}", e)),
+                )
+                .await?;
+            }
+        }
+
+        completed += 1;
+        if max_verifications > 0 && completed >= max_verifications {
+            eprintln!("Reached max verifications ({}), exiting", max_verifications);
+            break;
+        }
+    }
+
+    eprintln!(
+        "Verify worker '{}' finished ({} verifications)",
+        worker_id, completed
+    );
+    Ok(())
+}
+
 // ── Rayon Configuration ─────────────────────────────────────────
 
 /// Configure the rayon global thread pool with optional QoS and thread count.
@@ -1383,7 +1663,9 @@ pub fn configure_rayon(threads: Option<usize>, qos: bool) {
 
         match result {
             Ok(()) => {
-                info!("Rayon threads configured with macOS QoS: user-initiated (P-core scheduling)");
+                info!(
+                    "Rayon threads configured with macOS QoS: user-initiated (P-core scheduling)"
+                );
             }
             Err(e) => {
                 warn!(error = %e, "Could not configure rayon thread pool");
@@ -1404,5 +1686,57 @@ pub fn configure_rayon(threads: Option<usize>, qos: bool) {
         {
             warn!(error = %e, "Could not configure rayon thread pool");
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn estimate_digits_factorial() {
+        // 100! has 158 digits
+        let digits = estimate_digits_for_form("factorial", &serde_json::json!({}), 100);
+        assert!(
+            (150..=165).contains(&digits),
+            "100! should be ~158 digits, got {}",
+            digits
+        );
+    }
+
+    #[test]
+    fn estimate_digits_kbn_base2() {
+        // k*2^1000+1 should be ~301 digits
+        let params = serde_json::json!({"k": 1, "base": 2});
+        let digits = estimate_digits_for_form("kbn", &params, 1000);
+        assert!(
+            (295..=310).contains(&digits),
+            "2^1000 should be ~301 digits, got {}",
+            digits
+        );
+    }
+
+    #[test]
+    fn estimate_digits_palindromic() {
+        // For palindromic, n IS the digit count
+        let digits = estimate_digits_for_form("palindromic", &serde_json::json!({}), 500);
+        assert_eq!(digits, 500);
+    }
+
+    #[test]
+    fn estimate_digits_wagstaff() {
+        // (2^1000+1)/3: digits ≈ 1000*log10(2) ≈ 301
+        let digits = estimate_digits_for_form("wagstaff", &serde_json::json!({}), 1000);
+        assert!(
+            (295..=310).contains(&digits),
+            "wagstaff p=1000 should be ~301 digits, got {}",
+            digits
+        );
+    }
+
+    #[test]
+    fn estimate_digits_unknown_form() {
+        let digits = estimate_digits_for_form("unknown", &serde_json::json!({}), 100);
+        assert_eq!(digits, 0);
     }
 }

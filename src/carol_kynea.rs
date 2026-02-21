@@ -249,8 +249,7 @@ pub fn search(
     let sieve_primes = sieve::generate_primes(sieve_limit);
     info!(
         prime_count = sieve_primes.len(),
-        sieve_limit,
-        "sieve initialized"
+        sieve_limit, "sieve initialized"
     );
 
     let resume_from = match checkpoint::load(checkpoint_path) {
@@ -426,7 +425,16 @@ pub fn search(
                     "prime found"
                 );
             }
-            db.insert_prime_sync(rt, form, &expr, digits, search_params, &certainty, None, &[form, "kbn"])?;
+            db.insert_prime_sync(
+                rt,
+                form,
+                &expr,
+                digits,
+                search_params,
+                &certainty,
+                None,
+                &[form, "kbn"],
+            )?;
             if let Some(wc) = worker_client {
                 wc.report_prime(form, &expr, digits, search_params, &certainty);
             }
@@ -454,7 +462,10 @@ pub fn search(
                     max_n: Some(max_n),
                 },
             )?;
-            info!(n = block_end, "stop requested by coordinator, checkpoint saved");
+            info!(
+                n = block_end,
+                "stop requested by coordinator, checkpoint saved"
+            );
             return Ok(());
         }
 

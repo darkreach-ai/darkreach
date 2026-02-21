@@ -196,15 +196,11 @@ pub fn search(
     let total_bases = (max_b - min_b) / 2 + 1;
     info!(
         fermat_n,
-        min_b,
-        max_b,
-        total_bases,
-        "generalized Fermat search started"
+        min_b, max_b, total_bases, "generalized Fermat search started"
     );
     info!(
         prime_count = sieve_primes.len(),
-        sieve_limit,
-        "sieve initialized"
+        sieve_limit, "sieve initialized"
     );
 
     let resume_from = match checkpoint::load(checkpoint_path) {
@@ -358,7 +354,10 @@ pub fn search(
                     max_base: Some(max_b),
                 },
             )?;
-            info!(b = block_max, "stop requested by coordinator, checkpoint saved");
+            info!(
+                b = block_max,
+                "stop requested by coordinator, checkpoint saved"
+            );
             return Ok(());
         }
     }

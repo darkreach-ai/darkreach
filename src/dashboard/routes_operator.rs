@@ -296,10 +296,7 @@ pub(super) async fn handler_v1_worker_heartbeat(
     };
 
     let start = std::time::Instant::now();
-    let result = state
-        .db
-        .operator_node_heartbeat(&payload.worker_id)
-        .await;
+    let result = state.db.operator_node_heartbeat(&payload.worker_id).await;
     let rtt = start.elapsed().as_secs_f64();
     state.prom_metrics.heartbeat_rtt.observe(rtt);
     state
@@ -442,9 +439,7 @@ pub(super) async fn handler_v1_result(
         state
             .prom_metrics
             .work_block_duration
-            .get_or_create(&crate::prom_metrics::FormLabel {
-                form: search_type,
-            })
+            .get_or_create(&crate::prom_metrics::FormLabel { form: search_type })
             .observe(duration_secs);
     }
 

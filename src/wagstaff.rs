@@ -143,9 +143,15 @@ pub fn search(
 
     // Build modular sieve
     let sieve_primes = sieve::generate_primes(sieve_limit);
-    info!(prime_count = sieve_primes.len(), "computing multiplicative orders for sieve primes");
+    info!(
+        prime_count = sieve_primes.len(),
+        "computing multiplicative orders for sieve primes"
+    );
     let wsieve = WagstaffSieve::new(&sieve_primes);
-    info!(active_entries = wsieve.entries.len(), "Wagstaff sieve ready");
+    info!(
+        active_entries = wsieve.entries.len(),
+        "Wagstaff sieve ready"
+    );
 
     // Minimum exponent where (2^p+1)/3 > sieve_limit, making sieve safe
     let sieve_min_exp = ((sieve_limit as f64 * 3.0).log2().ceil()) as u64;
@@ -329,7 +335,10 @@ pub fn search(
                     max_exp: Some(max_exp),
                 },
             )?;
-            info!(p = block_max, "stop requested by coordinator, checkpoint saved");
+            info!(
+                p = block_max,
+                "stop requested by coordinator, checkpoint saved"
+            );
             return Ok(());
         }
 
@@ -337,7 +346,11 @@ pub fn search(
     }
 
     checkpoint::clear(checkpoint_path);
-    info!(sieved_out, total = candidates.len(), "Wagstaff sieve eliminated candidates");
+    info!(
+        sieved_out,
+        total = candidates.len(),
+        "Wagstaff sieve eliminated candidates"
+    );
     Ok(())
 }
 
@@ -625,7 +638,11 @@ mod tests {
     fn wagstaff_p3_is_smallest() {
         let w = wagstaff(3);
         assert_eq!(w, 3);
-        assert_ne!(w.is_probably_prime(25), IsPrime::No, "(2^3+1)/3 = 3 is prime");
+        assert_ne!(
+            w.is_probably_prime(25),
+            IsPrime::No,
+            "(2^3+1)/3 = 3 is prime"
+        );
     }
 
     /// Verifies adaptive block sizing: larger exponents get smaller blocks.
@@ -649,17 +666,20 @@ mod tests {
         assert!(
             small >= medium,
             "Block size for small exp ({}) should be >= medium ({})",
-            small, medium
+            small,
+            medium
         );
         assert!(
             medium >= large,
             "Block size for medium exp ({}) should be >= large ({})",
-            medium, large
+            medium,
+            large
         );
         assert!(
             large >= huge,
             "Block size for large exp ({}) should be >= huge ({})",
-            large, huge
+            large,
+            huge
         );
     }
 
@@ -680,7 +700,10 @@ mod tests {
             assert!(
                 window[0].0 <= window[1].0,
                 "Sieve entries not sorted: ({}, {}) before ({}, {})",
-                window[0].0, window[0].1, window[1].0, window[1].1
+                window[0].0,
+                window[0].1,
+                window[1].0,
+                window[1].1
             );
         }
 
@@ -745,9 +768,6 @@ mod tests {
             "(2^29+1)/3 should be composite"
         );
         // Verify it has a factor < 100
-        assert!(
-            w.is_divisible_u(59),
-            "(2^29+1)/3 should be divisible by 59"
-        );
+        assert!(w.is_divisible_u(59), "(2^29+1)/3 should be divisible by 59");
     }
 }

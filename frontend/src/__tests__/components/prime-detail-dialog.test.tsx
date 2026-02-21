@@ -37,10 +37,23 @@ vi.mock("sonner", () => ({
 // Mock lucide-react icons
 vi.mock("lucide-react", () => ({
   CheckCircle2: () => <span data-testid="check-icon" />,
+  ChevronDown: () => <span data-testid="chevron-down-icon" />,
+  ChevronRight: () => <span data-testid="chevron-right-icon" />,
   Clock: () => <span data-testid="clock-icon" />,
   ExternalLink: () => <span data-testid="external-link-icon" />,
   RefreshCw: () => <span data-testid="refresh-icon" />,
   Loader2: () => <span data-testid="loader-icon" />,
+  Shield: () => <span data-testid="shield-icon" />,
+}));
+
+// Mock the verification hook
+vi.mock("@/hooks/use-prime-verification", () => ({
+  usePrimeVerifications: () => ({ results: [], loading: false }),
+}));
+
+// Mock TagChip
+vi.mock("@/components/tag-chip", () => ({
+  TagChip: ({ tag }: { tag: string }) => <span data-testid="tag-chip">{tag}</span>,
 }));
 
 // Mock format module

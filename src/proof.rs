@@ -109,14 +109,17 @@ pub fn pocklington_factorial_proof(n: u64, candidate: &Integer, sieve_primes: &[
 
     info!(
         factor_count = factors.len(),
-        n,
-        "Pocklington proof: verifying prime factors of n!"
+        n, "Pocklington proof: verifying prime factors of n!"
     );
 
     // Parallelize across factors
     let all_pass = factors.par_iter().enumerate().all(|(i, &q)| {
         if i > 0 && i % 100 == 0 {
-            debug!(verified = i, total = factors.len(), "Pocklington: factors verified");
+            debug!(
+                verified = i,
+                total = factors.len(),
+                "Pocklington: factors verified"
+            );
         }
 
         let exp_q = Integer::from(&n_minus_1 / q);
@@ -177,8 +180,7 @@ pub fn morrison_factorial_proof(n: u64, candidate: &Integer, sieve_primes: &[u64
 
     info!(
         factor_count = factors.len(),
-        n,
-        "Morrison proof: verifying prime factors of n!"
+        n, "Morrison proof: verifying prime factors of n!"
     );
 
     // Track which factors have been satisfied

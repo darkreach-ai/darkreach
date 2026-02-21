@@ -423,7 +423,10 @@ mod tests {
     fn gethostname_returns_something() {
         // On any real machine, hostname should return a non-empty string
         let h = gethostname();
-        assert!(h.is_some(), "gethostname should return Some on real machine");
+        assert!(
+            h.is_some(),
+            "gethostname should return Some on real machine"
+        );
         assert!(!h.unwrap().is_empty());
     }
 

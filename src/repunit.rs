@@ -126,8 +126,7 @@ pub fn search(
     info!(base, min_n, max_n, "repunit search started");
     info!(
         prime_count = sieve_primes.len(),
-        sieve_limit,
-        "sieve initialized"
+        sieve_limit, "sieve initialized"
     );
 
     let resume_from = match checkpoint::load(checkpoint_path) {
@@ -299,7 +298,10 @@ pub fn search(
                     max_n: Some(max_n),
                 },
             )?;
-            info!(n = block_max, "stop requested by coordinator, checkpoint saved");
+            info!(
+                n = block_max,
+                "stop requested by coordinator, checkpoint saved"
+            );
             return Ok(());
         }
     }

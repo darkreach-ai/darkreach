@@ -29,11 +29,7 @@ pub(super) async fn handler_strategy_status(
         }
     };
 
-    let last_decision = state
-        .db
-        .get_strategy_decisions(1)
-        .await
-        .unwrap_or_default();
+    let last_decision = state.db.get_strategy_decisions(1).await.unwrap_or_default();
     let monthly_spend = state.db.get_monthly_strategy_spend().await.unwrap_or(0.0);
 
     Json(serde_json::json!({

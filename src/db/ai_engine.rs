@@ -201,10 +201,7 @@ impl Database {
     }
 
     /// Get recent completed agent task results for feedback integration.
-    pub async fn get_recent_agent_results(
-        &self,
-        limit: i64,
-    ) -> Result<Vec<super::AgentTaskRow>> {
+    pub async fn get_recent_agent_results(&self, limit: i64) -> Result<Vec<super::AgentTaskRow>> {
         let rows = sqlx::query_as::<_, super::AgentTaskRow>(
             "SELECT id, title, description, status, priority, agent_model,
                     assigned_agent, source, result, tokens_used, cost_usd,
@@ -278,10 +275,7 @@ impl Database {
 
     /// Get recent decisions that have outcomes and component scores,
     /// for weight learning via EWA.
-    pub async fn get_outcomes_with_scores(
-        &self,
-        limit: i64,
-    ) -> Result<Vec<DecisionWithOutcome>> {
+    pub async fn get_outcomes_with_scores(&self, limit: i64) -> Result<Vec<DecisionWithOutcome>> {
         let rows = sqlx::query_as::<_, DecisionWithOutcome>(
             "SELECT id, form, component_scores, outcome
              FROM ai_engine_decisions

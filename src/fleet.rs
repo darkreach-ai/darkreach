@@ -157,7 +157,10 @@ mod tests {
     fn worker_state_with_checkpoint() {
         let mut worker = make_worker("worker-5", 8);
         worker.checkpoint = Some("/tmp/darkreach.checkpoint".into());
-        assert_eq!(worker.checkpoint.as_deref(), Some("/tmp/darkreach.checkpoint"));
+        assert_eq!(
+            worker.checkpoint.as_deref(),
+            Some("/tmp/darkreach.checkpoint")
+        );
     }
 
     /// Clone must produce an independent copy. WorkerState is cloned when
@@ -202,7 +205,10 @@ mod tests {
         let mut worker = make_worker("worker-8", 4);
         // Simulate a stale worker: last_heartbeat_secs_ago > 60
         worker.last_heartbeat_secs_ago = 120;
-        assert!(worker.last_heartbeat_secs_ago > 60, "Worker should be considered stale");
+        assert!(
+            worker.last_heartbeat_secs_ago > 60,
+            "Worker should be considered stale"
+        );
     }
 
     // ── JSON Round-Trip ────────────────────────────────────────────

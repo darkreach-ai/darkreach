@@ -43,7 +43,7 @@ use std::path::Path;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Instant;
-use tracing::{info, debug};
+use tracing::{debug, info};
 
 use crate::checkpoint::{self, Checkpoint};
 use crate::db::Database;
@@ -193,7 +193,10 @@ pub fn search(
     let sieve_limit = sieve::resolve_sieve_limit(sieve_limit, candidate_bits, n_range);
 
     let sieve_primes = sieve::generate_primes(sieve_limit);
-    info!(prime_count = sieve_primes.len(), sieve_limit, "sieve initialized");
+    info!(
+        prime_count = sieve_primes.len(),
+        sieve_limit, "sieve initialized"
+    );
 
     let resume_from = match checkpoint::load(checkpoint_path) {
         Some(Checkpoint::CullenWoodall { last_n, .. }) if last_n >= min_n && last_n < max_n => {
@@ -232,8 +235,14 @@ pub fn search(
         cullen_survivors,
         woodall_survivors,
         total_range,
-        cullen_pct = format_args!("{:.1}", cullen_survivors as f64 / total_range as f64 * 100.0),
-        woodall_pct = format_args!("{:.1}", woodall_survivors as f64 / total_range as f64 * 100.0),
+        cullen_pct = format_args!(
+            "{:.1}",
+            cullen_survivors as f64 / total_range as f64 * 100.0
+        ),
+        woodall_pct = format_args!(
+            "{:.1}",
+            woodall_survivors as f64 / total_range as f64 * 100.0
+        ),
         "sieve complete"
     );
 
@@ -386,7 +395,16 @@ pub fn search(
                     "*** PRIME FOUND ***"
                 );
             }
-            db.insert_prime_sync(rt, form, &expr, digits, search_params, &certainty, None, &[form, "kbn"])?;
+            db.insert_prime_sync(
+                rt,
+                form,
+                &expr,
+                digits,
+                search_params,
+                &certainty,
+                None,
+                &[form, "kbn"],
+            )?;
             if let Some(wc) = worker_client {
                 wc.report_prime(form, &expr, digits, search_params, &certainty);
             }
@@ -414,7 +432,10 @@ pub fn search(
                     max_n: Some(max_n),
                 },
             )?;
-            info!(n = block_end, "stop requested by coordinator, checkpoint saved");
+            info!(
+                n = block_end,
+                "stop requested by coordinator, checkpoint saved"
+            );
             return Ok(());
         }
 

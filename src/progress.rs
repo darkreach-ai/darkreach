@@ -254,7 +254,11 @@ mod tests {
         }
         // The current string should be one of the valid values (last writer wins)
         let current = p.current.lock().unwrap().clone();
-        assert!(current.starts_with("thread-"), "current should be a valid thread value, got: {}", current);
+        assert!(
+            current.starts_with("thread-"),
+            "current should be a valid thread value, got: {}",
+            current
+        );
     }
 
     /// Large batch increments (millions) must accumulate correctly. Some

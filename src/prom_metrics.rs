@@ -181,7 +181,9 @@ impl Metrics {
 
         // HTTP request latency: fine-grained buckets from 1ms to 5s
         fn http_histogram() -> Histogram {
-            Histogram::new([0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0])
+            Histogram::new([
+                0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0,
+            ])
         }
         let http_request_duration =
             Family::<HttpLabel, Histogram, fn() -> Histogram>::new_with_constructor(
@@ -209,7 +211,9 @@ impl Metrics {
 
         // Work block processing: 1s to 1 hour
         fn block_histogram() -> Histogram {
-            Histogram::new([1.0, 5.0, 10.0, 30.0, 60.0, 120.0, 300.0, 600.0, 1800.0, 3600.0])
+            Histogram::new([
+                1.0, 5.0, 10.0, 30.0, 60.0, 120.0, 300.0, 600.0, 1800.0, 3600.0,
+            ])
         }
         let work_block_duration =
             Family::<FormLabel, Histogram, fn() -> Histogram>::new_with_constructor(
@@ -222,8 +226,7 @@ impl Metrics {
         );
 
         // Heartbeat RTT: 10ms to 5s
-        let heartbeat_rtt =
-            Histogram::new([0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.0, 5.0]);
+        let heartbeat_rtt = Histogram::new([0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.0, 5.0]);
         registry.register(
             "darkreach_heartbeat_rtt_seconds",
             "Worker heartbeat SQL round-trip time in seconds",
@@ -341,29 +344,167 @@ impl Metrics {
     /// description, and labels. Consumed by `GET /api/observability/catalog`.
     pub fn catalog() -> Vec<MetricCatalogEntry> {
         vec![
-            MetricCatalogEntry { name: "darkreach_primes_found_total", metric_type: "counter", unit: "primes", description: "Total primes discovered", labels: &["form"] },
-            MetricCatalogEntry { name: "darkreach_candidates_tested_total", metric_type: "counter", unit: "candidates", description: "Total candidates tested", labels: &["form"] },
-            MetricCatalogEntry { name: "darkreach_workers_connected", metric_type: "gauge", unit: "workers", description: "Currently connected workers", labels: &[] },
-            MetricCatalogEntry { name: "darkreach_work_blocks_available", metric_type: "gauge", unit: "blocks", description: "Unclaimed work blocks", labels: &[] },
-            MetricCatalogEntry { name: "darkreach_work_blocks_claimed", metric_type: "gauge", unit: "blocks", description: "Currently claimed work blocks", labels: &[] },
-            MetricCatalogEntry { name: "darkreach_search_jobs_active", metric_type: "gauge", unit: "jobs", description: "Active search jobs", labels: &[] },
-            MetricCatalogEntry { name: "darkreach_cpu_usage_percent", metric_type: "gauge", unit: "percent", description: "Coordinator CPU usage", labels: &[] },
-            MetricCatalogEntry { name: "darkreach_memory_usage_percent", metric_type: "gauge", unit: "percent", description: "Coordinator memory usage", labels: &[] },
-            MetricCatalogEntry { name: "darkreach_http_request_duration_seconds", metric_type: "histogram", unit: "seconds", description: "API request latency", labels: &["method", "path"] },
-            MetricCatalogEntry { name: "darkreach_db_query_duration_seconds", metric_type: "histogram", unit: "seconds", description: "Database query latency", labels: &["query"] },
-            MetricCatalogEntry { name: "darkreach_work_block_duration_seconds", metric_type: "histogram", unit: "seconds", description: "Work block processing time", labels: &["form"] },
-            MetricCatalogEntry { name: "darkreach_heartbeat_rtt_seconds", metric_type: "histogram", unit: "seconds", description: "Worker heartbeat round-trip time", labels: &[] },
-            MetricCatalogEntry { name: "darkreach_db_pool_active", metric_type: "gauge", unit: "connections", description: "Active (in-use) database connections", labels: &[] },
-            MetricCatalogEntry { name: "darkreach_db_pool_idle", metric_type: "gauge", unit: "connections", description: "Idle database connections", labels: &[] },
-            MetricCatalogEntry { name: "darkreach_db_pool_max", metric_type: "gauge", unit: "connections", description: "Maximum configured database connections", labels: &[] },
-            MetricCatalogEntry { name: "darkreach_ws_connections_active", metric_type: "gauge", unit: "connections", description: "Active WebSocket connections", labels: &[] },
-            MetricCatalogEntry { name: "darkreach_ws_messages_sent_total", metric_type: "counter", unit: "messages", description: "Total WebSocket messages sent", labels: &[] },
-            MetricCatalogEntry { name: "darkreach_db_read_pool_active", metric_type: "gauge", unit: "connections", description: "Active read replica database connections", labels: &[] },
-            MetricCatalogEntry { name: "darkreach_db_read_pool_idle", metric_type: "gauge", unit: "connections", description: "Idle read replica database connections", labels: &[] },
-            MetricCatalogEntry { name: "darkreach_ai_engine_tick_duration_seconds", metric_type: "histogram", unit: "seconds", description: "AI engine tick duration", labels: &[] },
-            MetricCatalogEntry { name: "darkreach_ai_engine_tick_count", metric_type: "counter", unit: "ticks", description: "Total AI engine ticks", labels: &[] },
-            MetricCatalogEntry { name: "darkreach_ai_engine_decisions", metric_type: "counter", unit: "decisions", description: "AI engine decisions by type", labels: &["form"] },
-            MetricCatalogEntry { name: "darkreach_ai_engine_cost_model_version", metric_type: "gauge", unit: "version", description: "Cost model version", labels: &[] },
+            MetricCatalogEntry {
+                name: "darkreach_primes_found_total",
+                metric_type: "counter",
+                unit: "primes",
+                description: "Total primes discovered",
+                labels: &["form"],
+            },
+            MetricCatalogEntry {
+                name: "darkreach_candidates_tested_total",
+                metric_type: "counter",
+                unit: "candidates",
+                description: "Total candidates tested",
+                labels: &["form"],
+            },
+            MetricCatalogEntry {
+                name: "darkreach_workers_connected",
+                metric_type: "gauge",
+                unit: "workers",
+                description: "Currently connected workers",
+                labels: &[],
+            },
+            MetricCatalogEntry {
+                name: "darkreach_work_blocks_available",
+                metric_type: "gauge",
+                unit: "blocks",
+                description: "Unclaimed work blocks",
+                labels: &[],
+            },
+            MetricCatalogEntry {
+                name: "darkreach_work_blocks_claimed",
+                metric_type: "gauge",
+                unit: "blocks",
+                description: "Currently claimed work blocks",
+                labels: &[],
+            },
+            MetricCatalogEntry {
+                name: "darkreach_search_jobs_active",
+                metric_type: "gauge",
+                unit: "jobs",
+                description: "Active search jobs",
+                labels: &[],
+            },
+            MetricCatalogEntry {
+                name: "darkreach_cpu_usage_percent",
+                metric_type: "gauge",
+                unit: "percent",
+                description: "Coordinator CPU usage",
+                labels: &[],
+            },
+            MetricCatalogEntry {
+                name: "darkreach_memory_usage_percent",
+                metric_type: "gauge",
+                unit: "percent",
+                description: "Coordinator memory usage",
+                labels: &[],
+            },
+            MetricCatalogEntry {
+                name: "darkreach_http_request_duration_seconds",
+                metric_type: "histogram",
+                unit: "seconds",
+                description: "API request latency",
+                labels: &["method", "path"],
+            },
+            MetricCatalogEntry {
+                name: "darkreach_db_query_duration_seconds",
+                metric_type: "histogram",
+                unit: "seconds",
+                description: "Database query latency",
+                labels: &["query"],
+            },
+            MetricCatalogEntry {
+                name: "darkreach_work_block_duration_seconds",
+                metric_type: "histogram",
+                unit: "seconds",
+                description: "Work block processing time",
+                labels: &["form"],
+            },
+            MetricCatalogEntry {
+                name: "darkreach_heartbeat_rtt_seconds",
+                metric_type: "histogram",
+                unit: "seconds",
+                description: "Worker heartbeat round-trip time",
+                labels: &[],
+            },
+            MetricCatalogEntry {
+                name: "darkreach_db_pool_active",
+                metric_type: "gauge",
+                unit: "connections",
+                description: "Active (in-use) database connections",
+                labels: &[],
+            },
+            MetricCatalogEntry {
+                name: "darkreach_db_pool_idle",
+                metric_type: "gauge",
+                unit: "connections",
+                description: "Idle database connections",
+                labels: &[],
+            },
+            MetricCatalogEntry {
+                name: "darkreach_db_pool_max",
+                metric_type: "gauge",
+                unit: "connections",
+                description: "Maximum configured database connections",
+                labels: &[],
+            },
+            MetricCatalogEntry {
+                name: "darkreach_ws_connections_active",
+                metric_type: "gauge",
+                unit: "connections",
+                description: "Active WebSocket connections",
+                labels: &[],
+            },
+            MetricCatalogEntry {
+                name: "darkreach_ws_messages_sent_total",
+                metric_type: "counter",
+                unit: "messages",
+                description: "Total WebSocket messages sent",
+                labels: &[],
+            },
+            MetricCatalogEntry {
+                name: "darkreach_db_read_pool_active",
+                metric_type: "gauge",
+                unit: "connections",
+                description: "Active read replica database connections",
+                labels: &[],
+            },
+            MetricCatalogEntry {
+                name: "darkreach_db_read_pool_idle",
+                metric_type: "gauge",
+                unit: "connections",
+                description: "Idle read replica database connections",
+                labels: &[],
+            },
+            MetricCatalogEntry {
+                name: "darkreach_ai_engine_tick_duration_seconds",
+                metric_type: "histogram",
+                unit: "seconds",
+                description: "AI engine tick duration",
+                labels: &[],
+            },
+            MetricCatalogEntry {
+                name: "darkreach_ai_engine_tick_count",
+                metric_type: "counter",
+                unit: "ticks",
+                description: "Total AI engine ticks",
+                labels: &[],
+            },
+            MetricCatalogEntry {
+                name: "darkreach_ai_engine_decisions",
+                metric_type: "counter",
+                unit: "decisions",
+                description: "AI engine decisions by type",
+                labels: &["form"],
+            },
+            MetricCatalogEntry {
+                name: "darkreach_ai_engine_cost_model_version",
+                metric_type: "gauge",
+                unit: "version",
+                description: "Cost model version",
+                labels: &[],
+            },
         ]
     }
 
@@ -497,8 +638,14 @@ mod tests {
         m.search_jobs_active.set(3);
 
         let output = m.encode();
-        assert!(output.contains("42"), "workers_connected=42 not found in output");
-        assert!(output.contains("100"), "work_blocks_available=100 not found");
+        assert!(
+            output.contains("42"),
+            "workers_connected=42 not found in output"
+        );
+        assert!(
+            output.contains("100"),
+            "work_blocks_available=100 not found"
+        );
         assert!(output.contains("17"), "work_blocks_claimed=17 not found");
     }
 
@@ -574,9 +721,15 @@ mod tests {
     /// Same-form labels must be equal; different-form labels must differ.
     #[test]
     fn form_label_hash_equality() {
-        let l1 = FormLabel { form: "factorial".to_string() };
-        let l2 = FormLabel { form: "factorial".to_string() };
-        let l3 = FormLabel { form: "kbn".to_string() };
+        let l1 = FormLabel {
+            form: "factorial".to_string(),
+        };
+        let l2 = FormLabel {
+            form: "factorial".to_string(),
+        };
+        let l3 = FormLabel {
+            form: "kbn".to_string(),
+        };
         assert_eq!(l1, l2);
         assert_ne!(l1, l3);
     }
@@ -693,15 +846,30 @@ mod tests {
     /// HttpLabel and QueryLabel must implement Hash+Eq for Family keys.
     #[test]
     fn label_types_hash_equality() {
-        let h1 = HttpLabel { method: "GET".into(), path: "/api".into() };
-        let h2 = HttpLabel { method: "GET".into(), path: "/api".into() };
-        let h3 = HttpLabel { method: "POST".into(), path: "/api".into() };
+        let h1 = HttpLabel {
+            method: "GET".into(),
+            path: "/api".into(),
+        };
+        let h2 = HttpLabel {
+            method: "GET".into(),
+            path: "/api".into(),
+        };
+        let h3 = HttpLabel {
+            method: "POST".into(),
+            path: "/api".into(),
+        };
         assert_eq!(h1, h2);
         assert_ne!(h1, h3);
 
-        let q1 = QueryLabel { query: "heartbeat".into() };
-        let q2 = QueryLabel { query: "heartbeat".into() };
-        let q3 = QueryLabel { query: "insert".into() };
+        let q1 = QueryLabel {
+            query: "heartbeat".into(),
+        };
+        let q2 = QueryLabel {
+            query: "heartbeat".into(),
+        };
+        let q3 = QueryLabel {
+            query: "insert".into(),
+        };
         assert_eq!(q1, q2);
         assert_ne!(q1, q3);
     }

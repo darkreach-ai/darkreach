@@ -31,6 +31,8 @@ import {
   overrideDecision,
 } from "@/hooks/use-strategy";
 import type { FormScore, StrategyDecision } from "@/hooks/use-strategy";
+import { useWs } from "@/contexts/websocket-context";
+import type { AiEngineDecision, ScoringWeights, WsData } from "@/hooks/use-websocket";
 import {
   Brain,
   Play,
@@ -41,6 +43,11 @@ import {
   ChevronDown,
   ChevronRight,
   RefreshCw,
+  Cpu,
+  Target,
+  CheckCircle2,
+  XCircle,
+  CircleDot,
 } from "lucide-react";
 
 export default function StrategyPage() {
@@ -56,6 +63,7 @@ function StrategyPageInner() {
   const { scores } = useStrategyScores();
   const { decisions } = useStrategyDecisions();
   const { config, refetch: refetchConfig } = useStrategyConfig();
+  const { aiEngine } = useWs();
   const [triggering, setTriggering] = useState(false);
 
   const handleToggle = useCallback(
@@ -141,6 +149,9 @@ function StrategyPageInner() {
           </TabsTrigger>
           <TabsTrigger value="decisions">
             Decisions ({decisions.length})
+          </TabsTrigger>
+          <TabsTrigger value="ai-engine">
+            AI Engine {aiEngine?.tick_count != null && `(${aiEngine.tick_count})`}
           </TabsTrigger>
           <TabsTrigger value="config">Config</TabsTrigger>
         </TabsList>
@@ -300,6 +311,11 @@ function StrategyPageInner() {
           ) : (
             decisions.map((d) => <DecisionCard key={d.id} decision={d} />)
           )}
+        </TabsContent>
+
+        {/* ── AI Engine ─────────────────────────────────── */}
+        <TabsContent value="ai-engine" className="space-y-4 mt-4">
+          <AiEngineTab aiEngine={aiEngine} />
         </TabsContent>
 
         {/* ── Config ────────────────────────────────────── */}
@@ -575,5 +591,210 @@ function ConfigPanel({
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+// ── AI Engine Tab ────────────────────────────────────────────────
+
+function AiEngineTab({ aiEngine }: { aiEngine: WsData["aiEngine"] }) {
+  if (!aiEngine) {
+    return <EmptyState message="No AI engine data yet. The engine may not have run a tick." />;
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Status cards */}
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Tick Count
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center gap-2">
+              <Cpu className="h-4 w-4 text-muted-foreground" />
+              <span className="text-2xl font-bold">
+                {aiEngine.tick_count ?? 0}
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Cost Model Version
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center gap-2">
+              <Target className="h-4 w-4 text-muted-foreground" />
+              <span className="text-2xl font-bold">
+                v{aiEngine.cost_model_version ?? 0}
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Recent Decisions
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center gap-2">
+              <Activity className="h-4 w-4 text-muted-foreground" />
+              <span className="text-2xl font-bold">
+                {aiEngine.recent_decisions?.length ?? 0}
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Scoring weights */}
+      {aiEngine.scoring_weights && (
+        <WeightsCard weights={aiEngine.scoring_weights} />
+      )}
+
+      {/* Recent decisions */}
+      {aiEngine.recent_decisions?.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm font-medium">
+              Recent AI Decisions
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {aiEngine.recent_decisions.map((d) => (
+              <AiDecisionCard key={d.id} decision={d} />
+            ))}
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+/** Horizontal bar visualization of the 7-component scoring weights. */
+function WeightsCard({ weights }: { weights: ScoringWeights }) {
+  const entries: { key: string; label: string; value: number }[] = [
+    { key: "record_gap", label: "Record Gap", value: weights.record_gap },
+    { key: "yield_rate", label: "Yield Rate", value: weights.yield_rate },
+    { key: "cost_efficiency", label: "Cost Efficiency", value: weights.cost_efficiency },
+    { key: "opportunity_density", label: "Opportunity", value: weights.opportunity_density },
+    { key: "fleet_fit", label: "Fleet Fit", value: weights.fleet_fit },
+    { key: "momentum", label: "Momentum", value: weights.momentum },
+    { key: "competition", label: "Competition", value: weights.competition },
+  ];
+
+  const maxWeight = Math.max(...entries.map((e) => e.value), 0.01);
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-sm font-medium">
+          Scoring Weights (learned via EWA)
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-2">
+          {entries.map((e) => (
+            <div key={e.key} className="flex items-center gap-3">
+              <span className="w-28 text-sm text-muted-foreground truncate">
+                {e.label}
+              </span>
+              <div className="flex-1 h-3 rounded bg-muted overflow-hidden">
+                <div
+                  className="h-full rounded bg-indigo-500 transition-all"
+                  style={{ width: `${(e.value / maxWeight) * 100}%` }}
+                />
+              </div>
+              <span className="w-14 text-right text-sm font-mono">
+                {(e.value * 100).toFixed(1)}%
+              </span>
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+/** Individual AI engine decision card with outcome tracking. */
+function AiDecisionCard({ decision }: { decision: AiEngineDecision }) {
+  const [expanded, setExpanded] = useState(false);
+
+  const typeColor: Record<string, string> = {
+    create_project: "bg-green-500/10 text-green-700 dark:text-green-400",
+    stall_penalty: "bg-yellow-500/10 text-yellow-700 dark:text-yellow-400",
+    request_agent_intel: "bg-blue-500/10 text-blue-700 dark:text-blue-400",
+    rebalance_fleet: "bg-purple-500/10 text-purple-700 dark:text-purple-400",
+    no_action: "bg-gray-500/10 text-gray-500",
+  };
+
+  const outcomeIcon = decision.outcome
+    ? decision.outcome.verdict === "success"
+      ? <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+      : <XCircle className="h-3.5 w-3.5 text-red-500" />
+    : <CircleDot className="h-3.5 w-3.5 text-muted-foreground" />;
+
+  return (
+    <div className="border rounded-lg p-3">
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-1">
+            <Badge
+              variant="secondary"
+              className={typeColor[decision.decision_type] || ""}
+            >
+              {decision.decision_type.replace(/_/g, " ")}
+            </Badge>
+            {decision.form && (
+              <Badge variant="outline">{decision.form}</Badge>
+            )}
+            {decision.confidence != null && (
+              <span className="text-xs text-muted-foreground">
+                {(decision.confidence * 100).toFixed(0)}% conf
+              </span>
+            )}
+            <span className="ml-auto flex items-center gap-1 text-xs text-muted-foreground">
+              {outcomeIcon}
+              {decision.outcome
+                ? (decision.outcome.verdict as string)
+                : "pending"}
+            </span>
+          </div>
+          <p className="text-sm">{decision.action}</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            tick #{decision.tick_id} ·{" "}
+            {new Date(decision.created_at).toLocaleString()}
+          </p>
+        </div>
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => setExpanded(!expanded)}
+        >
+          {expanded ? (
+            <ChevronDown className="h-4 w-4" />
+          ) : (
+            <ChevronRight className="h-4 w-4" />
+          )}
+        </Button>
+      </div>
+      {expanded && (
+        <div className="mt-3 pt-3 border-t space-y-2">
+          <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+            {decision.reasoning}
+          </p>
+          {decision.outcome && (
+            <div className="text-xs bg-muted/50 rounded p-2 font-mono">
+              {JSON.stringify(decision.outcome, null, 2)}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }

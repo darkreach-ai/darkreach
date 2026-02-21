@@ -170,7 +170,10 @@ pub fn search(
     let sieve_limit = sieve::resolve_sieve_limit(sieve_limit, candidate_bits, n_range);
 
     let sieve_primes = sieve::generate_primes(sieve_limit);
-    info!(prime_count = sieve_primes.len(), sieve_limit, "near-repdigit sieve initialized");
+    info!(
+        prime_count = sieve_primes.len(),
+        sieve_limit, "near-repdigit sieve initialized"
+    );
 
     // Ensure we start on an odd digit count
     let first_odd = if min_digits.is_multiple_of(2) {
@@ -347,7 +350,10 @@ pub fn search(
                     max_digits: Some(max_digits),
                 },
             )?;
-            info!(digit_count, "stop requested by coordinator, checkpoint saved");
+            info!(
+                digit_count,
+                "stop requested by coordinator, checkpoint saved"
+            );
             return Ok(());
         }
 
@@ -676,9 +682,15 @@ mod tests {
                     let n = build_candidate(k, d, m);
                     let s = n.to_string_radix(10);
                     assert_eq!(
-                        s.len() as u64, expected_digits,
+                        s.len() as u64,
+                        expected_digits,
                         "k={}, d={}, m={}: expected {} digits, got {} (value={})",
-                        k, d, m, expected_digits, s.len(), s
+                        k,
+                        d,
+                        m,
+                        expected_digits,
+                        s.len(),
+                        s
                     );
                 }
             }
@@ -710,7 +722,10 @@ mod tests {
                         assert!(
                             non_nine_count <= 1,
                             "k={}, d={}, m=0: expected at most 1 non-nine digit, got {} (value={})",
-                            k, d, non_nine_count, s
+                            k,
+                            d,
+                            non_nine_count,
+                            s
                         );
                     } else {
                         // Two symmetric positions at k+m and k-m
@@ -758,7 +773,9 @@ mod tests {
             assert!(
                 !sieve_filter(k, d, m, &sieve_primes),
                 "Known prime k={}, d={}, m={} should survive sieve",
-                k, d, m
+                k,
+                d,
+                m
             );
         }
     }

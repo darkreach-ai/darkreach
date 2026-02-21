@@ -125,17 +125,50 @@ impl Database {
         // Build SET clause from provided fields
         let mut sets = Vec::new();
         let mut idx = 2u32; // $1 is id
-        if updates.get("name").is_some() { sets.push(format!("name = ${}", idx)); idx += 1; }
-        if updates.get("description").is_some() { sets.push(format!("description = ${}", idx)); idx += 1; }
-        if updates.get("enabled").is_some() { sets.push(format!("enabled = ${}", idx)); idx += 1; }
-        if updates.get("trigger_type").is_some() { sets.push(format!("trigger_type = ${}", idx)); idx += 1; }
-        if updates.get("cron_expr").is_some() { sets.push(format!("cron_expr = ${}", idx)); idx += 1; }
-        if updates.get("event_filter").is_some() { sets.push(format!("event_filter = ${}", idx)); idx += 1; }
-        if updates.get("task_title").is_some() { sets.push(format!("task_title = ${}", idx)); idx += 1; }
-        if updates.get("task_description").is_some() { sets.push(format!("task_description = ${}", idx)); idx += 1; }
-        if updates.get("priority").is_some() { sets.push(format!("priority = ${}", idx)); idx += 1; }
-        if updates.get("max_cost_usd").is_some() { sets.push(format!("max_cost_usd = ${}", idx)); idx += 1; }
-        if updates.get("permission_level").is_some() { sets.push(format!("permission_level = ${}", idx)); idx += 1; }
+        if updates.get("name").is_some() {
+            sets.push(format!("name = ${}", idx));
+            idx += 1;
+        }
+        if updates.get("description").is_some() {
+            sets.push(format!("description = ${}", idx));
+            idx += 1;
+        }
+        if updates.get("enabled").is_some() {
+            sets.push(format!("enabled = ${}", idx));
+            idx += 1;
+        }
+        if updates.get("trigger_type").is_some() {
+            sets.push(format!("trigger_type = ${}", idx));
+            idx += 1;
+        }
+        if updates.get("cron_expr").is_some() {
+            sets.push(format!("cron_expr = ${}", idx));
+            idx += 1;
+        }
+        if updates.get("event_filter").is_some() {
+            sets.push(format!("event_filter = ${}", idx));
+            idx += 1;
+        }
+        if updates.get("task_title").is_some() {
+            sets.push(format!("task_title = ${}", idx));
+            idx += 1;
+        }
+        if updates.get("task_description").is_some() {
+            sets.push(format!("task_description = ${}", idx));
+            idx += 1;
+        }
+        if updates.get("priority").is_some() {
+            sets.push(format!("priority = ${}", idx));
+            idx += 1;
+        }
+        if updates.get("max_cost_usd").is_some() {
+            sets.push(format!("max_cost_usd = ${}", idx));
+            idx += 1;
+        }
+        if updates.get("permission_level").is_some() {
+            sets.push(format!("permission_level = ${}", idx));
+            idx += 1;
+        }
         let _ = idx;
 
         if sets.is_empty() {
@@ -153,17 +186,39 @@ impl Database {
         );
 
         let mut query = sqlx::query_as::<_, AgentScheduleRow>(&sql).bind(id);
-        if let Some(v) = updates.get("name").and_then(|v| v.as_str()) { query = query.bind(v); }
-        if let Some(v) = updates.get("description").and_then(|v| v.as_str()) { query = query.bind(v); }
-        if let Some(v) = updates.get("enabled").and_then(|v| v.as_bool()) { query = query.bind(v); }
-        if let Some(v) = updates.get("trigger_type").and_then(|v| v.as_str()) { query = query.bind(v); }
-        if let Some(v) = updates.get("cron_expr") { query = query.bind(v.as_str()); }
-        if let Some(v) = updates.get("event_filter") { query = query.bind(v.as_str()); }
-        if let Some(v) = updates.get("task_title").and_then(|v| v.as_str()) { query = query.bind(v); }
-        if let Some(v) = updates.get("task_description").and_then(|v| v.as_str()) { query = query.bind(v); }
-        if let Some(v) = updates.get("priority").and_then(|v| v.as_str()) { query = query.bind(v); }
-        if let Some(v) = updates.get("max_cost_usd").and_then(|v| v.as_f64()) { query = query.bind(v); }
-        if let Some(v) = updates.get("permission_level").and_then(|v| v.as_i64()) { query = query.bind(v as i32); }
+        if let Some(v) = updates.get("name").and_then(|v| v.as_str()) {
+            query = query.bind(v);
+        }
+        if let Some(v) = updates.get("description").and_then(|v| v.as_str()) {
+            query = query.bind(v);
+        }
+        if let Some(v) = updates.get("enabled").and_then(|v| v.as_bool()) {
+            query = query.bind(v);
+        }
+        if let Some(v) = updates.get("trigger_type").and_then(|v| v.as_str()) {
+            query = query.bind(v);
+        }
+        if let Some(v) = updates.get("cron_expr") {
+            query = query.bind(v.as_str());
+        }
+        if let Some(v) = updates.get("event_filter") {
+            query = query.bind(v.as_str());
+        }
+        if let Some(v) = updates.get("task_title").and_then(|v| v.as_str()) {
+            query = query.bind(v);
+        }
+        if let Some(v) = updates.get("task_description").and_then(|v| v.as_str()) {
+            query = query.bind(v);
+        }
+        if let Some(v) = updates.get("priority").and_then(|v| v.as_str()) {
+            query = query.bind(v);
+        }
+        if let Some(v) = updates.get("max_cost_usd").and_then(|v| v.as_f64()) {
+            query = query.bind(v);
+        }
+        if let Some(v) = updates.get("permission_level").and_then(|v| v.as_i64()) {
+            query = query.bind(v as i32);
+        }
 
         let row = query.fetch_optional(&self.pool).await?;
         Ok(row)

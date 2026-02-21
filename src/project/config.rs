@@ -386,13 +386,22 @@ recommended_workers = 2
         assert_eq!(reparsed.project.tags, vec!["kbn", "record"]);
         assert_eq!(reparsed.target.target_digits, Some(100000));
         assert!(reparsed.competitive.is_some());
-        assert_eq!(reparsed.competitive.as_ref().unwrap().current_record_digits, Some(30103));
+        assert_eq!(
+            reparsed.competitive.as_ref().unwrap().current_record_digits,
+            Some(30103)
+        );
         assert!(reparsed.infrastructure.is_some());
-        assert_eq!(reparsed.infrastructure.as_ref().unwrap().min_ram_gb, Some(8));
+        assert_eq!(
+            reparsed.infrastructure.as_ref().unwrap().min_ram_gb,
+            Some(8)
+        );
         assert!(reparsed.budget.is_some());
         assert_eq!(reparsed.budget.as_ref().unwrap().max_cost_usd, Some(100.0));
         assert!(reparsed.workers.is_some());
-        assert_eq!(reparsed.workers.as_ref().unwrap().recommended_workers, Some(2));
+        assert_eq!(
+            reparsed.workers.as_ref().unwrap().recommended_workers,
+            Some(2)
+        );
     }
 
     // ── Slug generation ─────────────────────────────────────────
@@ -434,7 +443,10 @@ recommended_workers = 2
 
     #[test]
     fn slugify_parentheses_and_equals() {
-        assert_eq!(slugify("factorial survey (n=1..1000)"), "factorial-survey-n-1-1000");
+        assert_eq!(
+            slugify("factorial survey (n=1..1000)"),
+            "factorial-survey-n-1-1000"
+        );
     }
 
     #[test]
@@ -551,7 +563,11 @@ name = "s"
 search_params = {}
 "#;
         let err = parse_toml(toml_str).unwrap_err();
-        assert!(err.to_string().contains("name"), "Expected name validation error, got: {}", err);
+        assert!(
+            err.to_string().contains("name"),
+            "Expected name validation error, got: {}",
+            err
+        );
     }
 
     #[test]
@@ -567,7 +583,11 @@ range_start = 1
 range_end = 100
 "#;
         let err = parse_toml(toml_str).unwrap_err();
-        assert!(err.to_string().contains("form"), "Expected form validation error, got: {}", err);
+        assert!(
+            err.to_string().contains("form"),
+            "Expected form validation error, got: {}",
+            err
+        );
     }
 
     #[test]
@@ -585,9 +605,18 @@ form = "nonexistent_form"
     #[test]
     fn validate_all_valid_forms_accepted() {
         let valid_forms = [
-            "factorial", "primorial", "kbn", "palindromic", "near_repdigit",
-            "cullen_woodall", "wagstaff", "carol_kynea", "twin",
-            "sophie_germain", "repunit", "gen_fermat",
+            "factorial",
+            "primorial",
+            "kbn",
+            "palindromic",
+            "near_repdigit",
+            "cullen_woodall",
+            "wagstaff",
+            "carol_kynea",
+            "twin",
+            "sophie_germain",
+            "repunit",
+            "gen_fermat",
         ];
         for form in &valid_forms {
             let toml_str = format!(
@@ -600,7 +629,12 @@ form = "{}"
                 form, form
             );
             let result = parse_toml(&toml_str);
-            assert!(result.is_ok(), "Form '{}' should be valid, got: {:?}", form, result.err());
+            assert!(
+                result.is_ok(),
+                "Form '{}' should be valid, got: {:?}",
+                form,
+                result.err()
+            );
         }
     }
 

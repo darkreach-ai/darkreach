@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { CheckCircle2, Clock, ExternalLink, RefreshCw, Loader2 } from "lucide-react";
+import { CheckCircle2, ChevronDown, ChevronRight, Clock, ExternalLink, RefreshCw, Loader2, Shield } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -11,6 +11,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { JsonBlock } from "@/components/json-block";
+import { TagChip } from "@/components/tag-chip";
+import { usePrimeVerifications } from "@/hooks/use-prime-verification";
 import { API_BASE, numberWithCommas, formatTime } from "@/lib/format";
 
 interface PrimeData {
@@ -25,6 +27,7 @@ interface PrimeData {
   verified_at?: string | null;
   verification_method?: string | null;
   verification_tier?: number | null;
+  tags?: string[];
 }
 
 interface PrimeDetailDialogProps {
@@ -43,6 +46,9 @@ export function PrimeDetailDialog({
   loading = false,
 }: PrimeDetailDialogProps) {
   const [verifying, setVerifying] = useState(false);
+  const [verificationOpen, setVerificationOpen] = useState(false);
+  const { results: verificationResults, loading: verificationsLoading } =
+    usePrimeVerifications(open && verificationOpen ? prime?.id ?? null : null);
 
   const handleVerify = useCallback(async () => {
     if (!prime) return;
@@ -130,6 +136,16 @@ export function PrimeDetailDialog({
                 <span>{formatTime(prime.found_at)}</span>
               </div>
             </div>
+            {prime.tags && prime.tags.length > 0 && (
+              <div>
+                <div className="text-xs font-medium text-muted-foreground mb-1.5">Tags</div>
+                <div className="flex flex-wrap gap-1">
+                  {prime.tags.map((tag) => (
+                    <TagChip key={tag} tag={tag} />
+                  ))}
+                </div>
+              </div>
+            )}
             {prime.verified && prime.verification_method && (
               <div>
                 <div className="text-xs font-medium text-muted-foreground mb-1">Verification details</div>
@@ -141,6 +157,58 @@ export function PrimeDetailDialog({
                 </div>
               </div>
             )}
+            {/* Distributed verification history (collapsible) */}
+            <div>
+              <button
+                type="button"
+                onClick={() => setVerificationOpen((prev) => !prev)}
+                className="flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+              >
+                {verificationOpen ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
+                <Shield className="size-3" />
+                Distributed Verification
+              </button>
+              {verificationOpen && (
+                <div className="mt-2 bg-muted rounded-md p-3 text-xs space-y-2">
+                  {verificationsLoading && (
+                    <div className="text-muted-foreground">Loading...</div>
+                  )}
+                  {!verificationsLoading && verificationResults.length === 0 && (
+                    <div className="text-muted-foreground">No distributed verification results yet.</div>
+                  )}
+                  {!verificationsLoading && verificationResults.length > 0 && (
+                    <>
+                      <div className="text-muted-foreground mb-1">
+                        {verificationResults.filter((r) => r.status === "verified").length}/{verificationResults.length} verified
+                      </div>
+                      <div className="space-y-1.5">
+                        {verificationResults.map((r) => (
+                          <div key={r.id} className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-1.5">
+                              {r.status === "verified" ? (
+                                <CheckCircle2 className="size-3 text-green-500" />
+                              ) : r.status === "failed" ? (
+                                <span className="size-3 rounded-full bg-destructive inline-block" />
+                              ) : (
+                                <Clock className="size-3 text-muted-foreground" />
+                              )}
+                              <span className="truncate max-w-[140px]">
+                                {r.claimed_by ?? "unclaimed"}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2 text-muted-foreground">
+                              {r.verification_method && <span>{r.verification_method}</span>}
+                              {r.verification_tier != null && <span>T{r.verification_tier}</span>}
+                              {r.completed_at && <span>{formatTime(r.completed_at)}</span>}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
             {parsedSearchParams && (
               <JsonBlock label="Search parameters" data={parsedSearchParams} maxHeight="max-h-48" />
             )}

@@ -60,8 +60,8 @@ pub fn classify_at_discovery(form: &str, proof_method: &str) -> Vec<String> {
 
     // Cross-form structural tags: forms that reuse kbn infrastructure
     match form {
-        "twin" | "sophie_germain" | "cullen" | "woodall" | "cullen_woodall" | "carol"
-        | "kynea" | "carol_kynea" | "gen_fermat" => {
+        "twin" | "sophie_germain" | "cullen" | "woodall" | "cullen_woodall" | "carol" | "kynea"
+        | "carol_kynea" | "gen_fermat" => {
             tags.push("kbn".to_string());
         }
         "near_repdigit" => {

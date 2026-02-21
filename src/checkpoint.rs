@@ -661,9 +661,18 @@ mod tests {
     #[test]
     fn generation_path_formats_correctly() {
         let base = Path::new("/tmp/checkpoint.json");
-        assert_eq!(generation_path(base, 0), PathBuf::from("/tmp/checkpoint.json"));
-        assert_eq!(generation_path(base, 1), PathBuf::from("/tmp/checkpoint.json.1"));
-        assert_eq!(generation_path(base, 2), PathBuf::from("/tmp/checkpoint.json.2"));
+        assert_eq!(
+            generation_path(base, 0),
+            PathBuf::from("/tmp/checkpoint.json")
+        );
+        assert_eq!(
+            generation_path(base, 1),
+            PathBuf::from("/tmp/checkpoint.json.1")
+        );
+        assert_eq!(
+            generation_path(base, 2),
+            PathBuf::from("/tmp/checkpoint.json.2")
+        );
     }
 
     // ── Edge Cases ──────────────────────────────────────────────
@@ -732,7 +741,10 @@ mod tests {
         .unwrap();
         let raw = fs::read_to_string(&path).unwrap();
         let parsed: serde_json::Value = serde_json::from_str(&raw).unwrap();
-        assert!(parsed.get("checksum").is_some(), "Envelope should have checksum");
+        assert!(
+            parsed.get("checksum").is_some(),
+            "Envelope should have checksum"
+        );
         assert!(parsed.get("data").is_some(), "Envelope should have data");
     }
 
@@ -817,7 +829,13 @@ mod tests {
         save(&path, &cp).unwrap();
         let loaded = load(&path).unwrap();
         match loaded {
-            Checkpoint::NearRepdigit { digit_count, d, m, min_digits, max_digits } => {
+            Checkpoint::NearRepdigit {
+                digit_count,
+                d,
+                m,
+                min_digits,
+                max_digits,
+            } => {
                 assert_eq!(digit_count, 15);
                 assert_eq!(d, 7);
                 assert_eq!(m, 3);
@@ -844,7 +862,13 @@ mod tests {
         save(&path, &cp).unwrap();
         let loaded = load(&path).unwrap();
         match loaded {
-            Checkpoint::Twin { last_n, k, base, min_n, max_n } => {
+            Checkpoint::Twin {
+                last_n,
+                k,
+                base,
+                min_n,
+                max_n,
+            } => {
                 assert_eq!(last_n, 5000);
                 assert_eq!(k, Some(3));
                 assert_eq!(base, Some(2));
@@ -865,7 +889,11 @@ mod tests {
         fs::write(&tmp, "leftover").unwrap();
         save(
             &path,
-            &Checkpoint::Factorial { last_n: 1, start: None, end: None },
+            &Checkpoint::Factorial {
+                last_n: 1,
+                start: None,
+                end: None,
+            },
         )
         .unwrap();
 

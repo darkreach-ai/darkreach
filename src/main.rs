@@ -277,6 +277,18 @@ enum Commands {
     /// Run as an operator node (claim work, compute, submit results)
     #[command(alias = "volunteer")]
     Run,
+    /// Run as a prime verification worker (claim primes, re-verify, submit results)
+    VerifyWorker {
+        /// Worker ID for identification (defaults to hostname)
+        #[arg(long)]
+        worker_id: Option<String>,
+        /// Seconds between poll attempts when queue is empty
+        #[arg(long, default_value_t = 30)]
+        poll_interval: u64,
+        /// Maximum verifications before exiting (0 = unlimited)
+        #[arg(long, default_value_t = 0)]
+        max_verifications: u64,
+    },
 }
 
 #[derive(Subcommand)]
@@ -403,6 +415,26 @@ fn main() -> Result<()> {
             server,
         } => cli::run_register(server, username, email),
         Commands::Run => cli::run_operator(&cli),
+        Commands::VerifyWorker {
+            worker_id,
+            poll_interval,
+            max_verifications,
+        } => {
+            let database_url = cli.database_url.as_deref().ok_or_else(|| {
+                anyhow::anyhow!("DATABASE_URL is required (set via --database-url or env)")
+            })?;
+            let rt = tokio::runtime::Runtime::new()?;
+            let database = rt.block_on(db::Database::connect(database_url))?;
+            let wid = worker_id
+                .clone()
+                .unwrap_or_else(|| darkreach::dashboard::gethostname());
+            rt.block_on(cli::run_verify_worker(
+                &database,
+                &wid,
+                *poll_interval,
+                *max_verifications,
+            ))
+        }
         _ => cli::run_search(&cli),
     }
 }

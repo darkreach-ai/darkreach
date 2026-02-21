@@ -76,8 +76,7 @@ pub fn search(
     info!(k, base, min_n, max_n, "twin prime search started");
     info!(
         prime_count = sieve_primes.len(),
-        sieve_limit,
-        "sieve initialized"
+        sieve_limit, "sieve initialized"
     );
 
     let resume_from = match checkpoint::load(checkpoint_path) {
@@ -258,7 +257,10 @@ pub fn search(
                     max_n: Some(max_n),
                 },
             )?;
-            info!(n = block_end, "stop requested by coordinator, checkpoint saved");
+            info!(
+                n = block_end,
+                "stop requested by coordinator, checkpoint saved"
+            );
             return Ok(());
         }
 

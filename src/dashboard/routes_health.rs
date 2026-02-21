@@ -38,7 +38,12 @@ pub async fn handler_readyz(State(state): State<Arc<AppState>>) -> impl IntoResp
     let primary_check = tokio::time::timeout(timeout, state.db.health_check()).await;
     match primary_check {
         Ok(Ok(())) => {}
-        Ok(Err(_)) => return (StatusCode::SERVICE_UNAVAILABLE, "primary database unreachable"),
+        Ok(Err(_)) => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "primary database unreachable",
+            )
+        }
         Err(_) => return (StatusCode::SERVICE_UNAVAILABLE, "primary database timeout"),
     }
 
@@ -59,9 +64,7 @@ pub async fn handler_readyz(State(state): State<Arc<AppState>>) -> impl IntoResp
     if let Some(redis) = state.db.redis() {
         let mut conn = redis.clone();
         let redis_check = tokio::time::timeout(timeout, async {
-            redis::cmd("PING")
-                .query_async::<String>(&mut conn)
-                .await
+            redis::cmd("PING").query_async::<String>(&mut conn).await
         })
         .await;
         match redis_check {

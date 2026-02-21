@@ -463,10 +463,7 @@ impl Database {
     }
 
     /// Get unverified volunteer blocks that need verification.
-    pub async fn get_unverified_operator_blocks(
-        &self,
-        limit: i64,
-    ) -> Result<Vec<UnverifiedBlock>> {
+    pub async fn get_unverified_operator_blocks(&self, limit: i64) -> Result<Vec<UnverifiedBlock>> {
         let rows = sqlx::query_as::<_, UnverifiedBlock>(
             "SELECT wb.id AS block_id, wb.search_job_id, wb.volunteer_id,
                     wb.min_quorum, sj.search_type

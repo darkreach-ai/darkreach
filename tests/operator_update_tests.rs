@@ -70,9 +70,8 @@
 //! ```
 
 use darkreach::operator::{
-    WorkerReleaseArtifact, WorkerReleaseInfo,
-    binary_name_for_platform, find_darkreach_binary, make_executable,
-    sha256_file, worker_arch, worker_os,
+    binary_name_for_platform, find_darkreach_binary, make_executable, sha256_file, worker_arch,
+    worker_os, WorkerReleaseArtifact, WorkerReleaseInfo,
 };
 use std::fs;
 use tempfile::TempDir;
@@ -192,8 +191,7 @@ fn test_sha256_file_known_hash() {
 
     let hash = sha256_file(&path).unwrap();
     assert_eq!(
-        hash,
-        "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+        hash, "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
         "SHA-256 of 'abc' must match NIST test vector"
     );
 }
@@ -213,8 +211,7 @@ fn test_sha256_file_empty_file() {
 
     let hash = sha256_file(&path).unwrap();
     assert_eq!(
-        hash,
-        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        hash, "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
         "SHA-256 of empty file must match empty-string digest"
     );
 }
@@ -340,10 +337,7 @@ fn test_find_binary_nested() {
     fs::write(&binary_path, b"deeply nested binary").unwrap();
 
     let found = find_darkreach_binary(dir.path());
-    assert!(
-        found.is_some(),
-        "Binary nested 3 levels deep must be found"
-    );
+    assert!(found.is_some(), "Binary nested 3 levels deep must be found");
     assert_eq!(found.unwrap(), binary_path);
 }
 
@@ -444,8 +438,7 @@ fn test_create_and_extract_archive() {
 
     let data = fs::read(extract_dir.path().join("subdir").join("data.bin")).unwrap();
     assert_eq!(
-        data,
-        b"\x00\x01\x02\x03",
+        data, b"\x00\x01\x02\x03",
         "Extracted binary content must match"
     );
 }
@@ -507,8 +500,7 @@ fn test_extract_archive_with_darkreach_binary() {
     // Verify the content survived the archive round-trip
     let content = fs::read(&found_path).unwrap();
     assert_eq!(
-        content,
-        b"#!/bin/sh\necho fake-darkreach",
+        content, b"#!/bin/sh\necho fake-darkreach",
         "Binary content must survive tar round-trip"
     );
 }
@@ -531,10 +523,7 @@ fn test_extract_archive_with_darkreach_binary() {
 #[test]
 fn test_worker_os_returns_valid() {
     let os = worker_os();
-    assert!(
-        !os.is_empty(),
-        "worker_os() must not be empty"
-    );
+    assert!(!os.is_empty(), "worker_os() must not be empty");
     let valid_os = ["linux", "macos", "windows", "freebsd", "netbsd", "openbsd"];
     assert!(
         valid_os.contains(&os),
@@ -548,12 +537,16 @@ fn test_worker_os_returns_valid() {
 #[test]
 fn test_worker_arch_returns_valid() {
     let arch = worker_arch();
-    assert!(
-        !arch.is_empty(),
-        "worker_arch() must not be empty"
-    );
+    assert!(!arch.is_empty(), "worker_arch() must not be empty");
     let valid_arch = [
-        "x86_64", "aarch64", "arm", "x86", "powerpc64", "s390x", "riscv64gc", "mips64",
+        "x86_64",
+        "aarch64",
+        "arm",
+        "x86",
+        "powerpc64",
+        "s390x",
+        "riscv64gc",
+        "mips64",
     ];
     assert!(
         valid_arch.contains(&arch),
@@ -597,10 +590,7 @@ fn test_binary_name_starts_with_darkreach() {
         "Binary name '{}' must start with 'darkreach'",
         name
     );
-    assert!(
-        !name.is_empty(),
-        "Binary name must not be empty"
-    );
+    assert!(!name.is_empty(), "Binary name must not be empty");
 }
 
 // ============================================================================
@@ -671,7 +661,8 @@ fn test_artifact_matches_current_platform() {
         current_arch
     );
     assert_eq!(
-        matched.unwrap().sha256, "current_platform_hash",
+        matched.unwrap().sha256,
+        "current_platform_hash",
         "Must select the artifact for the current platform, not another"
     );
 }
@@ -759,7 +750,8 @@ fn test_artifact_multiple_platforms() {
 
     assert!(matched.is_some(), "Must find a matching artifact");
     assert_eq!(
-        matched.unwrap().sha256, "correct_first",
+        matched.unwrap().sha256,
+        "correct_first",
         "Must select the FIRST matching artifact (find returns first match)"
     );
 }
@@ -786,10 +778,7 @@ fn test_stage_binary_creates_dir() {
     fs::create_dir_all(&updates_dir).unwrap();
 
     assert!(updates_dir.exists(), "Updates directory must be created");
-    assert!(
-        updates_dir.is_dir(),
-        "Updates path must be a directory"
-    );
+    assert!(updates_dir.is_dir(), "Updates path must be a directory");
 
     // Verify we can write the staged binary
     let staged_path = updates_dir.join(binary_name_for_platform());
@@ -841,10 +830,7 @@ fn test_stage_overwrites_existing() {
 
     // First staging
     fs::write(&staged_path, b"version 1 binary").unwrap();
-    assert_eq!(
-        fs::read(&staged_path).unwrap(),
-        b"version 1 binary"
-    );
+    assert_eq!(fs::read(&staged_path).unwrap(), b"version 1 binary");
 
     // Re-staging (overwrite)
     fs::write(&staged_path, b"version 1 binary UPDATED").unwrap();
@@ -977,17 +963,14 @@ fn test_env_update_channel_default() {
     let saved = std::env::var("DARKREACH_UPDATE_CHANNEL").ok();
     std::env::remove_var("DARKREACH_UPDATE_CHANNEL");
 
-    let channel = std::env::var("DARKREACH_UPDATE_CHANNEL")
-        .unwrap_or_else(|_| "stable".to_string());
-    assert_eq!(
-        channel, "stable",
-        "Default update channel must be 'stable'"
-    );
+    let channel =
+        std::env::var("DARKREACH_UPDATE_CHANNEL").unwrap_or_else(|_| "stable".to_string());
+    assert_eq!(channel, "stable", "Default update channel must be 'stable'");
 
     // Test explicit channel
     std::env::set_var("DARKREACH_UPDATE_CHANNEL", "beta");
-    let channel = std::env::var("DARKREACH_UPDATE_CHANNEL")
-        .unwrap_or_else(|_| "stable".to_string());
+    let channel =
+        std::env::var("DARKREACH_UPDATE_CHANNEL").unwrap_or_else(|_| "stable".to_string());
     assert_eq!(
         channel, "beta",
         "Explicit DARKREACH_UPDATE_CHANNEL must override default"

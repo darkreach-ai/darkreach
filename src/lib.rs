@@ -59,6 +59,7 @@ pub mod gwnum;
 pub mod kbn;
 pub mod metrics;
 pub mod near_repdigit;
+pub mod operator;
 pub mod p1;
 pub mod palindromic;
 pub mod pfgw;
@@ -77,7 +78,6 @@ pub mod sophie_germain;
 pub mod strategy;
 pub mod twin;
 pub mod verify;
-pub mod operator;
 /// Backward compatibility re-export.
 pub mod volunteer {
     pub use crate::operator::*;
@@ -1213,10 +1213,18 @@ mod tests {
     fn mr_screened_test_with_1_round() {
         // With 1 round (bypasses pre-screen), still correctly classifies
         let p = Integer::from(104729u32);
-        assert_ne!(mr_screened_test(&p, 1), IsPrime::No, "Should accept prime with 1 round");
+        assert_ne!(
+            mr_screened_test(&p, 1),
+            IsPrime::No,
+            "Should accept prime with 1 round"
+        );
 
         let c = Integer::from(104730u32);
-        assert_eq!(mr_screened_test(&c, 1), IsPrime::No, "Should reject composite with 1 round");
+        assert_eq!(
+            mr_screened_test(&c, 1),
+            IsPrime::No,
+            "Should reject composite with 1 round"
+        );
     }
 
     /// Mersenne primes M_p = 2^p - 1 (OEIS [A000668](https://oeis.org/A000668)):
@@ -1426,12 +1434,7 @@ mod tests {
     #[test]
     fn small_primes_table_is_sorted() {
         for w in SMALL_PRIMES.windows(2) {
-            assert!(
-                w[0] < w[1],
-                "SMALL_PRIMES not sorted: {} >= {}",
-                w[0],
-                w[1]
-            );
+            assert!(w[0] < w[1], "SMALL_PRIMES not sorted: {} >= {}", w[0], w[1]);
         }
     }
 
@@ -1474,11 +1477,17 @@ mod tests {
         let url = "postgres://user:secret@host:5432/mydb";
         let redacted = redact_database_url(url);
         assert!(redacted.contains("***"), "password should be redacted");
-        assert!(!redacted.contains("secret"), "original password must not appear");
+        assert!(
+            !redacted.contains("secret"),
+            "original password must not appear"
+        );
         assert!(redacted.contains("user"), "username should be preserved");
         assert!(redacted.contains("host"), "host should be preserved");
         assert!(redacted.contains("5432"), "port should be preserved");
-        assert!(redacted.contains("mydb"), "database name should be preserved");
+        assert!(
+            redacted.contains("mydb"),
+            "database name should be preserved"
+        );
     }
 
     /// A URL without a password (e.g., local development) should pass through
@@ -1508,8 +1517,17 @@ mod tests {
     fn redact_database_url_supabase_style() {
         let url = "postgres://postgres.ref:eyJhbGciOiJIUzI1NiJ9@aws-0-us-east-1.pooler.supabase.com:6543/postgres";
         let redacted = redact_database_url(url);
-        assert!(!redacted.contains("eyJhbGciOiJIUzI1NiJ9"), "JWT password must be redacted");
-        assert!(redacted.contains("***"), "password should be replaced with ***");
-        assert!(redacted.contains("supabase.com"), "host should be preserved");
+        assert!(
+            !redacted.contains("eyJhbGciOiJIUzI1NiJ9"),
+            "JWT password must be redacted"
+        );
+        assert!(
+            redacted.contains("***"),
+            "password should be replaced with ***"
+        );
+        assert!(
+            redacted.contains("supabase.com"),
+            "host should be preserved"
+        );
     }
 }

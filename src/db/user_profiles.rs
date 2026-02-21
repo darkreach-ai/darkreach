@@ -30,21 +30,16 @@ impl Database {
 
     /// Get the role for a user (returns "operator" as default if no profile exists).
     pub async fn get_user_role(&self, user_id: &str) -> Result<String> {
-        let role = sqlx::query_scalar::<_, String>(
-            "SELECT role FROM user_profiles WHERE id = $1::uuid",
-        )
-        .bind(user_id)
-        .fetch_optional(self.pool())
-        .await?;
+        let role =
+            sqlx::query_scalar::<_, String>("SELECT role FROM user_profiles WHERE id = $1::uuid")
+                .bind(user_id)
+                .fetch_optional(self.pool())
+                .await?;
         Ok(role.unwrap_or_else(|| "operator".to_string()))
     }
 
     /// Update a user's display name.
-    pub async fn update_user_display_name(
-        &self,
-        user_id: &str,
-        display_name: &str,
-    ) -> Result<()> {
+    pub async fn update_user_display_name(&self, user_id: &str, display_name: &str) -> Result<()> {
         sqlx::query(
             "UPDATE user_profiles SET display_name = $2, updated_at = NOW()
              WHERE id = $1::uuid",

@@ -210,6 +210,46 @@ export interface WsPrimeFound {
   timestamp_ms: number;
 }
 
+/** AI engine decision from the audit trail (`ai_engine_decisions` table). */
+export interface AiEngineDecision {
+  id: number;
+  tick_id: number;
+  decision_type: string;
+  form: string | null;
+  action: string;
+  reasoning: string;
+  confidence: number | null;
+  params: Record<string, unknown> | null;
+  outcome: Record<string, unknown> | null;
+  outcome_measured_at: string | null;
+  created_at: string;
+}
+
+/** AI engine scoring weights (7-component model). */
+export interface ScoringWeights {
+  record_gap: number;
+  yield_rate: number;
+  cost_efficiency: number;
+  opportunity_density: number;
+  fleet_fit: number;
+  momentum: number;
+  competition: number;
+}
+
+/** AI engine state pushed via WebSocket. */
+export interface AiEngineData {
+  tick_count: number | null;
+  cost_model_version: number | null;
+  scoring_weights: ScoringWeights | null;
+  recent_decisions: AiEngineDecision[];
+}
+
+/** Strategy engine state pushed via WebSocket. */
+export interface StrategyWsData {
+  enabled: boolean;
+  recent_decisions: unknown[];
+}
+
 /** Coordination-only WebSocket data. Prime data comes from Supabase. */
 export interface WsData {
   status: Status | null;
@@ -225,6 +265,8 @@ export interface WsData {
   projects: ProjectSummary[];
   records: RecordSummary[];
   lastPrimeFound: WsPrimeFound | null;
+  aiEngine: AiEngineData | null;
+  strategy: StrategyWsData | null;
   connected: boolean;
   sendMessage: (msg: object) => void;
 }
@@ -243,6 +285,8 @@ export function useWebSocket(): WsData {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [records, setRecords] = useState<RecordSummary[]>([]);
   const [lastPrimeFound, setLastPrimeFound] = useState<WsPrimeFound | null>(null);
+  const [aiEngine, setAiEngine] = useState<AiEngineData | null>(null);
+  const [strategy, setStrategy] = useState<StrategyWsData | null>(null);
   const [connected, setConnected] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -294,6 +338,8 @@ export function useWebSocket(): WsData {
           if (data.running_agents) setRunningAgents(data.running_agents);
           if (data.projects) setProjects(data.projects);
           if (data.records) setRecords(data.records);
+          if (data.ai_engine) setAiEngine(data.ai_engine);
+          if (data.strategy) setStrategy(data.strategy);
           setCoordinator(data.coordinator ?? null);
         } else if (data.type === "notification") {
           const notif = data.notification as Notification;
@@ -342,6 +388,8 @@ export function useWebSocket(): WsData {
     projects,
     records,
     lastPrimeFound,
+    aiEngine,
+    strategy,
     connected,
     sendMessage,
   };

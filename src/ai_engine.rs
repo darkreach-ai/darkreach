@@ -539,7 +539,15 @@ impl AiEngine {
     /// Gather a complete world snapshot via parallel database queries.
     async fn observe(&self, db: &Database) -> Result<WorldSnapshot> {
         // Run queries in parallel using tokio::join!
-        let (records, workers, active_jobs, active_projects, yield_rates, calibrations, monthly_spend) = tokio::join!(
+        let (
+            records,
+            workers,
+            active_jobs,
+            active_projects,
+            yield_rates,
+            calibrations,
+            monthly_spend,
+        ) = tokio::join!(
             db.get_records(),
             db.get_all_workers(),
             db.get_search_jobs(),
@@ -559,10 +567,7 @@ impl AiEngine {
 
         let worker_count = workers.len() as u32;
         let total_cores: u32 = workers.iter().map(|w| w.cores as u32).sum();
-        let busy_workers = active_jobs
-            .iter()
-            .filter(|j| j.status == "running")
-            .count() as u32;
+        let busy_workers = active_jobs.iter().filter(|j| j.status == "running").count() as u32;
         let idle_workers = worker_count.saturating_sub(busy_workers.min(worker_count));
 
         // Get recent discoveries for momentum scoring (last 7 days)
@@ -572,10 +577,7 @@ impl AiEngine {
             .unwrap_or_default();
 
         // Get recent agent task completions
-        let agent_results = db
-            .get_recent_agent_results(10)
-            .await
-            .unwrap_or_default();
+        let agent_results = db.get_recent_agent_results(10).await.unwrap_or_default();
 
         // Get competitive intel from agent memory (Phase 7)
         let competition_intel = db
@@ -586,15 +588,15 @@ impl AiEngine {
         // Get worker speed statistics (Phase 8)
         let worker_speeds = db.get_worker_speeds().await.unwrap_or_default();
 
-        let fleet_summary = db
-            .get_fleet_summary()
-            .await
-            .unwrap_or_else(|_| crate::db::FleetSummary {
-                worker_count: 0,
-                total_cores: 0,
-                max_ram_gb: 0,
-                active_search_types: vec![],
-            });
+        let fleet_summary =
+            db.get_fleet_summary()
+                .await
+                .unwrap_or_else(|_| crate::db::FleetSummary {
+                    worker_count: 0,
+                    total_cores: 0,
+                    max_ram_gb: 0,
+                    active_search_types: vec![],
+                });
 
         // Compute workers per form from active workers
         let mut workers_per_form: HashMap<String, u32> = HashMap::new();
@@ -685,7 +687,9 @@ impl AiEngine {
 
             // 3. Cost efficiency: using calibrated cost model
             let digits_estimate = 1000u64;
-            let spc = self.cost_model.secs_per_candidate(form, digits_estimate, false);
+            let spc = self
+                .cost_model
+                .secs_per_candidate(form, digits_estimate, false);
             let cost_eff = if spc > 0.0 {
                 ((yr / spc) * 1e8).ln().max(0.0) / 20.0
             } else {
@@ -763,7 +767,11 @@ impl AiEngine {
             });
         }
 
-        scores.sort_by(|a, b| b.total.partial_cmp(&a.total).unwrap_or(std::cmp::Ordering::Equal));
+        scores.sort_by(|a, b| {
+            b.total
+                .partial_cmp(&a.total)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         scores
     }
 
@@ -773,8 +781,7 @@ impl AiEngine {
             return empty_drift();
         };
 
-        let workers_joined =
-            snapshot.fleet.worker_count as i32 - last.fleet.worker_count as i32;
+        let workers_joined = snapshot.fleet.worker_count as i32 - last.fleet.worker_count as i32;
         let workers_left = if workers_joined < 0 {
             workers_joined.unsigned_abs() as i32
         } else {
@@ -1134,13 +1141,11 @@ impl AiEngine {
                         scores,
                     )
                 }
-                Decision::PauseProject {
-                    project_id,
-                    reason,
-                } => {
+                Decision::PauseProject { project_id, reason } => {
                     // Try pausing as a search job first (stalled jobs use job_id)
-                    if let Err(e) =
-                        db.update_search_job_status(*project_id, "paused", None).await
+                    if let Err(e) = db
+                        .update_search_job_status(*project_id, "paused", None)
+                        .await
                     {
                         warn!(id = project_id, error = %e, "ai_engine: failed to pause job");
                     } else {
@@ -1191,10 +1196,7 @@ impl AiEngine {
                     Some(serde_json::json!({"project_id": project_id})),
                     None,
                 ),
-                Decision::AbandonProject {
-                    project_id,
-                    reason,
-                } => (
+                Decision::AbandonProject { project_id, reason } => (
                     "abandon_project",
                     None,
                     "logged",
@@ -1203,10 +1205,7 @@ impl AiEngine {
                     Some(serde_json::json!({"project_id": project_id})),
                     None,
                 ),
-                Decision::RebalanceFleet {
-                    moves,
-                    reasoning,
-                } => {
+                Decision::RebalanceFleet { moves, reasoning } => {
                     // Execute rebalance: release claimed blocks from overprovisioned workers
                     for mv in moves {
                         match db.release_worker_blocks(&mv.worker_id).await {
@@ -1316,9 +1315,7 @@ impl AiEngine {
     fn should_learn(&self) -> bool {
         match self.last_learn {
             None => true, // first tick always learns
-            Some(last) => {
-                last.elapsed().as_secs() >= self.config.learn_interval_secs
-            }
+            Some(last) => last.elapsed().as_secs() >= self.config.learn_interval_secs,
         }
     }
 
@@ -1346,18 +1343,10 @@ impl AiEngine {
                 Ok(obs) if obs.len() >= self.config.min_calibration_samples as usize => {
                     if let Some((a, b, mape)) = fit_power_law(&obs) {
                         if mape <= self.config.max_calibration_mape {
-                            self.cost_model
-                                .fitted
-                                .insert(form.to_string(), (a, b));
-                            db.upsert_cost_calibration(
-                                form,
-                                a,
-                                b,
-                                obs.len() as i64,
-                                Some(mape),
-                            )
-                            .await
-                            .ok();
+                            self.cost_model.fitted.insert(form.to_string(), (a, b));
+                            db.upsert_cost_calibration(form, a, b, obs.len() as i64, Some(mape))
+                                .await
+                                .ok();
                             self.cost_model.version += 1;
                         }
                     }
@@ -1441,10 +1430,7 @@ impl AiEngine {
     /// Update scoring weights from measured outcomes via exponential weighted
     /// averaging (EWA). Each outcome nudges weights toward components that
     /// correlated with success.
-    fn update_weights_from_outcomes(
-        &mut self,
-        outcomes: &[crate::db::DecisionWithOutcome],
-    ) {
+    fn update_weights_from_outcomes(&mut self, outcomes: &[crate::db::DecisionWithOutcome]) {
         if outcomes.is_empty() {
             return;
         }
@@ -1510,7 +1496,12 @@ impl AiEngine {
             if let Some(score) = parse_competition_score(result_text) {
                 let key = format!("competitive_intel:{}", form);
                 if let Err(e) = db
-                    .upsert_agent_memory(&key, &score.to_string(), "competitive_intel", Some(task.id))
+                    .upsert_agent_memory(
+                        &key,
+                        &score.to_string(),
+                        "competitive_intel",
+                        Some(task.id),
+                    )
                     .await
                 {
                     warn!(form, error = %e, "ai_engine: failed to store competition score");
@@ -1782,7 +1773,11 @@ mod tests {
             + w.fleet_fit
             + w.momentum
             + w.competition;
-        assert!((sum - 1.0).abs() < 0.01, "Weights should sum to 1.0, got {}", sum);
+        assert!(
+            (sum - 1.0).abs() < 0.01,
+            "Weights should sum to 1.0, got {}",
+            sum
+        );
     }
 
     #[test]
@@ -1796,7 +1791,10 @@ mod tests {
             momentum: 0.01,
             competition: 0.05,
         };
-        assert!(!w.validate(), "Out-of-bounds weights should fail validation");
+        assert!(
+            !w.validate(),
+            "Out-of-bounds weights should fail validation"
+        );
     }
 
     #[test]
@@ -1818,7 +1816,11 @@ mod tests {
             + w.fleet_fit
             + w.momentum
             + w.competition;
-        assert!((sum - 1.0).abs() < 0.001, "Normalized weights should sum to 1.0, got {}", sum);
+        assert!(
+            (sum - 1.0).abs() < 0.001,
+            "Normalized weights should sum to 1.0, got {}",
+            sum
+        );
     }
 
     #[test]
@@ -1862,7 +1864,8 @@ mod tests {
         assert!(
             (fitted - fitted_spc).abs() < 0.001,
             "Should use fitted coefficients, got {} expected {}",
-            fitted, fitted_spc
+            fitted,
+            fitted_spc
         );
         assert!(
             (fitted - default_spc).abs() > 0.001,
@@ -1878,7 +1881,8 @@ mod tests {
         assert!(
             (spc - expected).abs() < 0.001,
             "Should use default coefficients: got {} expected {}",
-            spc, expected
+            spc,
+            expected
         );
     }
 
@@ -1925,14 +1929,24 @@ mod tests {
         let (a, b, mape) = fit_power_law(&obs).expect("Should fit exact data");
         assert!((a - 0.5).abs() < 0.01, "a should be ~0.5, got {}", a);
         assert!((b - 2.5).abs() < 0.01, "b should be ~2.5, got {}", b);
-        assert!(mape < 0.01, "MAPE should be near 0 for exact data, got {}", mape);
+        assert!(
+            mape < 0.01,
+            "MAPE should be near 0 for exact data, got {}",
+            mape
+        );
     }
 
     #[test]
     fn fit_power_law_insufficient_data() {
         let obs = vec![
-            CostObservation { digits: 1000.0, secs: 0.5 },
-            CostObservation { digits: 2000.0, secs: 2.8 },
+            CostObservation {
+                digits: 1000.0,
+                secs: 0.5,
+            },
+            CostObservation {
+                digits: 2000.0,
+                secs: 2.8,
+            },
         ];
         assert!(fit_power_law(&obs).is_none(), "Should need >= 3 points");
     }
@@ -1940,11 +1954,23 @@ mod tests {
     #[test]
     fn fit_power_law_filters_invalid() {
         let obs = vec![
-            CostObservation { digits: 0.0, secs: 0.0 },
-            CostObservation { digits: -1.0, secs: 1.0 },
-            CostObservation { digits: 1000.0, secs: 0.5 },
+            CostObservation {
+                digits: 0.0,
+                secs: 0.0,
+            },
+            CostObservation {
+                digits: -1.0,
+                secs: 1.0,
+            },
+            CostObservation {
+                digits: 1000.0,
+                secs: 0.5,
+            },
         ];
-        assert!(fit_power_law(&obs).is_none(), "Should filter invalid and need >= 3 valid points");
+        assert!(
+            fit_power_law(&obs).is_none(),
+            "Should filter invalid and need >= 3 valid points"
+        );
     }
 
     // ── Portfolio slots ─────────────────────────────────────────
@@ -2029,7 +2055,11 @@ mod tests {
         let scores = engine.score_forms(&snapshot);
         assert_eq!(scores.len(), 12, "Should score all 12 forms");
         for s in &scores {
-            assert!(s.total >= 0.0, "Score for {} should be non-negative", s.form);
+            assert!(
+                s.total >= 0.0,
+                "Score for {} should be non-negative",
+                s.form
+            );
         }
     }
 
@@ -2042,7 +2072,10 @@ mod tests {
             assert!(
                 w[0].total >= w[1].total,
                 "Scores not sorted: {} ({}) >= {} ({})",
-                w[0].form, w[0].total, w[1].form, w[1].total
+                w[0].form,
+                w[0].total,
+                w[1].form,
+                w[1].total
             );
         }
     }
@@ -2087,7 +2120,8 @@ mod tests {
         assert!(
             kbn_with.momentum > kbn_no.momentum,
             "Momentum should increase with discoveries: {} > {}",
-            kbn_with.momentum, kbn_no.momentum
+            kbn_with.momentum,
+            kbn_no.momentum
         );
     }
 
@@ -2115,8 +2149,13 @@ mod tests {
         let analysis = engine.orient(&snapshot);
         let decisions = engine.decide(&snapshot, &analysis);
 
-        let has_no_action = decisions.iter().any(|d| matches!(d, Decision::NoAction { .. }));
-        assert!(has_no_action, "Should have a NoAction decision when no workers and no stale intel");
+        let has_no_action = decisions
+            .iter()
+            .any(|d| matches!(d, Decision::NoAction { .. }));
+        assert!(
+            has_no_action,
+            "Should have a NoAction decision when no workers and no stale intel"
+        );
     }
 
     #[test]
@@ -2146,9 +2185,18 @@ mod tests {
                     "CreateProject should include component scores in params"
                 );
                 let scores = &params["scores"];
-                assert!(scores["record_gap"].is_f64(), "Should have record_gap score");
-                assert!(scores["yield_rate"].is_f64(), "Should have yield_rate score");
-                assert!(scores["competition"].is_f64(), "Should have competition score");
+                assert!(
+                    scores["record_gap"].is_f64(),
+                    "Should have record_gap score"
+                );
+                assert!(
+                    scores["yield_rate"].is_f64(),
+                    "Should have yield_rate score"
+                );
+                assert!(
+                    scores["competition"].is_f64(),
+                    "Should have competition score"
+                );
             }
         }
     }
@@ -2171,7 +2219,10 @@ mod tests {
         let engine = AiEngine::new();
         let snapshot = test_snapshot(4, 32, 4);
         let drift = engine.detect_drift(&snapshot);
-        assert!(!drift.significant, "First tick should not report significant drift");
+        assert!(
+            !drift.significant,
+            "First tick should not report significant drift"
+        );
     }
 
     // ── Phase 6: Reward computation ─────────────────────────────
@@ -2193,7 +2244,11 @@ mod tests {
             "cost_usd": 10.0,
         });
         let reward = compute_reward(&outcome);
-        assert!(reward < 0.6, "Zero primes should give low-ish reward: got {}", reward);
+        assert!(
+            reward < 0.6,
+            "Zero primes should give low-ish reward: got {}",
+            reward
+        );
     }
 
     #[test]
@@ -2203,7 +2258,8 @@ mod tests {
         assert!(
             high > low,
             "Higher efficiency should give higher reward: {} > {}",
-            high, low
+            high,
+            low
         );
     }
 
@@ -2212,7 +2268,7 @@ mod tests {
     #[test]
     fn test_weight_update_positive_outcome() {
         let mut engine = AiEngine::new();
-        let original_record_gap = engine.scoring_weights.record_gap;
+        let _original_record_gap = engine.scoring_weights.record_gap;
 
         let outcomes = vec![crate::db::DecisionWithOutcome {
             id: 1,
@@ -2307,7 +2363,9 @@ mod tests {
             assert!(
                 w >= WEIGHT_MIN && w <= WEIGHT_MAX,
                 "Weight {} out of bounds [{}, {}]",
-                w, WEIGHT_MIN, WEIGHT_MAX
+                w,
+                WEIGHT_MIN,
+                WEIGHT_MAX
             );
         }
     }

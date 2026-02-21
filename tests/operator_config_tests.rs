@@ -475,10 +475,7 @@ fn test_cpu_model_detection_not_empty() {
 #[test]
 fn test_core_count_positive() {
     let cores = rayon::current_num_threads();
-    assert!(
-        cores > 0,
-        "rayon should report at least 1 available thread"
-    );
+    assert!(cores > 0, "rayon should report at least 1 available thread");
 }
 
 /// Validates that the system reports a positive amount of RAM. The `sysinfo`
@@ -525,8 +522,17 @@ fn test_os_detection_valid() {
 fn test_arch_detection_valid() {
     let arch = std::env::consts::ARCH;
     let valid_arch = [
-        "x86_64", "x86", "aarch64", "arm", "mips", "mips64", "powerpc", "powerpc64", "riscv64",
-        "s390x", "wasm32",
+        "x86_64",
+        "x86",
+        "aarch64",
+        "arm",
+        "mips",
+        "mips64",
+        "powerpc",
+        "powerpc64",
+        "riscv64",
+        "s390x",
+        "wasm32",
     ];
 
     assert!(
@@ -680,10 +686,7 @@ fn test_gpu_vram_env_var() {
         .ok()
         .and_then(|v| v.parse::<i32>().ok())
         .filter(|v| *v > 0);
-    assert!(
-        vram_zero.is_none(),
-        "zero VRAM should be filtered out"
-    );
+    assert!(vram_zero.is_none(), "zero VRAM should be filtered out");
 
     // Negative should be filtered out
     std::env::set_var("DARKREACH_GPU_VRAM_GB", "-8");

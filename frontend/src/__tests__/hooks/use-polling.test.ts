@@ -213,7 +213,7 @@ describe("usePolling", () => {
 
     // sendMessage should exist and not throw
     expect(typeof result.current.sendMessage).toBe("function");
-    expect(() => result.current.sendMessage()).not.toThrow();
+    expect(() => result.current.sendMessage({})).not.toThrow();
   });
 
   /**

@@ -187,10 +187,17 @@ mod tests {
         let t1 = secs_per_candidate("factorial", 1000, false);
         let t2 = secs_per_candidate("factorial", 2000, false);
         // Larger digit count should take more time (power-law d^2.5)
-        assert!(t2 > t1, "2000-digit factorial should be slower than 1000-digit");
+        assert!(
+            t2 > t1,
+            "2000-digit factorial should be slower than 1000-digit"
+        );
         // The ratio should be roughly 2^2.5 ≈ 5.66
         let ratio = t2 / t1;
-        assert!(ratio > 4.0 && ratio < 7.0, "ratio should be ~5.66, got {}", ratio);
+        assert!(
+            ratio > 4.0 && ratio < 7.0,
+            "ratio should be ~5.66, got {}",
+            ratio
+        );
     }
 
     #[test]
@@ -200,7 +207,11 @@ mod tests {
         assert!(t2 > t1);
         // Power-law d^2.0, ratio should be 2^2 = 4.0
         let ratio = t2 / t1;
-        assert!((ratio - 4.0).abs() < 0.1, "ratio should be ~4.0, got {}", ratio);
+        assert!(
+            (ratio - 4.0).abs() < 0.1,
+            "ratio should be ~4.0, got {}",
+            ratio
+        );
     }
 
     #[test]
@@ -213,7 +224,10 @@ mod tests {
     fn secs_per_candidate_near_repdigit_same_as_palindromic() {
         let t_pal = secs_per_candidate("palindromic", 3000, false);
         let t_nr = secs_per_candidate("near_repdigit", 3000, false);
-        assert!((t_pal - t_nr).abs() < f64::EPSILON, "palindromic and near_repdigit should share the same model");
+        assert!(
+            (t_pal - t_nr).abs() < f64::EPSILON,
+            "palindromic and near_repdigit should share the same model"
+        );
     }
 
     #[test]
@@ -252,7 +266,10 @@ mod tests {
         assert!(t > 0.0);
         // cullen_woodall uses 0.2 * d^2.2
         let t_ck = secs_per_candidate("carol_kynea", 2000, false);
-        assert!((t - t_ck).abs() < f64::EPSILON, "cullen_woodall and carol_kynea share the same model");
+        assert!(
+            (t - t_ck).abs() < f64::EPSILON,
+            "cullen_woodall and carol_kynea share the same model"
+        );
     }
 
     #[test]
@@ -271,7 +288,10 @@ mod tests {
     fn secs_per_candidate_unknown_form_uses_default() {
         let t_unknown = secs_per_candidate("unknown_xyz", 5000, false);
         let t_fac = secs_per_candidate("factorial", 5000, false);
-        assert!((t_unknown - t_fac).abs() < f64::EPSILON, "unknown form should use factorial's model (default)");
+        assert!(
+            (t_unknown - t_fac).abs() < f64::EPSILON,
+            "unknown form should use factorial's model (default)"
+        );
     }
 
     #[test]
@@ -288,14 +308,21 @@ mod tests {
         let without = secs_per_candidate("factorial", 10_000, false);
         let with = secs_per_candidate("factorial", 10_000, true);
         let ratio = without / with;
-        assert!((ratio - 50.0).abs() < 0.01, "PFGW should give 50x speedup at 10K digits, got {}", ratio);
+        assert!(
+            (ratio - 50.0).abs() < 0.01,
+            "PFGW should give 50x speedup at 10K digits, got {}",
+            ratio
+        );
     }
 
     #[test]
     fn pfgw_acceleration_not_applied_below_10k() {
         let without = secs_per_candidate("factorial", 9_999, false);
         let with = secs_per_candidate("factorial", 9_999, true);
-        assert!((without - with).abs() < f64::EPSILON, "PFGW should not apply below 10K digits");
+        assert!(
+            (without - with).abs() < f64::EPSILON,
+            "PFGW should not apply below 10K digits"
+        );
     }
 
     #[test]
@@ -303,7 +330,10 @@ mod tests {
         let without = secs_per_candidate("kbn", 50_000, false);
         let with = secs_per_candidate("kbn", 50_000, true);
         let ratio = without / with;
-        assert!((ratio - 50.0).abs() < 0.01, "PFGW should give 50x speedup above 10K digits");
+        assert!(
+            (ratio - 50.0).abs() < 0.01,
+            "PFGW should give 50x speedup above 10K digits"
+        );
     }
 
     #[test]
@@ -320,7 +350,11 @@ mod tests {
         // 100! has 158 digits (known value)
         let est = estimate_digits_for_form("factorial", 100);
         // Stirling's approximation: 100 * log10(100/e) ≈ 100 * 1.564 ≈ 156
-        assert!(est >= 140 && est <= 170, "100! should have ~158 digits, got {}", est);
+        assert!(
+            est >= 140 && est <= 170,
+            "100! should have ~158 digits, got {}",
+            est
+        );
     }
 
     #[test]
@@ -334,7 +368,11 @@ mod tests {
         // p# ≈ e^p, so digits ≈ p / ln(10) ≈ p / 2.303
         let est = estimate_digits_for_form("primorial", 1000);
         // 1000 / 2.303 ≈ 434
-        assert!(est >= 400 && est <= 460, "1000# should have ~434 digits, got {}", est);
+        assert!(
+            est >= 400 && est <= 460,
+            "1000# should have ~434 digits, got {}",
+            est
+        );
     }
 
     #[test]
@@ -342,7 +380,11 @@ mod tests {
         // k*2^n has ~n*log10(2) ≈ n*0.301 digits
         let est = estimate_digits_for_form("kbn", 10_000);
         // 10000 * 0.301 ≈ 3010
-        assert!(est >= 2900 && est <= 3100, "k*2^10000 should have ~3010 digits, got {}", est);
+        assert!(
+            est >= 2900 && est <= 3100,
+            "k*2^10000 should have ~3010 digits, got {}",
+            est
+        );
     }
 
     #[test]
@@ -384,7 +426,11 @@ mod tests {
         // (2^n±1)²−2 has ~2n*log10(2) digits — double kbn
         let carol = estimate_digits_for_form("carol_kynea", 5000);
         let kbn = estimate_digits_for_form("kbn", 5000);
-        assert_eq!(carol, 2 * kbn, "carol_kynea should have twice the digits of kbn");
+        assert_eq!(
+            carol,
+            2 * kbn,
+            "carol_kynea should have twice the digits of kbn"
+        );
     }
 
     #[test]
@@ -585,7 +631,10 @@ mod tests {
         let est_with_pfgw = estimate_project_cost(&pfgw_config);
 
         // Both should estimate the same number of candidates
-        assert_eq!(est_no_pfgw.estimated_candidates, est_with_pfgw.estimated_candidates);
+        assert_eq!(
+            est_no_pfgw.estimated_candidates,
+            est_with_pfgw.estimated_candidates
+        );
 
         // PFGW config should be faster (only if digits >= 10K)
         // The digit estimate for factorial at n=15000 is large enough

@@ -40,6 +40,7 @@ type SearchType =
   | "kbn"
   | "factorial"
   | "palindromic"
+  | "near_repdigit"
   | "primorial"
   | "cullen_woodall"
   | "wagstaff"
@@ -94,6 +95,18 @@ const formMeta: Record<SearchType, FormMeta> = {
       { key: "max_digits", label: "Max digits", placeholder: "11" },
     ],
     defaults: { base: 10, min_digits: 1, max_digits: 11 },
+  },
+  near_repdigit: {
+    label: "Near-Repdigit Palindromic",
+    description: "Palindromic primes with near-repdigit structure (e.g., 99...9X9...99).",
+    hint: "Uses BLS N+1 proofs via PFGW. Deterministic when proof succeeds. Generates palindromes with a single differing central digit.",
+    proof: "Deterministic (BLS N+1)",
+    fields: [
+      { key: "base", label: "Base", placeholder: "10" },
+      { key: "min_digits", label: "Min digits", placeholder: "3" },
+      { key: "max_digits", label: "Max digits", placeholder: "1001" },
+    ],
+    defaults: { base: 10, min_digits: 3, max_digits: 1001 },
   },
   primorial: {
     label: "Primorial (p# +/- 1)",
@@ -247,6 +260,13 @@ const presets: Preset[] = [
     tag: "Fast",
     type: "palindromic",
     values: { base: 10, min_digits: 1, max_digits: 11 },
+  },
+  {
+    name: "Near-repdigit palindromic",
+    description: "99...9X9...99 palindromes, 3 to 101 digits",
+    tag: "Novel",
+    type: "near_repdigit",
+    values: { base: 10, min_digits: 3, max_digits: 101 },
   },
   {
     name: "Twin primes",

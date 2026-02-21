@@ -760,7 +760,12 @@ mod tests {
         }
     }
 
-    fn make_fleet(workers: u32, cores: u32, ram_gb: u32, search_types: Vec<String>) -> FleetSummary {
+    fn make_fleet(
+        workers: u32,
+        cores: u32,
+        ram_gb: u32,
+        search_types: Vec<String>,
+    ) -> FleetSummary {
         FleetSummary {
             worker_count: workers,
             total_cores: cores,
@@ -968,13 +973,7 @@ mod tests {
     fn activate_multiple_dependencies_all_met() {
         let a = make_phase("a", "completed", vec![], None, 1);
         let b = make_phase("b", "completed", vec![], None, 2);
-        let c = make_phase(
-            "c",
-            "pending",
-            vec!["a".into(), "b".into()],
-            None,
-            0,
-        );
+        let c = make_phase("c", "pending", vec!["a".into(), "b".into()], None, 0);
         assert!(should_activate(&c, &[a, b, c.clone()]));
     }
 
@@ -982,13 +981,7 @@ mod tests {
     fn activate_multiple_dependencies_one_unmet() {
         let a = make_phase("a", "completed", vec![], None, 1);
         let b = make_phase("b", "active", vec![], None, 0);
-        let c = make_phase(
-            "c",
-            "pending",
-            vec!["a".into(), "b".into()],
-            None,
-            0,
-        );
+        let c = make_phase("c", "pending", vec!["a".into(), "b".into()], None, 0);
         assert!(!should_activate(&c, &[a, b, c.clone()]));
     }
 
@@ -1018,7 +1011,8 @@ mod tests {
     fn followup_prevented_for_extend_phase() {
         let project = make_project_row(serde_json::json!(null));
         let mut phase = make_phase("sweep-extend", "completed", vec![], None, 0);
-        phase.search_params = serde_json::json!({"search_type": "factorial", "start": 2001, "end": 3001});
+        phase.search_params =
+            serde_json::json!({"search_type": "factorial", "start": 2001, "end": 3001});
         assert!(generate_followup_phase(&project, &phase, &[phase.clone()]).is_none());
     }
 
@@ -1097,7 +1091,10 @@ mod tests {
         let phase = make_phase("sweep", "completed", vec![], None, 0);
         let followup = generate_followup_phase(&project, &phase, &[phase.clone()]).unwrap();
         assert_eq!(followup.depends_on, Some(vec!["sweep".to_string()]));
-        assert_eq!(followup.activation_condition, Some("previous_phase_found_zero".to_string()));
+        assert_eq!(
+            followup.activation_condition,
+            Some("previous_phase_found_zero".to_string())
+        );
     }
 
     #[test]
@@ -1105,13 +1102,19 @@ mod tests {
         let project = make_project_row(serde_json::json!(null));
         let mut phase = make_phase("sweep", "completed", vec![], None, 0);
         // start == end → span is 0
-        phase.search_params = serde_json::json!({"search_type": "factorial", "start": 100, "end": 100});
+        phase.search_params =
+            serde_json::json!({"search_type": "factorial", "start": 100, "end": 100});
         assert!(generate_followup_phase(&project, &phase, &[phase.clone()]).is_none());
     }
 
     // ── generate_auto_strategy ──────────────────────────────────
 
-    fn make_config(form: &str, objective: Objective, range_start: Option<u64>, range_end: Option<u64>) -> ProjectConfig {
+    fn make_config(
+        form: &str,
+        objective: Objective,
+        range_start: Option<u64>,
+        range_end: Option<u64>,
+    ) -> ProjectConfig {
         ProjectConfig {
             project: super::super::config::ProjectMeta {
                 name: "test".into(),
@@ -1161,16 +1164,24 @@ mod tests {
 
     #[test]
     fn auto_strategy_wagstaff_record_two_phases() {
-        let config = make_config("wagstaff", Objective::Record, Some(14_000_000), Some(20_000_000));
+        let config = make_config(
+            "wagstaff",
+            Objective::Record,
+            Some(14_000_000),
+            Some(20_000_000),
+        );
         let phases = generate_auto_strategy(&config);
         assert_eq!(phases.len(), 2);
         assert_eq!(phases[0].name, "sweep");
         assert_eq!(phases[1].name, "extend");
         assert_eq!(phases[1].depends_on, Some(vec!["sweep".to_string()]));
-        assert_eq!(phases[1].activation_condition, Some("previous_phase_found_zero".to_string()));
+        assert_eq!(
+            phases[1].activation_condition,
+            Some("previous_phase_found_zero".to_string())
+        );
         // Sweep covers first half, extend covers second half
         let (s1, e1) = extract_range_from_params(&phases[0].search_params);
-        let (s2, e2) = extract_range_from_params(&phases[1].search_params);
+        let (_s2, e2) = extract_range_from_params(&phases[1].search_params);
         assert_eq!(s1, 14_000_000);
         assert!(e1 < e2); // sweep ends before extend
         assert_eq!(e2, 20_000_000);

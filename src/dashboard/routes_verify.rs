@@ -43,13 +43,18 @@ pub(super) async fn handler_api_prime_verify(
         }
     };
     match result {
-        verify::VerifyResult::Verified { method, tier } => {
-            if let Err(e) = state.db.mark_verified(id, &method, tier as i16).await {
+        verify::VerifyResult::Verified { ref method, tier } => {
+            if let Err(e) = state.db.mark_verified(id, method, tier as i16).await {
                 return (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     Json(serde_json::json!({"error": e.to_string()})),
                 )
                     .into_response();
+            }
+            let new_tags = verify::classify_after_verification(&prime, &result);
+            if !new_tags.is_empty() {
+                let tag_refs: Vec<&str> = new_tags.iter().map(|s| s.as_str()).collect();
+                let _ = state.db.add_prime_tags(id, &tag_refs).await;
             }
             Json(serde_json::json!({"ok": true, "result": "verified", "method": method, "tier": tier})).into_response()
         }

@@ -56,7 +56,7 @@ import type { PrimeRecord } from "@/hooks/use-primes";
 function makeTimelineBucket(daysAgo: number, count: number): TimelineBucket {
   const d = new Date();
   d.setDate(d.getDate() - daysAgo);
-  return { bucket: d.toISOString(), count };
+  return { bucket: d.toISOString(), form: "factorial", count };
 }
 
 const defaultStats: Stats = {
@@ -85,6 +85,7 @@ const defaultPrime: PrimeRecord = {
   verified_at: null,
   verification_method: null,
   verification_tier: null,
+  tags: ["factorial"],
 };
 
 // Tests the InsightCards component: four summary cards with icons, computed rates,
