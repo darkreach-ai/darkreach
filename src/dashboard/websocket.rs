@@ -114,6 +114,12 @@ pub(super) async fn build_update(state: &Arc<AppState>) -> Option<String> {
         .get_strategy_decisions(10)
         .await
         .unwrap_or_default();
+    let ai_decisions = state
+        .db
+        .get_ai_engine_decisions(5)
+        .await
+        .unwrap_or_default();
+    let ai_state = state.db.get_ai_engine_state().await.ok().flatten();
     serde_json::to_string(&serde_json::json!({
         "type": "update",
         "status": status,
@@ -129,6 +135,12 @@ pub(super) async fn build_update(state: &Arc<AppState>) -> Option<String> {
         "strategy": {
             "enabled": strategy_config.as_ref().map(|c| c.enabled).unwrap_or(false),
             "recent_decisions": strategy_decisions,
+        },
+        "ai_engine": {
+            "tick_count": ai_state.as_ref().map(|s| s.tick_count),
+            "cost_model_version": ai_state.as_ref().map(|s| s.cost_model_version),
+            "scoring_weights": ai_state.as_ref().map(|s| &s.scoring_weights),
+            "recent_decisions": ai_decisions,
         },
     }))
     .ok()

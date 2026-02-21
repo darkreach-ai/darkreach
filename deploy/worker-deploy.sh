@@ -14,13 +14,13 @@ set -euo pipefail
 # Usage: ./deploy/worker-deploy.sh <user@host> <coordinator-url> [--workers N]
 #
 # Example:
-#   ./deploy/worker-deploy.sh root@178.156.158.184 http://178.156.211.107 --workers 4
+#   ./deploy/worker-deploy.sh deploy@178.156.158.184 http://178.156.211.107 --workers 4
 
 if [ $# -lt 2 ]; then
     echo "Usage: $0 <user@host> <coordinator-url> [--workers N]"
     echo ""
     echo "Example:"
-    echo "  $0 root@178.156.158.184 http://178.156.211.107 --workers 4"
+    echo "  $0 deploy@178.156.158.184 http://178.156.211.107 --workers 4"
     exit 1
 fi
 

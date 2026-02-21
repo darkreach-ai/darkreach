@@ -55,7 +55,10 @@ pub mod volunteers {
 mod user_profiles;
 mod workers;
 pub use user_profiles::UserProfile;
-pub use ai_engine::{AiEngineDecisionRow, AiEngineStateRow};
+pub use ai_engine::{
+    AiEngineDecisionRow, AiEngineStateRow, DecisionOutcomeCandidate, DecisionWithOutcome,
+    WorkerSpeedRow,
+};
 pub use strategy::{FormYieldRateRow, StrategyConfigRow, StrategyDecisionRow};
 pub use trust::{NodeReliability, VerificationBlock, VerificationOutcome, WorkBlockWithCheckpoint};
 pub use observability::{
@@ -80,6 +83,7 @@ pub struct PrimeRecord {
     pub digits: i64,
     pub found_at: chrono::DateTime<chrono::Utc>,
     pub proof_method: String,
+    pub tags: Vec<String>,
 }
 
 #[derive(Serialize)]
@@ -104,6 +108,8 @@ pub struct PrimeFilter {
     pub max_digits: Option<i64>,
     pub sort_by: Option<String>,
     pub sort_dir: Option<String>,
+    /// Filter by tag containment: primes must have ALL specified tags.
+    pub tags: Option<Vec<String>>,
 }
 
 impl PrimeFilter {
@@ -138,6 +144,7 @@ pub struct PrimeDetail {
     pub found_at: chrono::DateTime<chrono::Utc>,
     pub search_params: String,
     pub proof_method: String,
+    pub tags: Vec<String>,
 }
 
 #[derive(Serialize)]
@@ -320,7 +327,7 @@ pub struct AgentBudgetRow {
     pub updated_at: chrono::DateTime<chrono::Utc>,
 }
 
-#[derive(Serialize, sqlx::FromRow)]
+#[derive(Debug, Clone, Serialize, sqlx::FromRow)]
 pub struct AgentMemoryRow {
     pub id: i64,
     pub key: String,

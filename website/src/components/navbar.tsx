@@ -155,7 +155,7 @@ export function Navbar() {
 
           <div className="flex items-center gap-4">
             <a
-              href="https://github.com/darkreach/darkreach"
+              href="https://github.com/darkreach-ai/darkreach"
               target="_blank"
               rel="noopener noreferrer"
               className="text-muted-foreground hover:text-foreground transition-colors"

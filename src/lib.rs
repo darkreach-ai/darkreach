@@ -44,6 +44,7 @@ pub mod ai_engine;
 pub mod carol_kynea;
 pub mod certificate;
 pub mod checkpoint;
+pub mod classify;
 pub mod cullen_woodall;
 pub mod dashboard;
 pub mod db;

@@ -4,9 +4,14 @@
 *.checkpoint
 *.checkpoint.tmp
 
-# Environment
+# Environment — local .env files contain secrets, never commit them.
+# Use `./scripts/decrypt-secrets.sh` to generate .env from SOPS-encrypted secrets.
 .env
 .env.*
+!.env.example
+
+# SOPS age private keys (never commit)
+keys.txt
 
 # OS files
 .DS_Store

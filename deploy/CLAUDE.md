@@ -61,6 +61,28 @@ deploy.sh → SSH to target → install deps (Rust, GMP)
 
 > **Note:** The architecture is migrating from fleet/worker terminology to network/node terminology. Nodes now self-update via `darkreach run` instead of requiring SSH deployment. Old deployment scripts (`worker-deploy.sh`) remain for legacy setups but new nodes use the auto-update mechanism. See `docs/roadmaps/architecture.md`.
 
+## Multi-Developer SSH Access
+
+Both developers have full SSH access via the `deploy` user (not root).
+
+```bash
+# Copy entries from deploy/ssh_config.example to ~/.ssh/config
+ssh darkreach-coordinator      # Coordinator (178.156.211.107)
+ssh darkreach-worker-1         # Worker (178.156.158.184)
+
+# DB access via SSH tunnel (no pg_hba.conf changes needed)
+ssh -L 5432:localhost:5432 darkreach-coordinator
+psql postgresql://postgres:...@localhost:5432/postgres
+```
+
+### Deploy coordination
+- Announce deploys in chat before starting
+- Only deploy from `master` branch
+- `production-deploy.sh` uses `${DEPLOY_USER:-deploy}@` (override with `DEPLOY_USER=root` if needed)
+
+### Server setup for new developer
+On each server, add their SSH public key to `/home/deploy/.ssh/authorized_keys`.
+
 ## Fleet Architecture
 
 ```

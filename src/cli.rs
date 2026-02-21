@@ -491,7 +491,16 @@ pub fn run_work_loop(
     let mr = cli.mr_rounds;
     let sl = cli.sieve_limit;
     let mut blocks_completed = 0u64;
-    let batch_size = 5;
+    // Dynamic batch size: distribute available blocks evenly across active workers
+    let batch_size = {
+        let available = rt_handle
+            .block_on(db.get_available_block_count(search_job_id))
+            .unwrap_or(10);
+        let workers = rt_handle
+            .block_on(db.count_active_workers())
+            .unwrap_or(1);
+        (available / workers.max(1)).clamp(1, 3) as i32
+    };
     let mut pending_blocks: std::collections::VecDeque<db::WorkBlockWithCheckpoint> =
         std::collections::VecDeque::new();
 

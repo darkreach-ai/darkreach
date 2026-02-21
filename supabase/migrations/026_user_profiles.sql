@@ -19,11 +19,15 @@ ALTER TABLE user_profiles ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "read_own_profile" ON user_profiles
     FOR SELECT USING (auth.uid() = id);
 
--- Admins can read all profiles
+-- Admins can read all profiles via a SECURITY DEFINER helper to avoid
+-- infinite recursion (a policy on user_profiles cannot query user_profiles).
+CREATE OR REPLACE FUNCTION is_admin(uid UUID)
+RETURNS BOOLEAN AS $$
+  SELECT EXISTS (SELECT 1 FROM user_profiles WHERE id = uid AND role = 'admin');
+$$ LANGUAGE sql SECURITY DEFINER STABLE;
+
 CREATE POLICY "admin_read_all_profiles" ON user_profiles
-    FOR SELECT USING (
-        EXISTS (SELECT 1 FROM user_profiles up WHERE up.id = auth.uid() AND up.role = 'admin')
-    );
+    FOR SELECT USING (is_admin(auth.uid()));
 
 -- Users can update their own profile (display_name only, not role)
 CREATE POLICY "update_own_profile" ON user_profiles

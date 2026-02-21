@@ -14,7 +14,7 @@
 #
 # Volunteer mode:
 #   docker run -e API_KEY=ph_xxx -e SERVER=https://darkreach.example.com \
-#     ghcr.io/oddurs/darkreach volunteer
+#     ghcr.io/darkreach-ai/darkreach volunteer
 
 # ── Stage 1: Rust build ─────────────────────────────────────────
 FROM rust:1-bookworm AS rust-build
@@ -48,7 +48,7 @@ WORKDIR /app
 # OCI metadata labels
 LABEL org.opencontainers.image.title="darkreach" \
       org.opencontainers.image.description="Volunteer computing platform for hunting special-form prime numbers" \
-      org.opencontainers.image.source="https://github.com/oddurs/darkreach" \
+      org.opencontainers.image.source="https://github.com/darkreach-ai/darkreach" \
       org.opencontainers.image.licenses="MIT"
 
 RUN apt-get update && apt-get install -y --no-install-recommends \

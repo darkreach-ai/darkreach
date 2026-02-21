@@ -773,6 +773,7 @@ pub fn search(
                 search_params,
                 &certainty,
                 cert_json.as_deref(),
+                &["kbn"],
             )?;
             if let Some(wc) = worker_client {
                 wc.report_prime("kbn", &expr, digits, search_params, &certainty);

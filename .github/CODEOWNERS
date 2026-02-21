@@ -1,0 +1,10 @@
+# Default: both developers review everything.
+# GitHub will auto-assign reviewers based on these rules.
+# Docs: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+*                           @oddurs
+src/*.rs                    @oddurs
+frontend/                   @oddurs
+deploy/                     @oddurs
+supabase/migrations/        @oddurs
+secrets/                    @oddurs

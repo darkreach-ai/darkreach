@@ -426,7 +426,7 @@ pub fn search(
                     "prime found"
                 );
             }
-            db.insert_prime_sync(rt, form, &expr, digits, search_params, &certainty, None)?;
+            db.insert_prime_sync(rt, form, &expr, digits, search_params, &certainty, None, &[form, "kbn"])?;
             if let Some(wc) = worker_client {
                 wc.report_prime(form, &expr, digits, search_params, &certainty);
             }

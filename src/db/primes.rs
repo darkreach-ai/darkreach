@@ -21,10 +21,11 @@ impl Database {
         search_params: &str,
         proof_method: &str,
         certificate: Option<&str>,
+        tags: &[&str],
     ) -> Result<()> {
         sqlx::query(
-            "INSERT INTO primes (form, expression, digits, found_at, search_params, proof_method, certificate)
-             VALUES ($1, $2, $3, NOW(), $4, $5, $6::jsonb)",
+            "INSERT INTO primes (form, expression, digits, found_at, search_params, proof_method, certificate, tags)
+             VALUES ($1, $2, $3, NOW(), $4, $5, $6::jsonb, $7)",
         )
         .bind(form)
         .bind(expression)
@@ -32,6 +33,7 @@ impl Database {
         .bind(search_params)
         .bind(proof_method)
         .bind(certificate)
+        .bind(tags)
         .execute(&self.pool)
         .await?;
         Ok(())
@@ -48,10 +50,11 @@ impl Database {
         digits: u64,
         search_params: &str,
         proof_method: &str,
+        tags: &[&str],
     ) -> Result<()> {
         sqlx::query(
-            "INSERT INTO primes (form, expression, digits, found_at, search_params, proof_method)
-             VALUES ($1, $2, $3, NOW(), $4, $5)
+            "INSERT INTO primes (form, expression, digits, found_at, search_params, proof_method, tags)
+             VALUES ($1, $2, $3, NOW(), $4, $5, $6)
              ON CONFLICT (form, expression) DO NOTHING",
         )
         .bind(form)
@@ -59,6 +62,7 @@ impl Database {
         .bind(digits as i64)
         .bind(search_params)
         .bind(proof_method)
+        .bind(tags)
         .execute(&self.pool)
         .await?;
         Ok(())
@@ -79,6 +83,7 @@ impl Database {
         search_params: &str,
         proof_method: &str,
         certificate: Option<&str>,
+        tags: &[&str],
     ) -> Result<()> {
         rt.block_on(self.insert_prime(
             form,
@@ -87,6 +92,7 @@ impl Database {
             search_params,
             proof_method,
             certificate,
+            tags,
         ))
     }
 
@@ -99,8 +105,9 @@ impl Database {
         digits: u64,
         search_params: &str,
         proof_method: &str,
+        tags: &[&str],
     ) -> Result<()> {
-        rt.block_on(self.insert_prime_ignore(form, expression, digits, search_params, proof_method))
+        rt.block_on(self.insert_prime_ignore(form, expression, digits, search_params, proof_method, tags))
     }
 
     /// Query primes with dynamic filtering, sorting, and pagination.
@@ -133,6 +140,12 @@ impl Database {
             conditions.push(format!("digits <= ${}", param_idx));
             param_idx += 1;
         }
+        if let Some(ref tags) = filter.tags {
+            if !tags.is_empty() {
+                conditions.push(format!("tags @> ${}::text[]", param_idx));
+                param_idx += 1;
+            }
+        }
 
         let where_clause = if conditions.is_empty() {
             String::new()
@@ -141,7 +154,7 @@ impl Database {
         };
 
         let sql = format!(
-            "SELECT id, form, expression, digits, found_at, proof_method FROM primes{} ORDER BY {} {} LIMIT ${} OFFSET ${}",
+            "SELECT id, form, expression, digits, found_at, proof_method, tags FROM primes{} ORDER BY {} {} LIMIT ${} OFFSET ${}",
             where_clause,
             filter.safe_sort_column(),
             filter.safe_sort_dir(),
@@ -161,6 +174,11 @@ impl Database {
         }
         if let Some(max_d) = filter.max_digits {
             query = query.bind(max_d);
+        }
+        if let Some(ref tags) = filter.tags {
+            if !tags.is_empty() {
+                query = query.bind(tags);
+            }
         }
         query = query.bind(limit);
         query = query.bind(offset);
@@ -190,6 +208,12 @@ impl Database {
             conditions.push(format!("digits <= ${}", param_idx));
             param_idx += 1;
         }
+        if let Some(ref tags) = filter.tags {
+            if !tags.is_empty() {
+                conditions.push(format!("tags @> ${}::text[]", param_idx));
+                param_idx += 1;
+            }
+        }
         let _ = param_idx;
 
         let where_clause = if conditions.is_empty() {
@@ -213,6 +237,11 @@ impl Database {
         if let Some(max_d) = filter.max_digits {
             query = query.bind(max_d);
         }
+        if let Some(ref tags) = filter.tags {
+            if !tags.is_empty() {
+                query = query.bind(tags);
+            }
+        }
 
         let count = query.fetch_one(&self.read_pool).await?;
         Ok(count)
@@ -221,7 +250,7 @@ impl Database {
     /// Get unverified primes for the verification pipeline.
     pub async fn get_unverified_primes(&self, limit: i64) -> Result<Vec<PrimeDetail>> {
         let rows = sqlx::query_as::<_, PrimeDetail>(
-            "SELECT id, form, expression, digits, found_at, search_params, proof_method
+            "SELECT id, form, expression, digits, found_at, search_params, proof_method, tags
              FROM primes WHERE NOT verified ORDER BY id LIMIT $1",
         )
         .bind(limit)
@@ -243,7 +272,7 @@ impl Database {
         let (sql, has_form) = if form.is_some() {
             (
                 format!(
-                    "SELECT id, form, expression, digits, found_at, search_params, proof_method
+                    "SELECT id, form, expression, digits, found_at, search_params, proof_method, tags
                      FROM primes WHERE {} form = $1 ORDER BY id LIMIT $2",
                     verified_clause
                 ),
@@ -252,7 +281,7 @@ impl Database {
         } else {
             (
                 format!(
-                    "SELECT id, form, expression, digits, found_at, search_params, proof_method
+                    "SELECT id, form, expression, digits, found_at, search_params, proof_method, tags
                      FROM primes WHERE {} TRUE ORDER BY id LIMIT $1",
                     verified_clause
                 ),
@@ -273,7 +302,7 @@ impl Database {
     /// Get a single prime by ID with full detail (including search_params).
     pub async fn get_prime_by_id(&self, id: i64) -> Result<Option<PrimeDetail>> {
         let row = sqlx::query_as::<_, PrimeDetail>(
-            "SELECT id, form, expression, digits, found_at, search_params, proof_method
+            "SELECT id, form, expression, digits, found_at, search_params, proof_method, tags
              FROM primes WHERE id = $1",
         )
         .bind(id)
@@ -312,7 +341,7 @@ impl Database {
     /// Get our largest prime for a given form (used for records comparison).
     pub async fn get_best_prime_for_form(&self, form: &str) -> Result<Option<PrimeRecord>> {
         let row = sqlx::query_as::<_, PrimeRecord>(
-            "SELECT id, form, expression, digits, found_at, proof_method
+            "SELECT id, form, expression, digits, found_at, proof_method, tags
              FROM primes WHERE form = $1 ORDER BY digits DESC LIMIT 1",
         )
         .bind(form)
@@ -348,6 +377,43 @@ impl Database {
         )
         .bind(from)
         .bind(to)
+        .fetch_all(&self.read_pool)
+        .await?;
+        Ok(rows)
+    }
+
+    /// Replace all tags on a prime.
+    pub async fn update_prime_tags(&self, prime_id: i64, tags: &[&str]) -> Result<()> {
+        sqlx::query("UPDATE primes SET tags = $1 WHERE id = $2")
+            .bind(tags)
+            .bind(prime_id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    /// Append tags to a prime without removing existing ones (idempotent).
+    ///
+    /// Uses `SELECT DISTINCT unnest(...)` to deduplicate the combined array.
+    pub async fn add_prime_tags(&self, prime_id: i64, new_tags: &[&str]) -> Result<()> {
+        sqlx::query(
+            "UPDATE primes SET tags = (
+                SELECT ARRAY(SELECT DISTINCT unnest(tags || $1) ORDER BY 1)
+             ) WHERE id = $2",
+        )
+        .bind(new_tags)
+        .bind(prime_id)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    /// Get tag distribution across all primes.
+    pub async fn get_tag_distribution(&self) -> Result<Vec<(String, i64)>> {
+        let rows = sqlx::query_as::<_, (String, i64)>(
+            "SELECT unnest(tags) AS tag, COUNT(*)::BIGINT AS count
+             FROM primes GROUP BY tag ORDER BY count DESC",
+        )
         .fetch_all(&self.read_pool)
         .await?;
         Ok(rows)

@@ -25,7 +25,7 @@ const columns = [
     links: [
       {
         label: "GitHub",
-        href: "https://github.com/darkreach/darkreach",
+        href: "https://github.com/darkreach-ai/darkreach",
         external: true,
       },
       { label: "Discord", href: "#" },
@@ -38,7 +38,7 @@ const columns = [
     links: [
       {
         label: "MIT License",
-        href: "https://github.com/darkreach/darkreach/blob/master/LICENSE",
+        href: "https://github.com/darkreach-ai/darkreach/blob/master/LICENSE",
         external: true,
       },
     ],
@@ -97,12 +97,12 @@ export function Footer() {
             &copy; {new Date().getFullYear()} darkreach. Open source under MIT.
           </span>
           <a
-            href="https://github.com/darkreach/darkreach"
+            href="https://github.com/darkreach-ai/darkreach"
             target="_blank"
             rel="noopener noreferrer"
             className="text-sm text-muted-foreground hover:text-foreground transition-colors"
           >
-            github.com/darkreach/darkreach
+            github.com/darkreach-ai/darkreach
           </a>
         </div>
       </div>

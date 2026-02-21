@@ -66,7 +66,7 @@ export function CtaSection() {
             <ArrowRight size={18} className="group-hover:translate-x-0.5 transition-transform" />
           </Link>
           <a
-            href="https://github.com/darkreach/darkreach"
+            href="https://github.com/darkreach-ai/darkreach"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-2 px-8 py-3.5 rounded-lg border border-border text-muted-foreground font-medium hover:text-foreground hover:border-muted-foreground/60 transition-colors text-lg"

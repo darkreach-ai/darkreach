@@ -136,7 +136,7 @@ cargo run -- palindromic --base 10 --min-digits 1 --max-digits 9`}
       <p>
         Open an issue on{" "}
         <a
-          href="https://github.com/darkreach/darkreach/issues"
+          href="https://github.com/darkreach-ai/darkreach/issues"
           target="_blank"
           rel="noopener noreferrer"
         >

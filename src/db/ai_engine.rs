@@ -89,10 +89,35 @@ impl Database {
         confidence: f64,
         params: Option<&serde_json::Value>,
     ) -> Result<i64> {
+        self.insert_ai_engine_decision_with_scores(
+            tick_id,
+            decision_type,
+            form,
+            action,
+            reasoning,
+            confidence,
+            params,
+            None,
+        )
+        .await
+    }
+
+    /// Insert a decision with component scores for outcome correlation.
+    pub async fn insert_ai_engine_decision_with_scores(
+        &self,
+        tick_id: i64,
+        decision_type: &str,
+        form: Option<&str>,
+        action: &str,
+        reasoning: &str,
+        confidence: f64,
+        params: Option<&serde_json::Value>,
+        component_scores: Option<&serde_json::Value>,
+    ) -> Result<i64> {
         let id: i64 = sqlx::query_scalar(
             "INSERT INTO ai_engine_decisions
-                (tick_id, decision_type, form, action, reasoning, confidence, params)
-             VALUES ($1, $2, $3, $4, $5, $6, $7)
+                (tick_id, decision_type, form, action, reasoning, confidence, params, component_scores)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
              RETURNING id",
         )
         .bind(tick_id)
@@ -102,6 +127,7 @@ impl Database {
         .bind(reasoning)
         .bind(confidence)
         .bind(params)
+        .bind(component_scores)
         .fetch_one(&self.pool)
         .await?;
         Ok(id)
@@ -196,6 +222,162 @@ impl Database {
         .await?;
         Ok(rows)
     }
+
+    // ── Phase 6: Outcome measurement ─────────────────────────────
+
+    /// Get create_project decisions that need outcome measurement.
+    /// Joins with projects by form + creation time proximity to find
+    /// the associated project for each decision.
+    pub async fn get_decisions_needing_outcomes(
+        &self,
+        limit: i64,
+    ) -> Result<Vec<DecisionOutcomeCandidate>> {
+        let rows = sqlx::query_as::<_, DecisionOutcomeCandidate>(
+            "SELECT d.id AS decision_id,
+                    d.form AS decision_form,
+                    d.component_scores,
+                    d.created_at AS decision_created_at,
+                    p.id AS project_id,
+                    p.status AS project_status,
+                    p.total_found AS primes_found,
+                    p.total_cost_usd AS cost_usd,
+                    p.total_core_hours AS core_hours
+             FROM ai_engine_decisions d
+             JOIN projects p ON p.form = d.form
+               AND p.created_at BETWEEN d.created_at - INTERVAL '5 minutes'
+                                     AND d.created_at + INTERVAL '5 minutes'
+             WHERE d.outcome IS NULL
+               AND d.decision_type = 'create_project'
+               AND p.status IN ('completed', 'failed', 'cancelled')
+             ORDER BY d.created_at ASC
+             LIMIT $1",
+        )
+        .bind(limit)
+        .fetch_all(&self.read_pool)
+        .await?;
+        Ok(rows)
+    }
+
+    /// Update a decision's outcome after measurement.
+    pub async fn update_decision_outcome(
+        &self,
+        decision_id: i64,
+        outcome: &serde_json::Value,
+    ) -> Result<()> {
+        sqlx::query(
+            "UPDATE ai_engine_decisions
+             SET outcome = $2, outcome_measured_at = NOW()
+             WHERE id = $1",
+        )
+        .bind(decision_id)
+        .bind(outcome)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    /// Get recent decisions that have outcomes and component scores,
+    /// for weight learning via EWA.
+    pub async fn get_outcomes_with_scores(
+        &self,
+        limit: i64,
+    ) -> Result<Vec<DecisionWithOutcome>> {
+        let rows = sqlx::query_as::<_, DecisionWithOutcome>(
+            "SELECT id, form, component_scores, outcome
+             FROM ai_engine_decisions
+             WHERE outcome IS NOT NULL
+               AND component_scores IS NOT NULL
+               AND decision_type = 'create_project'
+             ORDER BY outcome_measured_at DESC
+             LIMIT $1",
+        )
+        .bind(limit)
+        .fetch_all(&self.read_pool)
+        .await?;
+        Ok(rows)
+    }
+
+    // ── Phase 8: Worker speed ────────────────────────────────────
+
+    /// Get per-worker, per-form speed statistics from the materialized view.
+    pub async fn get_worker_speeds(&self) -> Result<Vec<WorkerSpeedRow>> {
+        let rows = sqlx::query_as::<_, WorkerSpeedRow>(
+            "SELECT worker_id, form, blocks_completed, avg_block_secs, candidates_per_sec
+             FROM worker_speed",
+        )
+        .fetch_all(&self.read_pool)
+        .await?;
+        Ok(rows)
+    }
+
+    /// Count available work blocks for a specific search job.
+    pub async fn get_available_block_count(&self, job_id: i64) -> Result<i64> {
+        let count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM work_blocks
+             WHERE search_job_id = $1 AND status = 'available'",
+        )
+        .bind(job_id)
+        .fetch_one(&self.read_pool)
+        .await?;
+        Ok(count)
+    }
+
+    /// Count workers with a recent heartbeat (active in last 120s).
+    pub async fn count_active_workers(&self) -> Result<i64> {
+        let count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM workers
+             WHERE last_heartbeat > NOW() - INTERVAL '120 seconds'",
+        )
+        .fetch_one(&self.read_pool)
+        .await?;
+        Ok(count)
+    }
+
+    /// Release all claimed blocks for a worker back to available status.
+    /// Used by fleet rebalancing to free up blocks from overprovisioned workers.
+    pub async fn release_worker_blocks(&self, worker_id: &str) -> Result<i64> {
+        let result = sqlx::query(
+            "UPDATE work_blocks SET status = 'available', claimed_by = NULL, claimed_at = NULL
+             WHERE claimed_by = $1 AND status = 'claimed'",
+        )
+        .bind(worker_id)
+        .execute(&self.pool)
+        .await?;
+        Ok(result.rows_affected() as i64)
+    }
+}
+
+/// A decision that needs outcome measurement, joined with project results.
+#[derive(Debug, Clone, Serialize, sqlx::FromRow)]
+pub struct DecisionOutcomeCandidate {
+    pub decision_id: i64,
+    pub decision_form: Option<String>,
+    pub component_scores: Option<serde_json::Value>,
+    pub decision_created_at: chrono::DateTime<chrono::Utc>,
+    pub project_id: i64,
+    pub project_status: String,
+    pub primes_found: i64,
+    pub cost_usd: f64,
+    pub core_hours: f64,
+}
+
+/// A decision with measured outcome and component scores, for weight learning.
+#[derive(Debug, Clone, Serialize, sqlx::FromRow)]
+pub struct DecisionWithOutcome {
+    pub id: i64,
+    pub form: Option<String>,
+    pub component_scores: Option<serde_json::Value>,
+    pub outcome: Option<serde_json::Value>,
+}
+
+/// Worker speed statistics from the materialized view.
+#[derive(Debug, Clone, Serialize, sqlx::FromRow)]
+pub struct WorkerSpeedRow {
+    pub worker_id: String,
+    pub form: String,
+    pub blocks_completed: i64,
+    pub avg_block_secs: f64,
+    pub candidates_per_sec: f64,
 }
 
 /// Helper row type for the recent primes query.

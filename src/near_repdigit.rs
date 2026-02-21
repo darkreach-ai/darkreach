@@ -314,6 +314,7 @@ pub fn search(
                 search_params,
                 &certainty,
                 None,
+                &["near_repdigit", "palindromic"],
             )?;
             if let Some(wc) = worker_client {
                 wc.report_prime("near_repdigit", &expr, digits, search_params, &certainty);

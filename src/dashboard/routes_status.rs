@@ -62,6 +62,7 @@ pub(super) async fn handler_api_export(
         max_digits: params.max_digits,
         sort_by: params.sort_by,
         sort_dir: params.sort_dir,
+        tags: None,
     };
     let format = params.format.unwrap_or_else(|| "csv".to_string());
     let primes = match state.db.get_primes_filtered(100_000, 0, &filter).await {

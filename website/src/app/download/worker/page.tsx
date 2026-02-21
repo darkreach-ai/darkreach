@@ -8,7 +8,7 @@ const buildCommands = `# Install dependencies
 # macOS: brew install gmp rust
 # Linux: sudo apt install build-essential libgmp-dev m4
 
-git clone https://github.com/darkreach/darkreach.git
+git clone https://github.com/darkreach-ai/darkreach.git
 cd darkreach
 cargo build --release`;
 

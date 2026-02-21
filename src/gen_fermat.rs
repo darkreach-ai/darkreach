@@ -327,6 +327,7 @@ pub fn search(
                 search_params,
                 &certainty,
                 None,
+                &["gen_fermat", "kbn"],
             )?;
             if let Some(wc) = worker_client {
                 wc.report_prime("gen_fermat", &expr, digits, search_params, &certainty);

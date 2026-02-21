@@ -240,6 +240,7 @@ pub fn search(
                         search_params,
                         cert,
                         None,
+                        &["palindromic"],
                     )?;
                     if let Some(wc) = worker_client {
                         wc.report_prime("palindromic", &expr, digits, search_params, cert);
@@ -397,6 +398,7 @@ pub fn search(
                         search_params,
                         &certainty,
                         None,
+                        &["palindromic"],
                     )?;
                     if let Some(wc) = worker_client {
                         wc.report_prime("palindromic", &expr, digits, search_params, &certainty);

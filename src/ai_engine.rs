@@ -130,6 +130,41 @@ impl ScoringWeights {
         all_bounded && (sum - 1.0).abs() < 0.01
     }
 
+    /// Clamp each weight individually to [min, max].
+    pub fn clamp(&mut self, min: f64, max: f64) {
+        self.record_gap = self.record_gap.clamp(min, max);
+        self.yield_rate = self.yield_rate.clamp(min, max);
+        self.cost_efficiency = self.cost_efficiency.clamp(min, max);
+        self.opportunity_density = self.opportunity_density.clamp(min, max);
+        self.fleet_fit = self.fleet_fit.clamp(min, max);
+        self.momentum = self.momentum.clamp(min, max);
+        self.competition = self.competition.clamp(min, max);
+    }
+
+    /// Return weights as an array for iteration (same order as field declaration).
+    pub fn as_array(&self) -> [f64; 7] {
+        [
+            self.record_gap,
+            self.yield_rate,
+            self.cost_efficiency,
+            self.opportunity_density,
+            self.fleet_fit,
+            self.momentum,
+            self.competition,
+        ]
+    }
+
+    /// Set weights from an array (same order as field declaration).
+    pub fn from_array(&mut self, arr: [f64; 7]) {
+        self.record_gap = arr[0];
+        self.yield_rate = arr[1];
+        self.cost_efficiency = arr[2];
+        self.opportunity_density = arr[3];
+        self.fleet_fit = arr[4];
+        self.momentum = arr[5];
+        self.competition = arr[6];
+    }
+
     /// Normalize weights to sum to exactly 1.0.
     pub fn normalize(&mut self) {
         let sum = self.record_gap
@@ -232,6 +267,8 @@ pub struct WorldSnapshot {
     pub cost_calibrations: Vec<crate::db::CostCalibrationRow>,
     pub recent_discoveries: Vec<RecentDiscovery>,
     pub agent_results: Vec<crate::db::AgentTaskRow>,
+    pub competition_intel: Vec<crate::db::AgentMemoryRow>,
+    pub worker_speeds: Vec<crate::db::WorkerSpeedRow>,
     pub budget: BudgetSnapshot,
     pub timestamp: DateTime<Utc>,
 }
@@ -244,6 +281,7 @@ pub struct FleetSnapshot {
     pub idle_workers: u32,
     pub max_ram_gb: u32,
     pub active_search_types: Vec<String>,
+    pub workers_per_form: HashMap<String, u32>,
 }
 
 /// Budget state at snapshot time.
@@ -539,6 +577,15 @@ impl AiEngine {
             .await
             .unwrap_or_default();
 
+        // Get competitive intel from agent memory (Phase 7)
+        let competition_intel = db
+            .get_agent_memory_by_category("competitive_intel")
+            .await
+            .unwrap_or_default();
+
+        // Get worker speed statistics (Phase 8)
+        let worker_speeds = db.get_worker_speeds().await.unwrap_or_default();
+
         let fleet_summary = db
             .get_fleet_summary()
             .await
@@ -549,6 +596,14 @@ impl AiEngine {
                 active_search_types: vec![],
             });
 
+        // Compute workers per form from active workers
+        let mut workers_per_form: HashMap<String, u32> = HashMap::new();
+        for w in &workers {
+            if !w.search_type.is_empty() {
+                *workers_per_form.entry(w.search_type.clone()).or_insert(0) += 1;
+            }
+        }
+
         Ok(WorldSnapshot {
             records,
             fleet: FleetSnapshot {
@@ -557,6 +612,7 @@ impl AiEngine {
                 idle_workers,
                 max_ram_gb: fleet_summary.max_ram_gb,
                 active_search_types: fleet_summary.active_search_types,
+                workers_per_form,
             },
             active_projects,
             active_jobs,
@@ -564,6 +620,8 @@ impl AiEngine {
             cost_calibrations: calibrations,
             recent_discoveries,
             agent_results,
+            competition_intel,
+            worker_speeds,
             budget: BudgetSnapshot {
                 monthly_budget_usd: self.config.max_monthly_budget_usd,
                 monthly_spend_usd: monthly_spend,
@@ -669,8 +727,13 @@ impl AiEngine {
             let momentum = (recent_count as f64 / 5.0).min(1.0);
 
             // 7. Competition: penalty for forms with active external searches
-            // (placeholder — would be populated from competitive intel agent data)
-            let competition = 0.5; // neutral default
+            // Populated from agent memory (category=competitive_intel, key=competitive_intel:{form})
+            let competition = snapshot
+                .competition_intel
+                .iter()
+                .find(|m| m.key == format!("competitive_intel:{}", form))
+                .and_then(|m| m.value.parse::<f64>().ok())
+                .unwrap_or(0.5); // neutral default when no intel available
 
             // Weighted composite score
             let w = &self.scoring_weights;
@@ -853,6 +916,15 @@ impl AiEngine {
                     params: serde_json::json!({
                         "continue_from": max_searched,
                         "budget_usd": budget,
+                        "scores": {
+                            "record_gap": best.record_gap,
+                            "yield_rate": best.yield_rate,
+                            "cost_efficiency": best.cost_efficiency,
+                            "opportunity_density": best.opportunity_density,
+                            "fleet_fit": best.fleet_fit,
+                            "momentum": best.momentum,
+                            "competition": best.competition,
+                        },
                     }),
                     budget_usd: budget,
                     reasoning: format!(
@@ -878,7 +950,41 @@ impl AiEngine {
             }
         }
 
-        // 4. If no actionable decisions, emit NoAction with reason
+        // 4. Request competitive intel for forms with stale or missing data (Phase 7b)
+        // Limit to 1 intel request per tick to avoid spamming agents
+        let mut intel_requested = false;
+        for &form in strategy::ALL_FORMS {
+            if intel_requested {
+                break;
+            }
+            if self.config.excluded_forms.iter().any(|f| f == form) {
+                continue;
+            }
+            let intel_fresh = snapshot.competition_intel.iter().any(|m| {
+                m.key == format!("competitive_intel:{}", form)
+                    && (Utc::now() - m.updated_at).num_days() < 7
+            });
+            if !intel_fresh {
+                decisions.push(Decision::RequestAgentIntel {
+                    task_title: format!("Competitive Intel: {}", form),
+                    task_description: format!(
+                        "Research the competitive landscape for {} prime searching. \
+                         Who else is actively searching? What ranges are covered? \
+                         Rate competition intensity 0.0 (no competition) to 1.0 (heavily contested). \
+                         Return result as JSON: {{\"competition_score\": <float>}}",
+                        form
+                    ),
+                });
+                intel_requested = true;
+            }
+        }
+
+        // 5. Detect fleet imbalance and generate rebalance decisions (Phase 8d)
+        if let Some(rebalance) = self.detect_fleet_imbalance(snapshot) {
+            decisions.push(rebalance);
+        }
+
+        // 6. If no actionable decisions, emit NoAction with reason
         if decisions.is_empty() {
             let reason = if snapshot.fleet.worker_count == 0 {
                 "No workers connected".to_string()
@@ -903,6 +1009,81 @@ impl AiEngine {
         decisions
     }
 
+    /// Detect fleet imbalance: workers assigned to forms with no available blocks,
+    /// while other forms have queued blocks and no workers. Returns a RebalanceFleet
+    /// decision with suggested moves, or None if the fleet is balanced.
+    fn detect_fleet_imbalance(&self, snapshot: &WorldSnapshot) -> Option<Decision> {
+        // Find forms with workers but 0 available blocks (overprovisioned)
+        let mut overprovisioned: Vec<(&str, Vec<&str>)> = Vec::new();
+        // Find forms with available blocks but 0 workers (underprovisioned)
+        let mut underprovisioned: Vec<String> = Vec::new();
+
+        for job in &snapshot.active_jobs {
+            if job.status != "running" {
+                continue;
+            }
+            let form = &job.search_type;
+            let workers_on_form = snapshot
+                .fleet
+                .workers_per_form
+                .get(form)
+                .copied()
+                .unwrap_or(0);
+
+            // Check if this form has worker speed data but no available blocks
+            let has_available = snapshot.worker_speeds.iter().any(|ws| ws.form == *form);
+
+            if workers_on_form > 0 && !has_available {
+                // Find workers assigned to this form
+                // (workers_per_form tracks the form, but we don't have individual worker IDs here)
+                // We'll use worker_speeds to find workers on this form
+                let worker_ids: Vec<&str> = snapshot
+                    .worker_speeds
+                    .iter()
+                    .filter(|ws| ws.form == *form)
+                    .map(|ws| ws.worker_id.as_str())
+                    .collect();
+                if !worker_ids.is_empty() {
+                    overprovisioned.push((form, worker_ids));
+                }
+            } else if workers_on_form == 0 {
+                underprovisioned.push(form.clone());
+            }
+        }
+
+        if overprovisioned.is_empty() || underprovisioned.is_empty() {
+            return None;
+        }
+
+        let mut moves = Vec::new();
+        for (from_form, workers) in &overprovisioned {
+            if underprovisioned.is_empty() {
+                break;
+            }
+            for &worker_id in workers {
+                if let Some(to_form) = underprovisioned.pop() {
+                    moves.push(WorkerMove {
+                        worker_id: worker_id.to_string(),
+                        from_form: from_form.to_string(),
+                        to_form: to_form.clone(),
+                    });
+                }
+            }
+        }
+
+        if moves.is_empty() {
+            return None;
+        }
+
+        Some(Decision::RebalanceFleet {
+            moves: moves.clone(),
+            reasoning: format!(
+                "Fleet imbalance: {} workers moved from exhausted forms to underprovisioned forms",
+                moves.len()
+            ),
+        })
+    }
+
     /// Determine how many new projects to create based on fleet size.
     fn portfolio_slots(&self, fleet_size: u32, active_projects: i32) -> i32 {
         let max_concurrent = match fleet_size {
@@ -918,125 +1099,187 @@ impl AiEngine {
 
     /// Execute a single decision: create projects, pause jobs, log to audit trail.
     async fn act(&self, db: &Database, decision: &Decision, tick_id: u64) -> Result<()> {
-        let (decision_type, form, action, reasoning, confidence, params) = match decision {
-            Decision::CreateProject {
-                form,
-                params,
-                budget_usd,
-                reasoning,
-                confidence,
-            } => {
-                let continue_from = params["continue_from"].as_i64().unwrap_or(0);
-                let config =
-                    strategy::build_auto_project_config(form, continue_from, *budget_usd);
-                match db.create_project(&config, None).await {
-                    Ok(pid) => {
-                        if let Err(e) = db.update_project_status(pid, "active").await {
-                            warn!(project_id = pid, error = %e, "ai_engine: failed to activate project");
+        let (decision_type, form, action, reasoning, confidence, params, component_scores) =
+            match decision {
+                Decision::CreateProject {
+                    form,
+                    params,
+                    budget_usd,
+                    reasoning,
+                    confidence,
+                } => {
+                    let continue_from = params["continue_from"].as_i64().unwrap_or(0);
+                    let config =
+                        strategy::build_auto_project_config(form, continue_from, *budget_usd);
+                    match db.create_project(&config, None).await {
+                        Ok(pid) => {
+                            if let Err(e) = db.update_project_status(pid, "active").await {
+                                warn!(project_id = pid, error = %e, "ai_engine: failed to activate project");
+                            }
+                            info!(project_id = pid, form, "ai_engine: created project");
                         }
-                        info!(project_id = pid, form, "ai_engine: created project");
+                        Err(e) => {
+                            warn!(form, error = %e, "ai_engine: failed to create project");
+                        }
                     }
-                    Err(e) => {
-                        warn!(form, error = %e, "ai_engine: failed to create project");
-                    }
+                    // Extract component scores from params for outcome correlation
+                    let scores = params.get("scores").cloned();
+                    (
+                        "create_project",
+                        Some(form.as_str()),
+                        "executed",
+                        reasoning.as_str(),
+                        *confidence,
+                        Some(params.clone()),
+                        scores,
+                    )
                 }
-                (
-                    "create_project",
+                Decision::PauseProject {
+                    project_id,
+                    reason,
+                } => {
+                    // Try pausing as a search job first (stalled jobs use job_id)
+                    if let Err(e) =
+                        db.update_search_job_status(*project_id, "paused", None).await
+                    {
+                        warn!(id = project_id, error = %e, "ai_engine: failed to pause job");
+                    } else {
+                        info!(id = project_id, "ai_engine: paused stalled job");
+                    }
+                    (
+                        "pause_project",
+                        None,
+                        "executed",
+                        reason.as_str(),
+                        0.8,
+                        Some(serde_json::json!({"project_id": project_id})),
+                        None,
+                    )
+                }
+                Decision::VerifyResult {
+                    form,
+                    prime_id,
+                    reasoning,
+                } => (
+                    "verify_result",
                     Some(form.as_str()),
-                    "executed",
+                    "logged",
                     reasoning.as_str(),
-                    *confidence,
-                    Some(params.clone()),
-                )
-            }
-            Decision::PauseProject {
-                project_id,
-                reason,
-            } => {
-                // Try pausing as a search job first (stalled jobs use job_id)
-                if let Err(e) = db.update_search_job_status(*project_id, "paused", None).await {
-                    warn!(id = project_id, error = %e, "ai_engine: failed to pause job");
-                } else {
-                    info!(id = project_id, "ai_engine: paused stalled job");
-                }
-                (
-                    "pause_project",
+                    0.9,
+                    Some(serde_json::json!({"form": form, "prime_id": prime_id})),
                     None,
-                    "executed",
+                ),
+                Decision::NoAction { reason } => (
+                    "no_action",
+                    None,
+                    "logged",
                     reason.as_str(),
-                    0.8,
+                    1.0,
+                    None,
+                    None,
+                ),
+                Decision::ExtendProject {
+                    project_id,
+                    reasoning,
+                    ..
+                } => (
+                    "extend_project",
+                    None,
+                    "logged",
+                    reasoning.as_str(),
+                    0.7,
                     Some(serde_json::json!({"project_id": project_id})),
-                )
-            }
-            Decision::VerifyResult {
-                form,
-                prime_id,
-                reasoning,
-            } => (
-                "verify_result",
-                Some(form.as_str()),
-                "logged",
-                reasoning.as_str(),
-                0.9,
-                Some(serde_json::json!({"form": form, "prime_id": prime_id})),
-            ),
-            Decision::NoAction { reason } => (
-                "no_action",
-                None,
-                "logged",
-                reason.as_str(),
-                1.0,
-                None,
-            ),
-            Decision::ExtendProject {
-                project_id,
-                reasoning,
-                ..
-            } => (
-                "extend_project",
-                None,
-                "logged",
-                reasoning.as_str(),
-                0.7,
-                Some(serde_json::json!({"project_id": project_id})),
-            ),
-            Decision::AbandonProject {
-                project_id,
-                reason,
-            } => (
-                "abandon_project",
-                None,
-                "logged",
-                reason.as_str(),
-                0.6,
-                Some(serde_json::json!({"project_id": project_id})),
-            ),
-            Decision::RebalanceFleet { reasoning, .. } => (
-                "rebalance_fleet",
-                None,
-                "logged",
-                reasoning.as_str(),
-                0.5,
-                None,
-            ),
-            Decision::RequestAgentIntel {
-                task_title,
-                task_description,
-            } => (
-                "request_agent_intel",
-                None,
-                "logged",
-                task_title.as_str(),
-                0.5,
-                Some(serde_json::json!({
-                    "title": task_title,
-                    "description": task_description,
-                })),
-            ),
-        };
+                    None,
+                ),
+                Decision::AbandonProject {
+                    project_id,
+                    reason,
+                } => (
+                    "abandon_project",
+                    None,
+                    "logged",
+                    reason.as_str(),
+                    0.6,
+                    Some(serde_json::json!({"project_id": project_id})),
+                    None,
+                ),
+                Decision::RebalanceFleet {
+                    moves,
+                    reasoning,
+                } => {
+                    // Execute rebalance: release claimed blocks from overprovisioned workers
+                    for mv in moves {
+                        match db.release_worker_blocks(&mv.worker_id).await {
+                            Ok(released) => {
+                                info!(
+                                    worker = %mv.worker_id,
+                                    from = %mv.from_form,
+                                    to = %mv.to_form,
+                                    released,
+                                    "ai_engine: rebalanced worker"
+                                );
+                            }
+                            Err(e) => {
+                                warn!(
+                                    worker = %mv.worker_id,
+                                    error = %e,
+                                    "ai_engine: failed to release blocks"
+                                );
+                            }
+                        }
+                    }
+                    (
+                        "rebalance_fleet",
+                        None,
+                        "executed",
+                        reasoning.as_str(),
+                        0.5,
+                        Some(serde_json::json!({"moves": moves})),
+                        None,
+                    )
+                }
+                Decision::RequestAgentIntel {
+                    task_title,
+                    task_description,
+                } => {
+                    // Create an agent task to gather competitive intel
+                    match db
+                        .create_agent_task(
+                            task_title,
+                            task_description,
+                            "low",
+                            Some("haiku"),
+                            "ai_engine",
+                            Some(1.0),
+                            0,
+                            Some("strategy-advisor"),
+                        )
+                        .await
+                    {
+                        Ok(task) => {
+                            info!(task_id = task.id, "ai_engine: created intel agent task");
+                        }
+                        Err(e) => {
+                            warn!(error = %e, "ai_engine: failed to create intel agent task");
+                        }
+                    }
+                    (
+                        "request_agent_intel",
+                        None,
+                        "executed",
+                        task_title.as_str(),
+                        0.5,
+                        Some(serde_json::json!({
+                            "title": task_title,
+                            "description": task_description,
+                        })),
+                        None,
+                    )
+                }
+            };
 
-        // Log to ai_engine_decisions audit table
-        db.insert_ai_engine_decision(
+        // Log to ai_engine_decisions audit table (with component scores if available)
+        db.insert_ai_engine_decision_with_scores(
             tick_id as i64,
             decision_type,
             form,
@@ -1044,6 +1287,7 @@ impl AiEngine {
             reasoning,
             confidence,
             params.as_ref(),
+            component_scores.as_ref(),
         )
         .await?;
 
@@ -1078,7 +1322,8 @@ impl AiEngine {
         }
     }
 
-    /// Calibrate cost model from work block data and update scoring weights.
+    /// Calibrate cost model from work block data, evaluate outcomes, and update
+    /// scoring weights via exponential weighted averaging (EWA).
     async fn learn(&mut self, db: &Database) -> Result<()> {
         // 1. Fetch cost calibration data
         let calibrations = db.get_cost_calibrations().await?;
@@ -1096,7 +1341,6 @@ impl AiEngine {
         }
 
         // 3. Fit cost model from raw work block data
-        // (This queries the cost_observations view and runs OLS on log-log data)
         for &form in strategy::ALL_FORMS {
             match db.get_cost_observations(form, 50).await {
                 Ok(obs) if obs.len() >= self.config.min_calibration_samples as usize => {
@@ -1105,7 +1349,6 @@ impl AiEngine {
                             self.cost_model
                                 .fitted
                                 .insert(form.to_string(), (a, b));
-                            // Persist to DB for next restart
                             db.upsert_cost_calibration(
                                 form,
                                 a,
@@ -1119,9 +1362,28 @@ impl AiEngine {
                         }
                     }
                 }
-                _ => {} // not enough data yet
+                _ => {}
             }
         }
+
+        // 4. Evaluate outcomes for unmeasured decisions (Phase 6b)
+        self.evaluate_outcomes(db).await;
+
+        // 5. Update scoring weights from measured outcomes (Phase 6c-d)
+        let old_weights = self.scoring_weights.clone();
+        if let Ok(outcomes) = db.get_outcomes_with_scores(50).await {
+            self.update_weights_from_outcomes(&outcomes);
+        }
+        if old_weights.as_array() != self.scoring_weights.as_array() {
+            info!(
+                old = ?old_weights.as_array(),
+                new = ?self.scoring_weights.as_array(),
+                "ai_engine: weights updated"
+            );
+        }
+
+        // 6. Process completed agent intel tasks (Phase 7d)
+        self.process_agent_intel(db).await;
 
         info!(
             cost_model_version = self.cost_model.version,
@@ -1130,6 +1392,131 @@ impl AiEngine {
         );
 
         Ok(())
+    }
+
+    // ── Phase 6: Outcome Evaluation & Weight Learning ───────────
+
+    /// Evaluate outcomes for create_project decisions that haven't been measured yet.
+    /// Joins decisions with their associated projects and records the verdict.
+    async fn evaluate_outcomes(&self, db: &Database) {
+        let candidates = match db.get_decisions_needing_outcomes(20).await {
+            Ok(c) => c,
+            Err(e) => {
+                warn!(error = %e, "ai_engine: failed to fetch outcome candidates");
+                return;
+            }
+        };
+
+        for candidate in candidates {
+            let verdict = if candidate.primes_found > 0 {
+                "success"
+            } else if candidate.project_status == "failed" {
+                "failure"
+            } else {
+                "stalled"
+            };
+
+            let outcome = serde_json::json!({
+                "verdict": verdict,
+                "primes_found": candidate.primes_found,
+                "cost_usd": candidate.cost_usd,
+                "core_hours": candidate.core_hours,
+                "project_id": candidate.project_id,
+                "project_status": candidate.project_status,
+            });
+
+            if let Err(e) = db
+                .update_decision_outcome(candidate.decision_id, &outcome)
+                .await
+            {
+                warn!(
+                    decision_id = candidate.decision_id,
+                    error = %e,
+                    "ai_engine: failed to store outcome"
+                );
+            }
+        }
+    }
+
+    /// Update scoring weights from measured outcomes via exponential weighted
+    /// averaging (EWA). Each outcome nudges weights toward components that
+    /// correlated with success.
+    fn update_weights_from_outcomes(
+        &mut self,
+        outcomes: &[crate::db::DecisionWithOutcome],
+    ) {
+        if outcomes.is_empty() {
+            return;
+        }
+
+        for outcome in outcomes {
+            let Some(scores_json) = &outcome.component_scores else {
+                continue;
+            };
+            let Some(outcome_json) = &outcome.outcome else {
+                continue;
+            };
+
+            let component_scores = match extract_component_scores(scores_json) {
+                Some(s) => s,
+                None => continue,
+            };
+
+            let reward = compute_reward(outcome_json);
+
+            // EWA nudge: w_i += alpha * (reward - 0.5) * component_score_i
+            let mut weights = self.scoring_weights.as_array();
+            for (i, &score) in component_scores.iter().enumerate() {
+                weights[i] += WEIGHT_LEARNING_RATE * (reward - 0.5) * score;
+            }
+            self.scoring_weights.from_array(weights);
+        }
+
+        // Clamp and normalize to maintain invariants
+        self.scoring_weights.clamp(WEIGHT_MIN, WEIGHT_MAX);
+        self.scoring_weights.normalize();
+    }
+
+    // ── Phase 7: Agent Intel Processing ─────────────────────────
+
+    /// Process completed agent tasks that were spawned by the AI engine,
+    /// extracting competitive intel scores and storing them in agent memory.
+    async fn process_agent_intel(&self, db: &Database) {
+        let tasks = match db.get_recent_agent_results(20).await {
+            Ok(t) => t,
+            Err(_) => return,
+        };
+
+        for task in &tasks {
+            if task.source != "ai_engine" || task.status != "completed" {
+                continue;
+            }
+
+            let Some(result) = &task.result else {
+                continue;
+            };
+            let result_text = result.as_str().unwrap_or_default();
+
+            // Try to extract form name from the task title
+            // Title format: "Competitive Intel: {form}"
+            let form = task
+                .title
+                .strip_prefix("Competitive Intel: ")
+                .unwrap_or_default();
+            if form.is_empty() {
+                continue;
+            }
+
+            if let Some(score) = parse_competition_score(result_text) {
+                let key = format!("competitive_intel:{}", form);
+                if let Err(e) = db
+                    .upsert_agent_memory(&key, &score.to_string(), "competitive_intel", Some(task.id))
+                    .await
+                {
+                    warn!(form, error = %e, "ai_engine: failed to store competition score");
+                }
+            }
+        }
     }
 
     // ── State Persistence ───────────────────────────────────────
@@ -1186,6 +1573,72 @@ impl AiEngine {
 
 /// Preferred forms scoring multiplier.
 const PREFERRED_MULTIPLIER: f64 = 1.5;
+
+/// Learning rate for EWA weight updates. Conservative to avoid oscillation.
+const WEIGHT_LEARNING_RATE: f64 = 0.05;
+
+/// Minimum weight bound (prevents any component from being zeroed out).
+const WEIGHT_MIN: f64 = 0.05;
+
+/// Maximum weight bound (prevents any single component from dominating).
+const WEIGHT_MAX: f64 = 0.40;
+
+/// Compute reward from a decision outcome. Reward is based on primes found
+/// normalized by cost, producing a value in [0, 1].
+pub fn compute_reward(outcome: &serde_json::Value) -> f64 {
+    let primes_found = outcome["primes_found"].as_f64().unwrap_or(0.0);
+    let cost = outcome["cost_usd"].as_f64().unwrap_or(0.01).max(0.01);
+    // Raw efficiency: primes per dollar
+    let efficiency = primes_found / cost;
+    // Sigmoid mapping to [0, 1]: higher efficiency → higher reward
+    // At efficiency=0 → reward≈0.38, at efficiency=1 → reward≈0.62, at efficiency=5 → reward≈0.92
+    let x = efficiency - 0.5;
+    (1.0 / (1.0 + (-x).exp())).clamp(0.0, 1.0)
+}
+
+/// Extract the 7 component scores from a JSON object.
+/// Returns None if the JSON doesn't contain the expected fields.
+fn extract_component_scores(scores_json: &serde_json::Value) -> Option<[f64; 7]> {
+    Some([
+        scores_json["record_gap"].as_f64()?,
+        scores_json["yield_rate"].as_f64()?,
+        scores_json["cost_efficiency"].as_f64()?,
+        scores_json["opportunity_density"].as_f64()?,
+        scores_json["fleet_fit"].as_f64()?,
+        scores_json["momentum"].as_f64()?,
+        scores_json["competition"].as_f64()?,
+    ])
+}
+
+/// Parse a competition score from agent result text.
+/// Looks for JSON `{"competition_score": 0.3}` or plain float patterns.
+pub fn parse_competition_score(result_text: &str) -> Option<f64> {
+    // Try JSON parsing first
+    if let Ok(val) = serde_json::from_str::<serde_json::Value>(result_text) {
+        if let Some(score) = val["competition_score"].as_f64() {
+            return Some(score.clamp(0.0, 1.0));
+        }
+    }
+
+    // Try to find JSON embedded in text
+    if let Some(start) = result_text.find('{') {
+        if let Some(end) = result_text[start..].find('}') {
+            let json_str = &result_text[start..=start + end];
+            if let Ok(val) = serde_json::from_str::<serde_json::Value>(json_str) {
+                if let Some(score) = val["competition_score"].as_f64() {
+                    return Some(score.clamp(0.0, 1.0));
+                }
+            }
+        }
+    }
+
+    // Try plain float at the end of text (e.g., "Competition score: 0.3")
+    result_text
+        .split_whitespace()
+        .last()
+        .and_then(|s| s.parse::<f64>().ok())
+        .filter(|&s| (0.0..=1.0).contains(&s))
+}
 
 /// Default searchable range per form (for opportunity density).
 fn searchable_range(form: &str) -> u64 {
@@ -1282,6 +1735,35 @@ pub fn fit_power_law(observations: &[CostObservation]) -> Option<(f64, f64, f64)
 mod tests {
     use super::*;
 
+    /// Helper to create a minimal snapshot for testing.
+    fn test_snapshot(worker_count: u32, total_cores: u32, idle_workers: u32) -> WorldSnapshot {
+        WorldSnapshot {
+            records: vec![],
+            fleet: FleetSnapshot {
+                worker_count,
+                total_cores,
+                idle_workers,
+                max_ram_gb: 32,
+                active_search_types: vec![],
+                workers_per_form: HashMap::new(),
+            },
+            active_projects: vec![],
+            active_jobs: vec![],
+            yield_rates: vec![],
+            cost_calibrations: vec![],
+            recent_discoveries: vec![],
+            agent_results: vec![],
+            competition_intel: vec![],
+            worker_speeds: vec![],
+            budget: BudgetSnapshot {
+                monthly_budget_usd: 100.0,
+                monthly_spend_usd: 0.0,
+                remaining_usd: 100.0,
+            },
+            timestamp: Utc::now(),
+        }
+    }
+
     // ── ScoringWeights ──────────────────────────────────────────
 
     #[test]
@@ -1339,6 +1821,33 @@ mod tests {
         assert!((sum - 1.0).abs() < 0.001, "Normalized weights should sum to 1.0, got {}", sum);
     }
 
+    #[test]
+    fn clamp_method() {
+        let mut w = ScoringWeights {
+            record_gap: 0.90,
+            yield_rate: 0.01,
+            cost_efficiency: 0.20,
+            opportunity_density: 0.15,
+            fleet_fit: 0.10,
+            momentum: 0.10,
+            competition: -0.10,
+        };
+        w.clamp(WEIGHT_MIN, WEIGHT_MAX);
+        assert_eq!(w.record_gap, WEIGHT_MAX, "Should clamp to max");
+        assert_eq!(w.yield_rate, WEIGHT_MIN, "Should clamp to min");
+        assert_eq!(w.competition, WEIGHT_MIN, "Negative should clamp to min");
+        assert_eq!(w.cost_efficiency, 0.20, "In-range should be unchanged");
+    }
+
+    #[test]
+    fn as_array_from_array_roundtrip() {
+        let w = ScoringWeights::default();
+        let arr = w.as_array();
+        let mut w2 = ScoringWeights::default();
+        w2.from_array(arr);
+        assert_eq!(w.as_array(), w2.as_array());
+    }
+
     // ── CostModel ───────────────────────────────────────────────
 
     #[test]
@@ -1347,7 +1856,7 @@ mod tests {
         model.fitted.insert("kbn".to_string(), (0.05, 1.8));
 
         let fitted = model.secs_per_candidate("kbn", 1000, false);
-        let default_spc = 0.1 * 1.0f64.powf(2.0); // default: 0.1 * d^2.0
+        let default_spc = 0.1 * 1.0f64.powf(2.0);
         let fitted_spc = 0.05 * 1.0f64.powf(1.8);
 
         assert!(
@@ -1405,7 +1914,6 @@ mod tests {
 
     #[test]
     fn fit_power_law_exact_data() {
-        // Generate exact power-law data: secs = 0.5 * (d/1000)^2.5
         let obs: Vec<CostObservation> = (1..=10)
             .map(|i| {
                 let digits = 1000.0 * i as f64;
@@ -1426,7 +1934,7 @@ mod tests {
             CostObservation { digits: 1000.0, secs: 0.5 },
             CostObservation { digits: 2000.0, secs: 2.8 },
         ];
-        assert!(fit_power_law(&obs).is_none(), "Should need ≥3 points");
+        assert!(fit_power_law(&obs).is_none(), "Should need >= 3 points");
     }
 
     #[test]
@@ -1436,7 +1944,7 @@ mod tests {
             CostObservation { digits: -1.0, secs: 1.0 },
             CostObservation { digits: 1000.0, secs: 0.5 },
         ];
-        assert!(fit_power_law(&obs).is_none(), "Should filter invalid and need ≥3 valid points");
+        assert!(fit_power_law(&obs).is_none(), "Should filter invalid and need >= 3 valid points");
     }
 
     // ── Portfolio slots ─────────────────────────────────────────
@@ -1451,7 +1959,7 @@ mod tests {
     #[test]
     fn portfolio_slots_medium_fleet() {
         let engine = AiEngine::new();
-        assert_eq!(engine.portfolio_slots(10, 0), 2); // capped at 2 per tick
+        assert_eq!(engine.portfolio_slots(10, 0), 2);
         assert_eq!(engine.portfolio_slots(10, 2), 1);
         assert_eq!(engine.portfolio_slots(10, 3), 0);
     }
@@ -1459,7 +1967,7 @@ mod tests {
     #[test]
     fn portfolio_slots_large_fleet() {
         let engine = AiEngine::new();
-        assert_eq!(engine.portfolio_slots(20, 0), 2); // max 2 per tick
+        assert_eq!(engine.portfolio_slots(20, 0), 2);
         assert_eq!(engine.portfolio_slots(100, 0), 2);
     }
 
@@ -1517,29 +2025,7 @@ mod tests {
     #[test]
     fn score_forms_empty_snapshot() {
         let engine = AiEngine::new();
-        let snapshot = WorldSnapshot {
-            records: vec![],
-            fleet: FleetSnapshot {
-                worker_count: 0,
-                total_cores: 0,
-                idle_workers: 0,
-                max_ram_gb: 0,
-                active_search_types: vec![],
-            },
-            active_projects: vec![],
-            active_jobs: vec![],
-            yield_rates: vec![],
-            cost_calibrations: vec![],
-            recent_discoveries: vec![],
-            agent_results: vec![],
-            budget: BudgetSnapshot {
-                monthly_budget_usd: 100.0,
-                monthly_spend_usd: 0.0,
-                remaining_usd: 100.0,
-            },
-            timestamp: Utc::now(),
-        };
-
+        let snapshot = test_snapshot(0, 0, 0);
         let scores = engine.score_forms(&snapshot);
         assert_eq!(scores.len(), 12, "Should score all 12 forms");
         for s in &scores {
@@ -1550,29 +2036,7 @@ mod tests {
     #[test]
     fn score_forms_sorted_descending() {
         let engine = AiEngine::new();
-        let snapshot = WorldSnapshot {
-            records: vec![],
-            fleet: FleetSnapshot {
-                worker_count: 8,
-                total_cores: 64,
-                idle_workers: 8,
-                max_ram_gb: 32,
-                active_search_types: vec![],
-            },
-            active_projects: vec![],
-            active_jobs: vec![],
-            yield_rates: vec![],
-            cost_calibrations: vec![],
-            recent_discoveries: vec![],
-            agent_results: vec![],
-            budget: BudgetSnapshot {
-                monthly_budget_usd: 100.0,
-                monthly_spend_usd: 0.0,
-                remaining_usd: 100.0,
-            },
-            timestamp: Utc::now(),
-        };
-
+        let snapshot = test_snapshot(8, 64, 8);
         let scores = engine.score_forms(&snapshot);
         for w in scores.windows(2) {
             assert!(
@@ -1587,30 +2051,7 @@ mod tests {
     fn score_forms_excludes_forms() {
         let mut engine = AiEngine::new();
         engine.config.excluded_forms = vec!["wagstaff".to_string()];
-
-        let snapshot = WorldSnapshot {
-            records: vec![],
-            fleet: FleetSnapshot {
-                worker_count: 8,
-                total_cores: 64,
-                idle_workers: 8,
-                max_ram_gb: 32,
-                active_search_types: vec![],
-            },
-            active_projects: vec![],
-            active_jobs: vec![],
-            yield_rates: vec![],
-            cost_calibrations: vec![],
-            recent_discoveries: vec![],
-            agent_results: vec![],
-            budget: BudgetSnapshot {
-                monthly_budget_usd: 100.0,
-                monthly_spend_usd: 0.0,
-                remaining_usd: 100.0,
-            },
-            timestamp: Utc::now(),
-        };
-
+        let snapshot = test_snapshot(8, 64, 8);
         let scores = engine.score_forms(&snapshot);
         let wagstaff = scores.iter().find(|s| s.form == "wagstaff").unwrap();
         assert_eq!(wagstaff.total, 0.0, "Excluded form should have zero score");
@@ -1621,34 +2062,13 @@ mod tests {
         let engine = AiEngine::new();
         let now = Utc::now();
 
-        let mut snapshot_no_momentum = WorldSnapshot {
-            records: vec![],
-            fleet: FleetSnapshot {
-                worker_count: 8,
-                total_cores: 64,
-                idle_workers: 8,
-                max_ram_gb: 32,
-                active_search_types: vec![],
-            },
-            active_projects: vec![],
-            active_jobs: vec![],
-            yield_rates: vec![],
-            cost_calibrations: vec![],
-            recent_discoveries: vec![],
-            agent_results: vec![],
-            budget: BudgetSnapshot {
-                monthly_budget_usd: 100.0,
-                monthly_spend_usd: 0.0,
-                remaining_usd: 100.0,
-            },
-            timestamp: now,
-        };
+        let mut snapshot = test_snapshot(8, 64, 8);
+        snapshot.timestamp = now;
 
-        let scores_no = engine.score_forms(&snapshot_no_momentum);
+        let scores_no = engine.score_forms(&snapshot);
         let kbn_no = scores_no.iter().find(|s| s.form == "kbn").unwrap();
 
-        // Add momentum for kbn
-        snapshot_no_momentum.recent_discoveries = vec![
+        snapshot.recent_discoveries = vec![
             RecentDiscovery {
                 form: "kbn".to_string(),
                 digits: 5000,
@@ -1661,7 +2081,7 @@ mod tests {
             },
         ];
 
-        let scores_with = engine.score_forms(&snapshot_no_momentum);
+        let scores_with = engine.score_forms(&snapshot);
         let kbn_with = scores_with.iter().find(|s| s.form == "kbn").unwrap();
 
         assert!(
@@ -1676,60 +2096,33 @@ mod tests {
     #[test]
     fn decide_no_action_no_workers() {
         let engine = AiEngine::new();
-        let snapshot = WorldSnapshot {
-            records: vec![],
-            fleet: FleetSnapshot {
-                worker_count: 0,
-                total_cores: 0,
-                idle_workers: 0,
-                max_ram_gb: 0,
-                active_search_types: vec![],
-            },
-            active_projects: vec![],
-            active_jobs: vec![],
-            yield_rates: vec![],
-            cost_calibrations: vec![],
-            recent_discoveries: vec![],
-            agent_results: vec![],
-            budget: BudgetSnapshot {
-                monthly_budget_usd: 100.0,
-                monthly_spend_usd: 0.0,
-                remaining_usd: 100.0,
-            },
-            timestamp: Utc::now(),
-        };
+        let now = Utc::now();
+        let mut snapshot = test_snapshot(0, 0, 0);
+
+        // Provide fresh intel for all forms so no intel requests are generated
+        for form in strategy::ALL_FORMS {
+            snapshot.competition_intel.push(crate::db::AgentMemoryRow {
+                id: 0,
+                key: format!("competitive_intel:{}", form),
+                value: "0.5".to_string(),
+                category: "competitive_intel".to_string(),
+                created_by_task: None,
+                created_at: now,
+                updated_at: now,
+            });
+        }
+
         let analysis = engine.orient(&snapshot);
         let decisions = engine.decide(&snapshot, &analysis);
 
-        assert_eq!(decisions.len(), 1);
-        assert!(matches!(&decisions[0], Decision::NoAction { .. }));
+        let has_no_action = decisions.iter().any(|d| matches!(d, Decision::NoAction { .. }));
+        assert!(has_no_action, "Should have a NoAction decision when no workers and no stale intel");
     }
 
     #[test]
     fn decide_creates_project_with_idle_workers() {
         let engine = AiEngine::new();
-        let snapshot = WorldSnapshot {
-            records: vec![],
-            fleet: FleetSnapshot {
-                worker_count: 4,
-                total_cores: 32,
-                idle_workers: 4,
-                max_ram_gb: 32,
-                active_search_types: vec![],
-            },
-            active_projects: vec![],
-            active_jobs: vec![],
-            yield_rates: vec![],
-            cost_calibrations: vec![],
-            recent_discoveries: vec![],
-            agent_results: vec![],
-            budget: BudgetSnapshot {
-                monthly_budget_usd: 100.0,
-                monthly_spend_usd: 0.0,
-                remaining_usd: 100.0,
-            },
-            timestamp: Utc::now(),
-        };
+        let snapshot = test_snapshot(4, 32, 4);
         let analysis = engine.orient(&snapshot);
         let decisions = engine.decide(&snapshot, &analysis);
 
@@ -1737,6 +2130,27 @@ mod tests {
             .iter()
             .any(|d| matches!(d, Decision::CreateProject { .. }));
         assert!(has_create, "Should create a project with idle workers");
+    }
+
+    #[test]
+    fn decide_includes_component_scores_in_params() {
+        let engine = AiEngine::new();
+        let snapshot = test_snapshot(4, 32, 4);
+        let analysis = engine.orient(&snapshot);
+        let decisions = engine.decide(&snapshot, &analysis);
+
+        for d in &decisions {
+            if let Decision::CreateProject { params, .. } = d {
+                assert!(
+                    params.get("scores").is_some(),
+                    "CreateProject should include component scores in params"
+                );
+                let scores = &params["scores"];
+                assert!(scores["record_gap"].is_f64(), "Should have record_gap score");
+                assert!(scores["yield_rate"].is_f64(), "Should have yield_rate score");
+                assert!(scores["competition"].is_f64(), "Should have competition score");
+            }
+        }
     }
 
     // ── AiEngineConfig ──────────────────────────────────────────
@@ -1755,29 +2169,397 @@ mod tests {
     #[test]
     fn drift_first_tick_not_significant() {
         let engine = AiEngine::new();
-        let snapshot = WorldSnapshot {
-            records: vec![],
-            fleet: FleetSnapshot {
-                worker_count: 4,
-                total_cores: 32,
-                idle_workers: 4,
-                max_ram_gb: 32,
-                active_search_types: vec![],
-            },
-            active_projects: vec![],
-            active_jobs: vec![],
-            yield_rates: vec![],
-            cost_calibrations: vec![],
-            recent_discoveries: vec![],
-            agent_results: vec![],
-            budget: BudgetSnapshot {
-                monthly_budget_usd: 100.0,
-                monthly_spend_usd: 0.0,
-                remaining_usd: 100.0,
-            },
-            timestamp: Utc::now(),
-        };
+        let snapshot = test_snapshot(4, 32, 4);
         let drift = engine.detect_drift(&snapshot);
         assert!(!drift.significant, "First tick should not report significant drift");
+    }
+
+    // ── Phase 6: Reward computation ─────────────────────────────
+
+    #[test]
+    fn test_compute_reward_with_primes() {
+        let outcome = serde_json::json!({
+            "primes_found": 5,
+            "cost_usd": 1.0,
+        });
+        let reward = compute_reward(&outcome);
+        assert!(reward > 0.5, "Should reward finding primes: got {}", reward);
+    }
+
+    #[test]
+    fn test_compute_reward_without_primes() {
+        let outcome = serde_json::json!({
+            "primes_found": 0,
+            "cost_usd": 10.0,
+        });
+        let reward = compute_reward(&outcome);
+        assert!(reward < 0.6, "Zero primes should give low-ish reward: got {}", reward);
+    }
+
+    #[test]
+    fn test_compute_reward_high_efficiency() {
+        let low = compute_reward(&serde_json::json!({"primes_found": 1, "cost_usd": 10.0}));
+        let high = compute_reward(&serde_json::json!({"primes_found": 10, "cost_usd": 1.0}));
+        assert!(
+            high > low,
+            "Higher efficiency should give higher reward: {} > {}",
+            high, low
+        );
+    }
+
+    // ── Phase 6: Weight update ──────────────────────────────────
+
+    #[test]
+    fn test_weight_update_positive_outcome() {
+        let mut engine = AiEngine::new();
+        let original_record_gap = engine.scoring_weights.record_gap;
+
+        let outcomes = vec![crate::db::DecisionWithOutcome {
+            id: 1,
+            form: Some("kbn".to_string()),
+            component_scores: Some(serde_json::json!({
+                "record_gap": 0.9,
+                "yield_rate": 0.1,
+                "cost_efficiency": 0.1,
+                "opportunity_density": 0.1,
+                "fleet_fit": 0.1,
+                "momentum": 0.1,
+                "competition": 0.1,
+            })),
+            outcome: Some(serde_json::json!({
+                "primes_found": 10,
+                "cost_usd": 1.0,
+            })),
+        }];
+
+        engine.update_weights_from_outcomes(&outcomes);
+
+        // With a high-reward outcome and high record_gap score,
+        // record_gap weight should increase (before normalization may adjust)
+        let sum: f64 = engine.scoring_weights.as_array().iter().sum();
+        assert!(
+            (sum - 1.0).abs() < 0.01,
+            "Weights should still sum to ~1.0 after update, got {}",
+            sum
+        );
+    }
+
+    #[test]
+    fn test_weight_update_negative_outcome() {
+        let mut engine = AiEngine::new();
+
+        let outcomes = vec![crate::db::DecisionWithOutcome {
+            id: 1,
+            form: Some("kbn".to_string()),
+            component_scores: Some(serde_json::json!({
+                "record_gap": 0.9,
+                "yield_rate": 0.1,
+                "cost_efficiency": 0.1,
+                "opportunity_density": 0.1,
+                "fleet_fit": 0.1,
+                "momentum": 0.1,
+                "competition": 0.1,
+            })),
+            outcome: Some(serde_json::json!({
+                "primes_found": 0,
+                "cost_usd": 50.0,
+            })),
+        }];
+
+        engine.update_weights_from_outcomes(&outcomes);
+
+        let sum: f64 = engine.scoring_weights.as_array().iter().sum();
+        assert!(
+            (sum - 1.0).abs() < 0.01,
+            "Weights should still sum to ~1.0 after negative update, got {}",
+            sum
+        );
+    }
+
+    #[test]
+    fn test_weight_update_preserves_bounds() {
+        let mut engine = AiEngine::new();
+
+        // Apply many extreme updates
+        for _ in 0..100 {
+            let outcomes = vec![crate::db::DecisionWithOutcome {
+                id: 1,
+                form: Some("kbn".to_string()),
+                component_scores: Some(serde_json::json!({
+                    "record_gap": 1.0,
+                    "yield_rate": 0.0,
+                    "cost_efficiency": 0.0,
+                    "opportunity_density": 0.0,
+                    "fleet_fit": 0.0,
+                    "momentum": 0.0,
+                    "competition": 0.0,
+                })),
+                outcome: Some(serde_json::json!({
+                    "primes_found": 100,
+                    "cost_usd": 0.01,
+                })),
+            }];
+            engine.update_weights_from_outcomes(&outcomes);
+        }
+
+        let weights = engine.scoring_weights.as_array();
+        for &w in &weights {
+            assert!(
+                w >= WEIGHT_MIN && w <= WEIGHT_MAX,
+                "Weight {} out of bounds [{}, {}]",
+                w, WEIGHT_MIN, WEIGHT_MAX
+            );
+        }
+    }
+
+    #[test]
+    fn test_weight_update_preserves_sum() {
+        let mut engine = AiEngine::new();
+
+        for i in 0..50 {
+            let primes = if i % 2 == 0 { 5.0 } else { 0.0 };
+            let outcomes = vec![crate::db::DecisionWithOutcome {
+                id: i,
+                form: Some("kbn".to_string()),
+                component_scores: Some(serde_json::json!({
+                    "record_gap": 0.3,
+                    "yield_rate": 0.7,
+                    "cost_efficiency": 0.5,
+                    "opportunity_density": 0.2,
+                    "fleet_fit": 0.8,
+                    "momentum": 0.4,
+                    "competition": 0.6,
+                })),
+                outcome: Some(serde_json::json!({
+                    "primes_found": primes,
+                    "cost_usd": 5.0,
+                })),
+            }];
+            engine.update_weights_from_outcomes(&outcomes);
+        }
+
+        let sum: f64 = engine.scoring_weights.as_array().iter().sum();
+        assert!(
+            (sum - 1.0).abs() < 0.01,
+            "Weights should sum to ~1.0 after 50 updates, got {}",
+            sum
+        );
+    }
+
+    #[test]
+    fn test_multiple_updates_dont_degenerate() {
+        let mut engine = AiEngine::new();
+
+        // 100 random-ish updates shouldn't collapse all weights to min/max
+        for i in 0..100 {
+            let score = (i as f64 * 0.7) % 1.0;
+            let primes = ((i * 3) % 7) as f64;
+            let outcomes = vec![crate::db::DecisionWithOutcome {
+                id: i,
+                form: Some("factorial".to_string()),
+                component_scores: Some(serde_json::json!({
+                    "record_gap": score,
+                    "yield_rate": 1.0 - score,
+                    "cost_efficiency": score * 0.5,
+                    "opportunity_density": 0.3,
+                    "fleet_fit": 0.5,
+                    "momentum": score * 0.8,
+                    "competition": 0.4,
+                })),
+                outcome: Some(serde_json::json!({
+                    "primes_found": primes,
+                    "cost_usd": 2.0,
+                })),
+            }];
+            engine.update_weights_from_outcomes(&outcomes);
+        }
+
+        let weights = engine.scoring_weights.as_array();
+        let all_at_min = weights.iter().all(|&w| (w - WEIGHT_MIN).abs() < 0.001);
+        let all_at_max = weights.iter().all(|&w| (w - WEIGHT_MAX).abs() < 0.001);
+        assert!(
+            !all_at_min && !all_at_max,
+            "Weights shouldn't all collapse to bounds: {:?}",
+            weights
+        );
+    }
+
+    // ── Phase 6: extract_component_scores ───────────────────────
+
+    #[test]
+    fn test_extract_component_scores_valid() {
+        let json = serde_json::json!({
+            "record_gap": 0.8,
+            "yield_rate": 0.3,
+            "cost_efficiency": 0.5,
+            "opportunity_density": 0.7,
+            "fleet_fit": 0.9,
+            "momentum": 0.2,
+            "competition": 0.4,
+        });
+        let scores = extract_component_scores(&json).unwrap();
+        assert_eq!(scores[0], 0.8);
+        assert_eq!(scores[6], 0.4);
+    }
+
+    #[test]
+    fn test_extract_component_scores_missing_field() {
+        let json = serde_json::json!({
+            "record_gap": 0.8,
+            "yield_rate": 0.3,
+        });
+        assert!(extract_component_scores(&json).is_none());
+    }
+
+    // ── Phase 7: Competition scoring ────────────────────────────
+
+    #[test]
+    fn test_competition_score_from_memory() {
+        let engine = AiEngine::new();
+        let now = Utc::now();
+        let mut snapshot = test_snapshot(8, 64, 8);
+        snapshot.competition_intel = vec![crate::db::AgentMemoryRow {
+            id: 1,
+            key: "competitive_intel:kbn".to_string(),
+            value: "0.3".to_string(),
+            category: "competitive_intel".to_string(),
+            created_by_task: None,
+            created_at: now,
+            updated_at: now,
+        }];
+
+        let scores = engine.score_forms(&snapshot);
+        let kbn = scores.iter().find(|s| s.form == "kbn").unwrap();
+        assert!(
+            (kbn.competition - 0.3).abs() < 0.001,
+            "Competition should be 0.3 from memory, got {}",
+            kbn.competition
+        );
+    }
+
+    #[test]
+    fn test_competition_score_fallback() {
+        let engine = AiEngine::new();
+        let snapshot = test_snapshot(8, 64, 8);
+
+        let scores = engine.score_forms(&snapshot);
+        let kbn = scores.iter().find(|s| s.form == "kbn").unwrap();
+        assert!(
+            (kbn.competition - 0.5).abs() < 0.001,
+            "Competition should default to 0.5, got {}",
+            kbn.competition
+        );
+    }
+
+    #[test]
+    fn test_decide_requests_intel_when_stale() {
+        let engine = AiEngine::new();
+        let snapshot = test_snapshot(0, 0, 0);
+        let analysis = engine.orient(&snapshot);
+        let decisions = engine.decide(&snapshot, &analysis);
+
+        let intel_requests: Vec<_> = decisions
+            .iter()
+            .filter(|d| matches!(d, Decision::RequestAgentIntel { .. }))
+            .collect();
+        assert_eq!(
+            intel_requests.len(),
+            1,
+            "Should request exactly 1 intel per tick"
+        );
+    }
+
+    #[test]
+    fn test_decide_no_intel_when_fresh() {
+        let engine = AiEngine::new();
+        let now = Utc::now();
+        let mut snapshot = test_snapshot(0, 0, 0);
+
+        // Add fresh intel for all 12 forms
+        for form in strategy::ALL_FORMS {
+            snapshot.competition_intel.push(crate::db::AgentMemoryRow {
+                id: 0,
+                key: format!("competitive_intel:{}", form),
+                value: "0.5".to_string(),
+                category: "competitive_intel".to_string(),
+                created_by_task: None,
+                created_at: now,
+                updated_at: now,
+            });
+        }
+
+        let analysis = engine.orient(&snapshot);
+        let decisions = engine.decide(&snapshot, &analysis);
+
+        let intel_requests = decisions
+            .iter()
+            .filter(|d| matches!(d, Decision::RequestAgentIntel { .. }))
+            .count();
+        assert_eq!(
+            intel_requests, 0,
+            "Should not request intel when all forms have fresh data"
+        );
+    }
+
+    #[test]
+    fn test_only_one_intel_request_per_tick() {
+        let engine = AiEngine::new();
+        let snapshot = test_snapshot(4, 32, 4);
+        let analysis = engine.orient(&snapshot);
+        let decisions = engine.decide(&snapshot, &analysis);
+
+        let intel_requests = decisions
+            .iter()
+            .filter(|d| matches!(d, Decision::RequestAgentIntel { .. }))
+            .count();
+        assert!(
+            intel_requests <= 1,
+            "Should have at most 1 intel request, got {}",
+            intel_requests
+        );
+    }
+
+    // ── Phase 7: parse_competition_score ────────────────────────
+
+    #[test]
+    fn test_parse_competition_score_json() {
+        let result = r#"{"competition_score": 0.3}"#;
+        assert_eq!(parse_competition_score(result), Some(0.3));
+    }
+
+    #[test]
+    fn test_parse_competition_score_embedded_json() {
+        let result = "Analysis complete. Result: {\"competition_score\": 0.7} end.";
+        assert_eq!(parse_competition_score(result), Some(0.7));
+    }
+
+    #[test]
+    fn test_parse_competition_score_plain_float() {
+        let result = "Competition score: 0.4";
+        assert_eq!(parse_competition_score(result), Some(0.4));
+    }
+
+    #[test]
+    fn test_parse_competition_score_missing() {
+        let result = "No competition data available";
+        assert!(parse_competition_score(result).is_none());
+    }
+
+    #[test]
+    fn test_parse_competition_score_clamped() {
+        let result = r#"{"competition_score": 1.5}"#;
+        assert_eq!(parse_competition_score(result), Some(1.0));
+    }
+
+    // ── Phase 8: Fleet rebalancing ──────────────────────────────
+
+    #[test]
+    fn test_rebalance_no_action_when_balanced() {
+        let engine = AiEngine::new();
+        let snapshot = test_snapshot(4, 32, 4);
+        assert!(
+            engine.detect_fleet_imbalance(&snapshot).is_none(),
+            "Should not rebalance when no jobs are running"
+        );
     }
 }

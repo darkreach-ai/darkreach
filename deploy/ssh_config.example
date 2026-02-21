@@ -1,0 +1,20 @@
+# SSH config for darkreach infrastructure.
+# Copy relevant entries to ~/.ssh/config
+#
+# Usage:
+#   ssh darkreach-coordinator
+#   ssh darkreach-worker-1
+#
+# DB access via SSH tunnel:
+#   ssh -L 5432:localhost:5432 darkreach-coordinator
+#   psql postgresql://postgres:...@localhost:5432/postgres
+
+Host darkreach-coordinator
+    HostName 178.156.211.107
+    User deploy
+    IdentityFile ~/.ssh/id_ed25519
+
+Host darkreach-worker-1
+    HostName 178.156.158.184
+    User deploy
+    IdentityFile ~/.ssh/id_ed25519

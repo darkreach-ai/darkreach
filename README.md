@@ -10,9 +10,9 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/oddurs/prime-hunter/actions/workflows/ci.yml"><img src="https://github.com/oddurs/prime-hunter/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://github.com/oddurs/prime-hunter/releases"><img src="https://img.shields.io/github/v/release/oddurs/prime-hunter?include_prereleases&label=release" alt="Release"></a>
-  <a href="https://github.com/oddurs/prime-hunter/blob/master/LICENSE"><img src="https://img.shields.io/github/license/oddurs/prime-hunter" alt="License"></a>
+  <a href="https://github.com/darkreach-ai/darkreach/actions/workflows/ci.yml"><img src="https://github.com/darkreach-ai/darkreach/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/darkreach-ai/darkreach/releases"><img src="https://img.shields.io/github/v/release/darkreach/darkreach?include_prereleases&label=release" alt="Release"></a>
+  <a href="https://github.com/darkreach-ai/darkreach/blob/master/LICENSE"><img src="https://img.shields.io/github/license/darkreach/darkreach" alt="License"></a>
   <a href="https://darkreach.ai"><img src="https://img.shields.io/badge/web-darkreach.ai-blue" alt="Website"></a>
 </p>
 

@@ -1,29 +1,22 @@
 "use client";
 
 /**
- * @module fleet/page
+ * @module network/page
  *
- * Fleet monitoring page. Shows servers grouped by role (service vs compute),
- * with hardware metrics, workers nested under their host servers, active
- * searches, and remote deployments.
+ * Compute nodes monitoring page. Shows machines grouped as collapsible
+ * sections, each containing a table of worker nodes with real-time health,
+ * throughput, and search progress.
  *
- * Data comes from the WebSocket (fleet heartbeats, not Supabase).
+ * Data comes from the WebSocket (fleet heartbeats). Service servers
+ * (coordinator, DB, agents) are filtered out — this page is purely
+ * about compute capacity.
  */
 
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { useWs } from "@/contexts/websocket-context";
-import { AddServerDialog } from "@/components/add-server-dialog";
-import { NewSearchDialog } from "@/components/new-search-dialog";
-import { SearchCard } from "@/components/search-card";
-import { MetricsBar } from "@/components/metrics-bar";
 import { WorkerDetailDialog } from "@/components/worker-detail-dialog";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { StatCard } from "@/components/stat-card";
 import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
@@ -44,9 +37,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { API_BASE, formatTime, numberWithCommas } from "@/lib/format";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import { API_BASE, numberWithCommas } from "@/lib/format";
 import { ViewHeader } from "@/components/view-header";
-import type { Deployment, ServerInfo, WorkerStatus } from "@/hooks/use-websocket";
+import type { ServerInfo, WorkerStatus } from "@/hooks/use-websocket";
 
 type WorkerHealth = "healthy" | "stale" | "offline";
 
@@ -56,35 +54,10 @@ function workerHealth(worker: WorkerStatus): WorkerHealth {
   return "offline";
 }
 
-function parseJsonObject(value: string): Record<string, unknown> | null {
-  try {
-    const parsed = JSON.parse(value) as unknown;
-    if (!parsed || typeof parsed !== "object") return null;
-    return parsed as Record<string, unknown>;
-  } catch {
-    return null;
-  }
-}
-
-function formatWorkerParams(searchType: string, params: Record<string, unknown>): string {
-  switch (searchType) {
-    case "kbn":
-      return `k=${params.k ?? "?"}, base=${params.base ?? "?"}, n=[${params.min_n ?? "?"},${params.max_n ?? "?"}]`;
-    case "factorial":
-      return `n=[${params.start ?? "?"},${params.end ?? "?"}]`;
-    case "palindromic":
-      return `base=${params.base ?? "?"}, digits=[${params.min_digits ?? "?"},${params.max_digits ?? "?"}]`;
-    default:
-      return JSON.stringify(params);
-  }
-}
-
-function deploymentStatusDot(status: string): string {
-  if (status === "running") return "bg-green-500";
-  if (status === "deploying") return "bg-yellow-500 animate-pulse";
-  if (status === "paused") return "bg-yellow-500";
-  if (status === "failed") return "bg-red-500";
-  return "bg-muted-foreground";
+function healthDotClass(health: WorkerHealth): string {
+  if (health === "healthy") return "bg-green-500";
+  if (health === "stale") return "bg-yellow-500";
+  return "bg-red-500";
 }
 
 function healthPillClass(health: WorkerHealth): string {
@@ -93,25 +66,8 @@ function healthPillClass(health: WorkerHealth): string {
   return "border-red-500/40 bg-red-500/10 text-red-300";
 }
 
-function deploymentPillClass(status: string): string {
-  if (status === "running") return "border-emerald-500/40 bg-emerald-500/10 text-emerald-400";
-  if (status === "deploying") return "border-amber-500/40 bg-amber-500/10 text-amber-300";
-  if (status === "paused") return "border-amber-500/40 bg-amber-500/10 text-amber-300";
-  if (status === "failed") return "border-red-500/40 bg-red-500/10 text-red-300";
-  return "border-border bg-muted/30 text-muted-foreground";
-}
-
-function roleBadgeClass(role: string): string {
-  if (role === "service") return "border-blue-500/40 bg-blue-500/10 text-blue-400";
-  return "border-emerald-500/40 bg-emerald-500/10 text-emerald-400";
-}
-
-/** Derive server status from metrics or workers */
-function serverStatus(server: ServerInfo, workers: WorkerStatus[]): "online" | "degraded" | "offline" {
-  if (server.role === "service") {
-    // Service server is online if we have metrics for it (we're connected to it)
-    return server.metrics ? "online" : "degraded";
-  }
+/** Derive machine status from its worker nodes */
+function machineStatus(server: ServerInfo, workers: WorkerStatus[]): "online" | "degraded" | "offline" {
   const hostWorkers = workers.filter((w) => server.worker_ids.includes(w.worker_id));
   if (hostWorkers.length === 0) return "offline";
   const allHealthy = hostWorkers.every((w) => workerHealth(w) === "healthy");
@@ -126,57 +82,68 @@ function statusDotClass(status: "online" | "degraded" | "offline"): string {
   return "bg-red-500";
 }
 
-export default function FleetPage() {
-  const { fleet, coordinator, deployments, searches } = useWs();
-  const [addServerOpen, setAddServerOpen] = useState(false);
-  const [newSearchOpen, setNewSearchOpen] = useState(false);
+export default function NetworkPage() {
+  const { fleet } = useWs();
   const [selectedWorker, setSelectedWorker] = useState<WorkerStatus | null>(null);
   const [workerDetailOpen, setWorkerDetailOpen] = useState(false);
-  const [stoppingDeploymentId, setStoppingDeploymentId] = useState<number | null>(null);
-  const [pausingDeploymentId, setPausingDeploymentId] = useState<number | null>(null);
-  const [resumingDeploymentId, setResumingDeploymentId] = useState<number | null>(null);
   const [stoppingWorkerId, setStoppingWorkerId] = useState<string | null>(null);
   const [searchFilter, setSearchFilter] = useState("");
   const [healthFilter, setHealthFilter] = useState<"all" | WorkerHealth>("all");
-  const [typeFilter, setTypeFilter] = useState<"all" | "kbn" | "factorial" | "palindromic">("all");
+  const [typeFilter, setTypeFilter] = useState<"all" | string>("all");
 
   const workers = useMemo(() => fleet?.workers ?? [], [fleet]);
 
-  const fleetRate = useMemo(() => {
-    return workers.reduce((acc, w) => {
-      if (w.uptime_secs <= 0) return acc;
-      return acc + w.tested / w.uptime_secs;
-    }, 0);
-  }, [workers]);
-
   // Compute servers from backend data, falling back to client-side grouping
-  const servers = useMemo((): ServerInfo[] => {
-    if (fleet?.servers && fleet.servers.length > 0) return fleet.servers;
-    // Fallback: group workers by hostname (no coordinator info available)
-    const hostMap = new Map<string, WorkerStatus[]>();
-    for (const w of workers) {
-      const list = hostMap.get(w.hostname) ?? [];
-      list.push(w);
-      hostMap.set(w.hostname, list);
+  const machines = useMemo((): ServerInfo[] => {
+    let list: ServerInfo[];
+    if (fleet?.servers && fleet.servers.length > 0) {
+      list = fleet.servers;
+    } else {
+      // Fallback: group workers by hostname
+      const hostMap = new Map<string, WorkerStatus[]>();
+      for (const w of workers) {
+        const arr = hostMap.get(w.hostname) ?? [];
+        arr.push(w);
+        hostMap.set(w.hostname, arr);
+      }
+      list = Array.from(hostMap.entries()).map(([hostname, hw]) => ({
+        hostname,
+        role: "compute" as const,
+        metrics: hw[0]?.metrics ?? null,
+        worker_count: hw.length,
+        cores: hw.reduce((s, w) => s + w.cores, 0),
+        worker_ids: hw.map((w) => w.worker_id),
+        total_tested: hw.reduce((s, w) => s + w.tested, 0),
+        total_found: hw.reduce((s, w) => s + w.found, 0),
+        uptime_secs: Math.max(...hw.map((w) => w.uptime_secs), 0),
+      }));
     }
-    return Array.from(hostMap.entries()).map(([hostname, hw]) => ({
-      hostname,
-      role: "compute" as const,
-      metrics: hw[0]?.metrics ?? null,
-      worker_count: hw.length,
-      cores: hw.reduce((s, w) => s + w.cores, 0),
-      worker_ids: hw.map((w) => w.worker_id),
-      total_tested: hw.reduce((s, w) => s + w.tested, 0),
-      total_found: hw.reduce((s, w) => s + w.found, 0),
-      uptime_secs: Math.max(...hw.map((w) => w.uptime_secs), 0),
-    }));
+    // Only compute machines
+    return list.filter((s) => s.role === "compute");
   }, [fleet, workers]);
 
-  const serviceServers = useMemo(() => servers.filter((s) => s.role === "service"), [servers]);
-  const computeServers = useMemo(() => servers.filter((s) => s.role === "compute"), [servers]);
-  const totalComputeWorkers = useMemo(() => computeServers.reduce((s, c) => s + c.worker_count, 0), [computeServers]);
+  // Summary stats
+  const totalNodes = useMemo(() => machines.reduce((s, m) => s + m.worker_count, 0), [machines]);
+  const totalCores = useMemo(() => machines.reduce((s, m) => s + m.cores, 0), [machines]);
+  const totalRate = useMemo(() => {
+    return workers
+      .filter((w) => machines.some((m) => m.worker_ids.includes(w.worker_id)))
+      .reduce((acc, w) => {
+        if (w.uptime_secs <= 0) return acc;
+        return acc + w.tested / w.uptime_secs;
+      }, 0);
+  }, [workers, machines]);
 
-  // Filter workers for display inside compute server cards
+  // Unique search types for filter dropdown
+  const searchTypes = useMemo(() => {
+    const types = new Set<string>();
+    for (const w of workers) {
+      if (w.search_type) types.add(w.search_type);
+    }
+    return Array.from(types).sort();
+  }, [workers]);
+
+  // Filter workers for display
   const filteredWorkerIds = useMemo(() => {
     const query = searchFilter.trim().toLowerCase();
     const set = new Set<string>();
@@ -193,72 +160,29 @@ export default function FleetPage() {
     return set;
   }, [workers, healthFilter, typeFilter, searchFilter]);
 
-  const activeDeployments = useMemo(
-    () => deployments.filter((d) => d.status === "running" || d.status === "deploying" || d.status === "paused"),
-    [deployments]
-  );
+  // Track which machines are expanded (all by default)
+  const [expandedMachines, setExpandedMachines] = useState<Set<string> | null>(null);
 
-  async function stopDeployment(deployment: Deployment) {
-    setStoppingDeploymentId(deployment.id);
-    try {
-      const res = await fetch(`${API_BASE}/api/fleet/deploy/${deployment.id}`, {
-        method: "DELETE",
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || `HTTP ${res.status}`);
+  // Initialize expanded set with all machine hostnames on first render with data
+  const expanded = useMemo(() => {
+    if (expandedMachines !== null) return expandedMachines;
+    return new Set(machines.map((m) => m.hostname));
+  }, [expandedMachines, machines]);
+
+  function toggleMachine(hostname: string) {
+    setExpandedMachines((prev) => {
+      const current = prev ?? new Set(machines.map((m) => m.hostname));
+      const next = new Set(current);
+      if (next.has(hostname)) {
+        next.delete(hostname);
+      } else {
+        next.add(hostname);
       }
-      toast.success(`Stopped deployment #${deployment.id}`);
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Failed to stop deployment";
-      toast.error(message);
-    } finally {
-      setStoppingDeploymentId(null);
-    }
+      return next;
+    });
   }
 
-  async function pauseDeployment(deployment: Deployment) {
-    setPausingDeploymentId(deployment.id);
-    try {
-      const res = await fetch(`${API_BASE}/api/fleet/deploy/${deployment.id}/pause`, {
-        method: "POST",
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || `HTTP ${res.status}`);
-      }
-      toast.success(`Paused deployment #${deployment.id}`);
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Failed to pause deployment";
-      toast.error(message);
-    } finally {
-      setPausingDeploymentId(null);
-    }
-  }
-
-  async function resumeDeployment(deployment: Deployment) {
-    setResumingDeploymentId(deployment.id);
-    try {
-      const res = await fetch(`${API_BASE}/api/fleet/deploy/${deployment.id}/resume`, {
-        method: "POST",
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || `HTTP ${res.status}`);
-      }
-      toast.success(`Resuming deployment #${deployment.id}`);
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Failed to resume deployment";
-      toast.error(message);
-    } finally {
-      setResumingDeploymentId(null);
-    }
-  }
-
-  async function stopWorker(workerId: string) {
+  async function stopNode(workerId: string) {
     setStoppingWorkerId(workerId);
     try {
       const res = await fetch(`${API_BASE}/api/fleet/workers/${encodeURIComponent(workerId)}/stop`, {
@@ -271,98 +195,32 @@ export default function FleetPage() {
       toast.success(`Stop command sent to ${workerId}`);
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Failed to stop worker";
+        error instanceof Error ? error.message : "Failed to stop node";
       toast.error(message);
     } finally {
       setStoppingWorkerId(null);
     }
   }
 
-  function renderWorkerRow(worker: WorkerStatus) {
-    const health = workerHealth(worker);
-    const throughput =
-      worker.uptime_secs > 0
-        ? (worker.tested / worker.uptime_secs).toFixed(1)
-        : "0.0";
-    const params = parseJsonObject(worker.search_params);
-    return (
-      <div key={worker.worker_id} className="flex flex-wrap items-center gap-2 justify-between py-2 px-3 rounded bg-muted/20">
-        <div className="flex items-center gap-2 min-w-0">
-          <div
-            className={`w-2 h-2 rounded-full flex-shrink-0 ${
-              health === "healthy"
-                ? "bg-green-500"
-                : health === "stale"
-                  ? "bg-yellow-500"
-                  : "bg-red-500"
-            }`}
-          />
-          <span className="font-mono text-xs truncate">{worker.worker_id}</span>
-          <Badge variant="outline" className="font-mono text-xs">{worker.search_type}</Badge>
-          <span className={`text-xs px-1.5 py-0.5 rounded-full border ${healthPillClass(health)}`}>
-            {health}
-          </span>
-        </div>
-        <div className="flex items-center gap-2 text-xs text-muted-foreground font-mono">
-          <span>{params ? formatWorkerParams(worker.search_type, params) : worker.search_params}</span>
-          <span>{numberWithCommas(worker.tested)} tested</span>
-          <span>{throughput}/s</span>
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-6 text-xs"
-            onClick={() => {
-              setSelectedWorker(worker);
-              setWorkerDetailOpen(true);
-            }}
-          >
-            Inspect
-          </Button>
-          {health === "healthy" && (
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-6 text-xs text-red-600 hover:text-red-700"
-              disabled={stoppingWorkerId === worker.worker_id}
-              onClick={() => void stopWorker(worker.worker_id)}
-            >
-              {stoppingWorkerId === worker.worker_id ? "Stopping..." : "Stop"}
-            </Button>
-          )}
-        </div>
-      </div>
-    );
-  }
-
   return (
     <>
       <ViewHeader
-        title="Fleet"
-        subtitle="Server roles, worker health, deployment lifecycle, and distributed search operations."
-        actions={
-          <>
-            <Button variant="outline" size="sm" onClick={() => setNewSearchOpen(true)}>
-              New Search
-            </Button>
-            <Button size="sm" onClick={() => setAddServerOpen(true)}>Add Server</Button>
-          </>
-        }
+        title="Network"
+        subtitle="Compute nodes powering the distributed search network."
         className="mb-5"
       />
 
-      <div className="grid grid-cols-2 lg:grid-cols-6 gap-3 mb-5">
-        <StatCard label="Servers" value={numberWithCommas(servers.length)} />
-        <StatCard label="Workers" value={numberWithCommas(fleet?.total_workers ?? 0)} />
-        <StatCard label="Cores" value={numberWithCommas(fleet?.total_cores ?? 0)} />
-        <StatCard label="Fleet Throughput" value={`${numberWithCommas(Math.round(fleetRate))}/s`} />
-        <StatCard label="Tested" value={numberWithCommas(fleet?.total_tested ?? 0)} />
-        <StatCard label="Found" value={numberWithCommas(fleet?.total_found ?? 0)} />
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+        <StatCard label="Machines" value={numberWithCommas(machines.length)} />
+        <StatCard label="Nodes" value={numberWithCommas(totalNodes)} />
+        <StatCard label="Cores" value={numberWithCommas(totalCores)} />
+        <StatCard label="Throughput" value={`${totalRate.toFixed(1)}/s`} />
       </div>
 
       {/* Filters */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mb-5">
         <Input
-          placeholder="Filter by worker, host, or candidate..."
+          placeholder="Filter by node, machine, or candidate..."
           value={searchFilter}
           onChange={(e) => setSearchFilter(e.target.value)}
         />
@@ -382,261 +240,173 @@ export default function FleetPage() {
         </Select>
         <Select
           value={typeFilter}
-          onValueChange={(v) =>
-            setTypeFilter(v as "all" | "kbn" | "factorial" | "palindromic")
-          }
+          onValueChange={(v) => setTypeFilter(v)}
         >
           <SelectTrigger>
-            <SelectValue placeholder="Search type" />
+            <SelectValue placeholder="Type" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All search types</SelectItem>
-            <SelectItem value="kbn">KBN</SelectItem>
-            <SelectItem value="factorial">Factorial</SelectItem>
-            <SelectItem value="palindromic">Palindromic</SelectItem>
+            <SelectItem value="all">All types</SelectItem>
+            {searchTypes.map((t) => (
+              <SelectItem key={t} value={t}>{t.toUpperCase()}</SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>
 
-      {/* Service Servers */}
-      {serviceServers.length > 0 && (
-        <div className="mb-5">
-          <h2 className="text-sm font-medium text-muted-foreground mb-3">
-            Service ({serviceServers.length} server{serviceServers.length !== 1 ? "s" : ""})
-          </h2>
-          <div className="space-y-3">
-            {serviceServers.map((server) => {
-              const status = serverStatus(server, workers);
-              return (
-                <Card key={server.hostname} className="rounded-md shadow-none">
-                  <CardContent className="p-4">
-                    <div className="flex items-center gap-2 mb-2">
+      {/* Machines */}
+      {machines.length === 0 ? (
+        <EmptyState message="No compute machines online." />
+      ) : (
+        <div className="space-y-3">
+          {machines.map((machine) => {
+            const status = machineStatus(machine, workers);
+            const isOpen = expanded.has(machine.hostname);
+            const machineWorkers = workers
+              .filter((w) => machine.worker_ids.includes(w.worker_id) && filteredWorkerIds.has(w.worker_id))
+              .sort((a, b) => a.worker_id.localeCompare(b.worker_id));
+            const machineRate = machine.uptime_secs > 0
+              ? (machine.total_tested / machine.uptime_secs).toFixed(1)
+              : "0.0";
+
+            return (
+              <Collapsible
+                key={machine.hostname}
+                open={isOpen}
+                onOpenChange={() => toggleMachine(machine.hostname)}
+              >
+                <div className="border rounded-md">
+                  <CollapsibleTrigger asChild>
+                    <button
+                      className="w-full flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 text-left hover:bg-muted/30 transition-colors cursor-pointer"
+                    >
+                      {isOpen ? (
+                        <ChevronDown className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                      ) : (
+                        <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                      )}
                       <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${statusDotClass(status)}`} />
-                      <span className="font-medium">{server.hostname}</span>
-                      <Badge variant="outline" className={`text-xs uppercase ${roleBadgeClass(server.role)}`}>
-                        Service
-                      </Badge>
-                    </div>
-                    <div className="text-xs text-muted-foreground mb-3">
-                      Coordinator, Dashboard, API, WebSocket
-                    </div>
-                    {server.metrics && (
-                      <div className="space-y-2">
-                        <MetricsBar label="CPU" percent={server.metrics.cpu_usage_percent} />
-                        <MetricsBar
-                          label="Memory"
-                          percent={server.metrics.memory_usage_percent}
-                          detail={`${server.metrics.memory_used_gb} / ${server.metrics.memory_total_gb} GB`}
-                        />
-                        <MetricsBar
-                          label="Disk"
-                          percent={server.metrics.disk_usage_percent}
-                          detail={`${server.metrics.disk_used_gb} / ${server.metrics.disk_total_gb} GB`}
-                        />
-                        <div className="text-xs text-muted-foreground">
-                          Load: {server.metrics.load_avg_1m} / {server.metrics.load_avg_5m} / {server.metrics.load_avg_15m}
-                        </div>
+                      <span className="font-medium">{machine.hostname}</span>
+                      <span className="text-xs text-muted-foreground font-mono">
+                        {machine.worker_count} node{machine.worker_count !== 1 ? "s" : ""}
+                      </span>
+                      <span className="text-xs text-muted-foreground font-mono">
+                        {machine.cores} core{machine.cores !== 1 ? "s" : ""}
+                      </span>
+                      {machine.metrics && (
+                        <>
+                          <span className="text-xs text-muted-foreground font-mono">
+                            CPU {Math.round(machine.metrics.cpu_usage_percent)}%
+                          </span>
+                          <span className="text-xs text-muted-foreground font-mono">
+                            Mem {Math.round(machine.metrics.memory_usage_percent)}%
+                          </span>
+                        </>
+                      )}
+                      <span className="text-xs text-muted-foreground font-mono">
+                        {machineRate}/s
+                      </span>
+                    </button>
+                  </CollapsibleTrigger>
+
+                  <CollapsibleContent>
+                    {machineWorkers.length > 0 ? (
+                      <div className="border-t">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead className="text-xs font-medium text-muted-foreground">Node</TableHead>
+                              <TableHead className="text-xs font-medium text-muted-foreground">Type</TableHead>
+                              <TableHead className="text-xs font-medium text-muted-foreground">Health</TableHead>
+                              <TableHead className="text-xs font-medium text-muted-foreground text-right">Tested</TableHead>
+                              <TableHead className="text-xs font-medium text-muted-foreground text-right">Found</TableHead>
+                              <TableHead className="text-xs font-medium text-muted-foreground text-right">Rate</TableHead>
+                              <TableHead className="text-xs font-medium text-muted-foreground">Current</TableHead>
+                              <TableHead className="text-xs font-medium text-muted-foreground text-right">Actions</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {machineWorkers.map((worker) => {
+                              const health = workerHealth(worker);
+                              const rate = worker.uptime_secs > 0
+                                ? (worker.tested / worker.uptime_secs).toFixed(1)
+                                : "0.0";
+                              return (
+                                <TableRow key={worker.worker_id} className="hover:bg-muted/30">
+                                  <TableCell className="font-mono text-xs">{worker.worker_id}</TableCell>
+                                  <TableCell>
+                                    <Badge variant="outline" className="font-mono text-xs">
+                                      {worker.search_type}
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell>
+                                    <span className="flex items-center gap-1.5">
+                                      <span className={`w-2 h-2 rounded-full inline-block ${healthDotClass(health)}`} />
+                                      <span className={`text-xs px-1.5 py-0.5 rounded-full border ${healthPillClass(health)}`}>
+                                        {health}
+                                      </span>
+                                    </span>
+                                  </TableCell>
+                                  <TableCell className="text-right font-mono text-xs">
+                                    {numberWithCommas(worker.tested)}
+                                  </TableCell>
+                                  <TableCell className="text-right font-mono text-xs">
+                                    {numberWithCommas(worker.found)}
+                                  </TableCell>
+                                  <TableCell className="text-right font-mono text-xs">
+                                    {rate}/s
+                                  </TableCell>
+                                  <TableCell className="font-mono text-xs max-w-[200px] truncate" title={worker.current}>
+                                    {worker.current}
+                                  </TableCell>
+                                  <TableCell className="text-right">
+                                    <div className="flex items-center justify-end gap-1">
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="h-6 text-xs"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setSelectedWorker(worker);
+                                          setWorkerDetailOpen(true);
+                                        }}
+                                      >
+                                        Inspect
+                                      </Button>
+                                      {health === "healthy" && (
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          className="h-6 text-xs text-red-600 hover:text-red-700"
+                                          disabled={stoppingWorkerId === worker.worker_id}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            void stopNode(worker.worker_id);
+                                          }}
+                                        >
+                                          {stoppingWorkerId === worker.worker_id ? "Stopping..." : "Stop"}
+                                        </Button>
+                                      )}
+                                    </div>
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            })}
+                          </TableBody>
+                        </Table>
                       </div>
-                    )}
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
+                    ) : machine.worker_count > 0 ? (
+                      <div className="border-t px-4 py-3 text-xs text-muted-foreground">
+                        No nodes match current filters.
+                      </div>
+                    ) : null}
+                  </CollapsibleContent>
+                </div>
+              </Collapsible>
+            );
+          })}
         </div>
       )}
-
-      {/* Compute Servers */}
-      <div className="mb-5">
-        <h2 className="text-sm font-medium text-muted-foreground mb-3">
-          Compute ({computeServers.length} server{computeServers.length !== 1 ? "s" : ""}, {totalComputeWorkers} worker{totalComputeWorkers !== 1 ? "s" : ""})
-        </h2>
-        {computeServers.length === 0 ? (
-          <EmptyState message="No compute servers online." />
-        ) : (
-          <div className="space-y-3">
-            {computeServers.map((server) => {
-              const status = serverStatus(server, workers);
-              const serverWorkers = workers
-                .filter((w) => server.worker_ids.includes(w.worker_id) && filteredWorkerIds.has(w.worker_id))
-                .sort((a, b) => a.worker_id.localeCompare(b.worker_id));
-              const throughput = server.uptime_secs > 0
-                ? (server.total_tested / server.uptime_secs).toFixed(1)
-                : "0.0";
-              return (
-                <Card key={server.hostname} className="rounded-md shadow-none">
-                  <CardContent className="p-4">
-                    <div className="flex flex-wrap items-center gap-2 justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${statusDotClass(status)}`} />
-                        <span className="font-medium">{server.hostname}</span>
-                        <Badge variant="outline" className={`text-xs uppercase ${roleBadgeClass(server.role)}`}>
-                          Compute
-                        </Badge>
-                      </div>
-                      <div className="flex items-center gap-3 text-xs text-muted-foreground font-mono">
-                        <span>{server.worker_count} worker{server.worker_count !== 1 ? "s" : ""}</span>
-                        <span>{server.cores} core{server.cores !== 1 ? "s" : ""}</span>
-                        <span>{numberWithCommas(server.total_tested)} tested</span>
-                        <span>{throughput}/s</span>
-                      </div>
-                    </div>
-                    {server.metrics && (
-                      <div className="space-y-2 mb-3">
-                        <MetricsBar label="CPU" percent={server.metrics.cpu_usage_percent} />
-                        <MetricsBar
-                          label="Memory"
-                          percent={server.metrics.memory_usage_percent}
-                          detail={`${server.metrics.memory_used_gb} / ${server.metrics.memory_total_gb} GB`}
-                        />
-                      </div>
-                    )}
-                    {serverWorkers.length > 0 && (
-                      <div className="space-y-1.5 mt-2">
-                        {serverWorkers.map(renderWorkerRow)}
-                      </div>
-                    )}
-                    {serverWorkers.length === 0 && server.worker_count > 0 && (
-                      <div className="text-xs text-muted-foreground mt-2">
-                        No workers match current filters.
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      <Card className="mb-5 rounded-md shadow-none">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">Deployments</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {deployments.length === 0 ? (
-            <EmptyState message="No deployments yet." />
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="text-xs font-medium text-muted-foreground">Status</TableHead>
-                  <TableHead className="text-xs font-medium text-muted-foreground">Host</TableHead>
-                  <TableHead className="text-xs font-medium text-muted-foreground">Type</TableHead>
-                  <TableHead className="text-xs font-medium text-muted-foreground">Params</TableHead>
-                  <TableHead className="text-xs font-medium text-muted-foreground">Worker</TableHead>
-                  <TableHead className="text-xs font-medium text-muted-foreground">Started</TableHead>
-                  <TableHead className="text-right text-xs font-medium text-muted-foreground">Control</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {deployments.map((deployment) => (
-                  <TableRow key={deployment.id} className="hover:bg-muted/30">
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <div
-                          className={`w-2 h-2 rounded-full ${deploymentStatusDot(deployment.status)}`}
-                        />
-                        <span className={`capitalize text-xs px-2 py-0.5 rounded-full border ${deploymentPillClass(deployment.status)}`}>
-                          {deployment.status}
-                        </span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="font-medium">
-                      {deployment.ssh_user}@{deployment.hostname}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className="font-mono text-xs">{deployment.search_type}</Badge>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground font-mono text-xs">
-                      {deployment.search_params}
-                    </TableCell>
-                    <TableCell className="font-mono text-xs">
-                      {deployment.worker_id}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {formatTime(deployment.started_at)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        {deployment.status === "running" && (
-                          <>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              disabled={pausingDeploymentId === deployment.id}
-                              onClick={() => void pauseDeployment(deployment)}
-                            >
-                              {pausingDeploymentId === deployment.id ? "Pausing..." : "Pause"}
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="destructive"
-                              disabled={stoppingDeploymentId === deployment.id}
-                              onClick={() => void stopDeployment(deployment)}
-                            >
-                              {stoppingDeploymentId === deployment.id ? "Stopping..." : "Stop"}
-                            </Button>
-                          </>
-                        )}
-                        {deployment.status === "paused" && (
-                          <Button
-                            size="sm"
-                            variant="default"
-                            disabled={resumingDeploymentId === deployment.id}
-                            onClick={() => void resumeDeployment(deployment)}
-                          >
-                            {resumingDeploymentId === deployment.id ? "Resuming..." : "Resume"}
-                          </Button>
-                        )}
-                        {deployment.status !== "running" && deployment.status !== "paused" && (
-                          <span className="text-xs text-muted-foreground">-</span>
-                        )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card className="rounded-md shadow-none">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">Search Queue</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {searches.length === 0 ? (
-            <EmptyState message="No searches in queue." />
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-              {[...searches]
-                .sort((a, b) => {
-                  const aRunning = a.status === "running" ? 0 : 1;
-                  const bRunning = b.status === "running" ? 0 : 1;
-                  if (aRunning !== bRunning) return aRunning - bRunning;
-                  return new Date(b.started_at).getTime() - new Date(a.started_at).getTime();
-                })
-                .map((search) => (
-                  <SearchCard key={search.id} search={search} />
-                ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      <AddServerDialog
-        open={addServerOpen}
-        onOpenChange={setAddServerOpen}
-        onDeployed={() => toast.success("Worker deployment started")}
-      />
-
-      <NewSearchDialog
-        open={newSearchOpen}
-        onOpenChange={setNewSearchOpen}
-        onCreated={() => toast.success("Search started")}
-      />
 
       <WorkerDetailDialog
         worker={selectedWorker}

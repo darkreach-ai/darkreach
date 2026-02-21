@@ -459,6 +459,7 @@ pub(super) async fn handler_v1_result(
                 prime.digits,
                 "",
                 &prime.proof_method,
+                &[prime.form.as_str()],
             )
             .await;
         state

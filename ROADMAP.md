@@ -21,6 +21,7 @@
 | **Testing** | Test strategy, integration tests, benchmarks, CI | [docs/roadmaps/testing.md](docs/roadmaps/testing.md) |
 | **GWNUM/FLINT** | External library integration for 50-100x acceleration | [docs/roadmaps/gwnum-flint.md](docs/roadmaps/gwnum-flint.md) |
 | **Public Compute** | Volunteer onboarding, release channels, validation | [docs/roadmaps/public-compute.md](docs/roadmaps/public-compute.md) |
+| **Verification** | Tags system, distributed verification, cross-form discovery | [docs/roadmaps/verification.md](docs/roadmaps/verification.md) |
 | **Website** | Public-facing website at darkreach.ai | [docs/roadmaps/website.md](docs/roadmaps/website.md) |
 | **Cluster** | Multi-node cluster management | [docs/roadmaps/cluster.md](docs/roadmaps/cluster.md) |
 | **Competitive Analysis** | Market landscape and competitor research | [docs/roadmaps/competitive-analysis.md](docs/roadmaps/competitive-analysis.md) |

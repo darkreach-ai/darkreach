@@ -15,7 +15,7 @@ set -euo pipefail
 #   6. Launch initial searches
 #   7. Verification checks
 
-SERVER="root@178.156.211.107"
+SERVER="${DEPLOY_USER:-deploy}@178.156.211.107"
 SKIP_SEARCHES=false
 
 for arg in "$@"; do

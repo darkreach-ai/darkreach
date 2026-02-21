@@ -2,7 +2,7 @@
 
 # -- Container image configuration
 image:
-  repository: ghcr.io/oddurs/darkreach
+  repository: ghcr.io/darkreach-ai/darkreach
   tag: latest
   pullPolicy: IfNotPresent
 

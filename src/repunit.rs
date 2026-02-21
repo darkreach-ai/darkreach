@@ -268,6 +268,7 @@ pub fn search(
                 search_params,
                 &certainty,
                 None,
+                &["repunit"],
             )?;
             if let Some(wc) = worker_client {
                 wc.report_prime("repunit", &expr, digits, search_params, &certainty);

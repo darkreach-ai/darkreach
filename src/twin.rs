@@ -225,6 +225,7 @@ pub fn search(
                 search_params,
                 &certainty,
                 cert_json.as_deref(),
+                &["twin", "kbn"],
             )?;
             if let Some(wc) = worker_client {
                 wc.report_prime("twin", &expr, digits, search_params, &certainty);

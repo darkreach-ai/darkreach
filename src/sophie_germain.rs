@@ -236,6 +236,7 @@ pub fn search(
                 search_params,
                 &certainty,
                 cert_json.as_deref(),
+                &["sophie_germain", "kbn"],
             )?;
             if let Some(wc) = worker_client {
                 wc.report_prime("sophie_germain", &expr, digits, search_params, &certainty);

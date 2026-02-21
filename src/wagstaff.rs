@@ -300,6 +300,7 @@ pub fn search(
                 search_params,
                 &certainty,
                 None,
+                &["wagstaff"],
             )?;
             if let Some(wc) = worker_client {
                 wc.report_prime("wagstaff", &expr, digits, search_params, &certainty);

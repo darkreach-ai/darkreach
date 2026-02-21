@@ -96,7 +96,7 @@ export function MobileNav({ open, onClose }: MobileNavProps) {
 
           <div className="pt-4 border-t border-border space-y-3">
             <a
-              href="https://github.com/darkreach/darkreach"
+              href="https://github.com/darkreach-ai/darkreach"
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-2 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors"

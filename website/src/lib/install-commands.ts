@@ -13,7 +13,7 @@ export const installMethods: Record<OS, InstallMethod[]> = {
 brew install gmp rust
 
 # Clone and build
-git clone https://github.com/darkreach/darkreach.git
+git clone https://github.com/darkreach-ai/darkreach.git
 cd darkreach
 cargo build --release
 
@@ -35,7 +35,7 @@ sudo apt install build-essential libgmp-dev m4
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
 # Clone and build
-git clone https://github.com/darkreach/darkreach.git
+git clone https://github.com/darkreach-ai/darkreach.git
 cd darkreach
 cargo build --release
 
@@ -56,7 +56,7 @@ docker run --rm darkreach/darkreach --version`,
 sudo apt install build-essential libgmp-dev m4
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
-git clone https://github.com/darkreach/darkreach.git
+git clone https://github.com/darkreach-ai/darkreach.git
 cd darkreach
 cargo build --release`,
     },

@@ -9,13 +9,34 @@ Thanks for your interest in contributing to darkreach! This project hunts specia
   - Linux: `sudo apt install build-essential libgmp-dev m4`
   - macOS: `brew install gmp`
 - **Node.js 22+** and npm (for the frontend)
+- **age + sops + yq** (for secrets management): `brew install age sops yq`
 - **PostgreSQL** (for integration tests — use `docker-compose.test.yml` or Supabase)
 
-## Setup
+## Developer Setup (Quick Start)
+
+The fastest way to set up:
 
 ```bash
-git clone https://github.com/oddurs/prime-hunter.git
-cd prime-hunter
+git clone https://github.com/darkreach-ai/darkreach.git
+cd darkreach
+./scripts/setup.sh
+```
+
+This checks prerequisites, generates an age key if needed, decrypts secrets, builds the project, installs frontend deps, and sets up the pre-commit hook.
+
+## Developer Setup (Manual)
+
+```bash
+git clone https://github.com/darkreach-ai/darkreach.git
+cd darkreach
+
+# Set up age key for secrets decryption
+mkdir -p ~/.config/sops/age
+age-keygen -o ~/.config/sops/age/keys.txt
+# Share your public key (age1...) with the team
+
+# Decrypt secrets to .env
+./scripts/decrypt-secrets.sh
 
 # Build the engine
 cargo build
@@ -26,6 +47,61 @@ cd frontend && npm install && cd ..
 # Install the pre-commit hook
 ln -sf ../../scripts/pre-commit .git/hooks/pre-commit
 ```
+
+## Secrets Management
+
+Secrets are encrypted in the repo using [SOPS](https://github.com/getsops/sops) + [age](https://github.com/FiloSottile/age).
+
+- Encrypted files live in `secrets/*.enc.yaml`
+- Each developer has an age key pair; public keys are listed in `.sops.yaml`
+- Run `./scripts/decrypt-secrets.sh` to generate local `.env` files
+- Run `sops secrets/env.enc.yaml` to edit secrets (decrypts in-place, re-encrypts on save)
+- Never commit `.env` files — only the encrypted `*.enc.yaml` files are in git
+
+## Git Workflow
+
+### Branch naming
+
+```
+feat/<description>    — New features
+fix/<description>     — Bug fixes
+chore/<description>   — Maintenance, deps
+docs/<description>    — Documentation
+deploy/<description>  — Infrastructure changes
+```
+
+### Day-to-day workflow
+
+1. Create a feature branch: `git checkout -b feat/my-feature`
+2. Make changes, commit locally
+3. Push and open a PR: `git push -u origin feat/my-feature && gh pr create`
+4. CI runs automatically (fmt, clippy, test, frontend)
+5. Get 1 approval, then squash-merge to `master`
+
+### Self-merge policy
+
+- **Trivial changes** (typos, deps): self-approve after 30 min with `trivial` label
+- **Engine algorithms, DB migrations, deploy scripts**: always require the other dev's review
+
+## Infrastructure Access
+
+Both developers have full SSH access to the Hetzner fleet via the `deploy` user.
+
+```bash
+# Copy SSH config entries from deploy/ssh_config.example to ~/.ssh/config
+ssh darkreach-coordinator      # Coordinator
+ssh darkreach-worker-1         # Worker
+
+# DB access via SSH tunnel
+ssh -L 5432:localhost:5432 darkreach-coordinator
+```
+
+### Deploy coordination
+
+- Announce deploys in chat before starting
+- Only deploy from `master`
+- Use `./deploy/production-deploy.sh` for the coordinator
+- Use `./deploy/worker-deploy.sh deploy@<host> <coordinator-url>` for workers
 
 ## Development Commands
 

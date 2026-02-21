@@ -97,7 +97,7 @@ export default function AboutPage() {
             inspection, modification, and contribution.
           </p>
           <a
-            href="https://github.com/darkreach/darkreach"
+            href="https://github.com/darkreach-ai/darkreach"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-2 px-6 py-3 rounded-md border border-border text-foreground hover:border-text-muted transition-colors"

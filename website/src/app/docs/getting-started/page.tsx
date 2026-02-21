@@ -32,7 +32,7 @@ export default function GettingStartedPage() {
 
       <h2>Build</h2>
       <CodeBlock language="bash">
-        {`git clone https://github.com/darkreach/darkreach.git
+        {`git clone https://github.com/darkreach-ai/darkreach.git
 cd darkreach
 cargo build --release`}
       </CodeBlock>

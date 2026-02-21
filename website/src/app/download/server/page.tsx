@@ -9,7 +9,7 @@ sudo apt install build-essential libgmp-dev m4 postgresql
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
 # Clone and build
-git clone https://github.com/darkreach/darkreach.git
+git clone https://github.com/darkreach-ai/darkreach.git
 cd darkreach
 cargo build --release`;
 

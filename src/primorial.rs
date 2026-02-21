@@ -377,6 +377,7 @@ pub fn search(
                     search_params,
                     certainty,
                     None,
+                    &["primorial"],
                 )?;
                 if let Some(wc) = worker_client {
                     wc.report_prime("primorial", &expr, digit_count, search_params, certainty);

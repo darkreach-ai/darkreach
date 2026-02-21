@@ -1,0 +1,19 @@
+# SOPS configuration for darkreach secrets management.
+#
+# Each developer needs an age key pair:
+#   brew install age sops yq
+#   mkdir -p ~/.config/sops/age
+#   age-keygen -o ~/.config/sops/age/keys.txt
+#
+# Share your PUBLIC key (age1...) — it gets added here.
+# Your PRIVATE key stays in ~/.config/sops/age/keys.txt (never shared).
+#
+# Encrypt:  sops --encrypt --in-place secrets/env.enc.yaml
+# Decrypt:  sops --decrypt secrets/env.enc.yaml
+# Edit:     sops secrets/env.enc.yaml
+
+creation_rules:
+  - path_regex: ^secrets/.*\.enc\.yaml$
+    age: >-
+      age1TODO_ODDURS_PUBLIC_KEY,
+      age1TODO_FRIEND_PUBLIC_KEY

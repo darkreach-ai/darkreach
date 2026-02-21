@@ -725,7 +725,27 @@ pub fn verify_prime(detail: &PrimeDetail) -> VerifyResult {
         }
     }
 
-    // Return tier 2 result if tier 3 was skipped or not attempted
+    // Step 6: Form-specific invariant checks.
+    // After confirming primality, verify the structural claims of the form
+    // (e.g., twin pairs, palindrome symmetry, factorial identity).
+    let best_verify = if matches!(&t2, VerifyResult::Verified { .. }) {
+        &t2
+    } else {
+        // This branch shouldn't be reached (t2 failures return early above),
+        // but handle gracefully.
+        &t2
+    };
+    let invariants = verify_invariants(&detail.form, &detail.expression, &candidate);
+    for inv in &invariants {
+        if let InvariantResult::Failed { check, reason } = inv {
+            return VerifyResult::Failed {
+                reason: format!("Invariant '{}' failed: {}", check, reason),
+            };
+        }
+    }
+
+    // Return the best primality verification result
+    let _ = best_verify;
     t2
 }
 
@@ -782,6 +802,351 @@ pub fn required_quorum_high_value(trust_level: i16, form: &str, digits: u64) -> 
 /// Check if a form has deterministic proof methods available.
 pub fn is_provable_form(form: &str) -> bool {
     PROVABLE_FORMS.contains(&form)
+}
+
+// ── Form-Specific Invariant Validation ────────────────────────────
+//
+// Beyond confirming "is this number prime?", invariant checks verify
+// the mathematical structure claimed by each form:
+// - Twin: both p and p±2 are prime
+// - Sophie Germain: both p and 2p+1 are prime
+// - Palindromic: decimal string is symmetric
+// - Factorial/primorial: candidate == n!±1 or p#±1 exactly
+// - Wagstaff: 3·p == 2^exp + 1 and exp is prime
+// - Cullen/Woodall: k == n in k·2^n ± 1
+
+/// Result of a form-specific invariant check.
+#[derive(Debug, Clone)]
+pub enum InvariantResult {
+    /// The invariant holds — the prime's structural claim is valid.
+    Verified { check: String },
+    /// The invariant failed — data corruption or classification error.
+    Failed { check: String, reason: String },
+    /// The invariant check was skipped (form has no invariant, or could not parse).
+    Skipped { reason: String },
+}
+
+/// Run all applicable invariant checks for a prime's form.
+///
+/// Returns a list of invariant results. Forms without special invariants
+/// return an empty list. Multiple invariants may apply (e.g., factorial
+/// checks both the identity and the sign).
+pub fn verify_invariants(
+    form: &str,
+    expression: &str,
+    candidate: &Integer,
+) -> Vec<InvariantResult> {
+    match form {
+        "twin" => vec![verify_twin_invariant(expression, candidate)],
+        "sophie_germain" => vec![verify_sophie_germain_invariant(expression, candidate)],
+        "palindromic" => vec![verify_palindrome_invariant(candidate)],
+        "near_repdigit" => vec![verify_palindrome_invariant(candidate)],
+        "factorial" => vec![verify_factorial_invariant(expression, candidate)],
+        "primorial" => vec![verify_primorial_invariant(expression, candidate)],
+        "wagstaff" => vec![verify_wagstaff_invariant(expression, candidate)],
+        "cullen" | "woodall" | "cullen_woodall" => {
+            vec![verify_cullen_woodall_invariant(expression)]
+        }
+        _ => vec![],
+    }
+}
+
+/// Twin prime invariant: both k·b^n − 1 AND k·b^n + 1 must be prime.
+///
+/// Twin expressions are stored as "k*b^n +/- 1". The verification pipeline
+/// tests the smaller twin (k·b^n − 1); this invariant also tests k·b^n + 1.
+fn verify_twin_invariant(expression: &str, candidate: &Integer) -> InvariantResult {
+    // candidate is the smaller twin (k*b^n - 1). The larger twin is candidate + 2.
+    let larger_twin = Integer::from(candidate + 2u32);
+    if larger_twin.is_probably_prime(25) == IsPrime::No {
+        return InvariantResult::Failed {
+            check: "twin-pair".into(),
+            reason: format!(
+                "Larger twin {} + 2 is composite",
+                &expression.replace(" +/- 1", " - 1")
+            ),
+        };
+    }
+    InvariantResult::Verified {
+        check: "twin-pair".into(),
+    }
+}
+
+/// Sophie Germain invariant: if p is a Sophie Germain prime, then 2p + 1 must also be prime.
+///
+/// Sophie Germain primes are stored as the base prime p (in k·b^n − 1 form).
+/// The safe prime 2p + 1 is the number that makes the pair special.
+fn verify_sophie_germain_invariant(
+    _expression: &str,
+    candidate: &Integer,
+) -> InvariantResult {
+    let safe_prime = Integer::from(candidate * 2u32) + 1u32;
+    if safe_prime.is_probably_prime(25) == IsPrime::No {
+        return InvariantResult::Failed {
+            check: "sophie-germain-relation".into(),
+            reason: "2p + 1 is composite — not a valid Sophie Germain prime".into(),
+        };
+    }
+    InvariantResult::Verified {
+        check: "sophie-germain-relation".into(),
+    }
+}
+
+/// Palindrome structure invariant: the decimal representation must read the same
+/// forwards and backwards, and must have an odd number of digits.
+///
+/// Even-digit palindromes are always divisible by (base + 1) = 11 in base 10,
+/// so any even-digit "palindromic prime" is a data error (except 11 itself).
+fn verify_palindrome_invariant(candidate: &Integer) -> InvariantResult {
+    let s = candidate.to_string_radix(10);
+    let bytes = s.as_bytes();
+    let len = bytes.len();
+
+    // Check palindromic structure
+    for i in 0..len / 2 {
+        if bytes[i] != bytes[len - 1 - i] {
+            return InvariantResult::Failed {
+                check: "palindrome-structure".into(),
+                reason: format!(
+                    "Not a palindrome: digit {} ('{}') != digit {} ('{}')",
+                    i,
+                    bytes[i] as char,
+                    len - 1 - i,
+                    bytes[len - 1 - i] as char
+                ),
+            };
+        }
+    }
+
+    // Even-digit palindromes > 11 are always divisible by 11
+    if len % 2 == 0 && len > 2 {
+        return InvariantResult::Failed {
+            check: "palindrome-structure".into(),
+            reason: format!(
+                "Even-digit palindrome ({} digits) — divisible by 11, should have been skipped",
+                len
+            ),
+        };
+    }
+
+    InvariantResult::Verified {
+        check: "palindrome-structure".into(),
+    }
+}
+
+/// Factorial identity invariant: verify that candidate == n! ± 1 exactly.
+///
+/// Recomputes n! from the expression and checks exact equality, catching
+/// expression parsing bugs or data corruption.
+fn verify_factorial_invariant(expression: &str, candidate: &Integer) -> InvariantResult {
+    let expr = expression.trim();
+    let bang = match expr.find('!') {
+        Some(p) => p,
+        None => {
+            return InvariantResult::Skipped {
+                reason: "Cannot parse factorial expression (no '!')".into(),
+            }
+        }
+    };
+    let n: u32 = match expr[..bang].trim().parse() {
+        Ok(v) => v,
+        Err(_) => {
+            return InvariantResult::Skipped {
+                reason: "Cannot parse n in factorial expression".into(),
+            }
+        }
+    };
+    let rest = expr[bang + 1..].trim();
+    let factorial = Integer::from(Integer::factorial(n));
+    let expected = if rest.starts_with('+') {
+        Integer::from(&factorial + 1u32)
+    } else if rest.starts_with('-') {
+        Integer::from(&factorial - 1u32)
+    } else {
+        return InvariantResult::Skipped {
+            reason: "Cannot determine +/- sign in factorial expression".into(),
+        };
+    };
+
+    if *candidate != expected {
+        return InvariantResult::Failed {
+            check: "factorial-identity".into(),
+            reason: format!(
+                "candidate != {}! {} 1 (digit count: expected={}, actual={})",
+                n,
+                if rest.starts_with('+') { "+" } else { "-" },
+                crate::exact_digits(&expected),
+                crate::exact_digits(candidate),
+            ),
+        };
+    }
+    InvariantResult::Verified {
+        check: "factorial-identity".into(),
+    }
+}
+
+/// Primorial identity invariant: verify that candidate == p# ± 1 exactly.
+///
+/// Recomputes p# (product of primes up to p) from the expression.
+fn verify_primorial_invariant(expression: &str, candidate: &Integer) -> InvariantResult {
+    let expr = expression.trim();
+    let hash = match expr.find('#') {
+        Some(p) => p,
+        None => {
+            return InvariantResult::Skipped {
+                reason: "Cannot parse primorial expression (no '#')".into(),
+            }
+        }
+    };
+    let p: u32 = match expr[..hash].trim().parse() {
+        Ok(v) => v,
+        Err(_) => {
+            return InvariantResult::Skipped {
+                reason: "Cannot parse p in primorial expression".into(),
+            }
+        }
+    };
+    let rest = expr[hash + 1..].trim();
+    let primorial = Integer::from(Integer::primorial(p));
+    let expected = if rest.starts_with('+') {
+        Integer::from(&primorial + 1u32)
+    } else if rest.starts_with('-') {
+        Integer::from(&primorial - 1u32)
+    } else {
+        return InvariantResult::Skipped {
+            reason: "Cannot determine +/- sign in primorial expression".into(),
+        };
+    };
+
+    if *candidate != expected {
+        return InvariantResult::Failed {
+            check: "primorial-identity".into(),
+            reason: format!(
+                "candidate != {}# {} 1",
+                p,
+                if rest.starts_with('+') { "+" } else { "-" },
+            ),
+        };
+    }
+    InvariantResult::Verified {
+        check: "primorial-identity".into(),
+    }
+}
+
+/// Wagstaff form invariant: verify 3·candidate == 2^p + 1 and p is prime.
+///
+/// Wagstaff primes have the form (2^p + 1) / 3 where p is an odd prime.
+/// This checks both the algebraic identity and the primality of the exponent.
+fn verify_wagstaff_invariant(expression: &str, candidate: &Integer) -> InvariantResult {
+    let expr = expression.trim();
+    // Parse exponent from "(2^p+1)/3"
+    let caret = match expr.find('^') {
+        Some(p) => p,
+        None => {
+            return InvariantResult::Skipped {
+                reason: "Cannot parse wagstaff expression (no '^')".into(),
+            }
+        }
+    };
+    let plus = match expr.find('+') {
+        Some(p) => p,
+        None => {
+            return InvariantResult::Skipped {
+                reason: "Cannot parse wagstaff expression (no '+')".into(),
+            }
+        }
+    };
+    let p: u32 = match expr[caret + 1..plus].trim().parse() {
+        Ok(v) => v,
+        Err(_) => {
+            return InvariantResult::Skipped {
+                reason: "Cannot parse exponent p in wagstaff expression".into(),
+            }
+        }
+    };
+
+    // Check: 3 * candidate == 2^p + 1
+    let three_c = Integer::from(candidate * 3u32);
+    let two_p_plus_1 = (Integer::from(1u32) << p) + Integer::from(1u32);
+    if three_c != two_p_plus_1 {
+        return InvariantResult::Failed {
+            check: "wagstaff-form".into(),
+            reason: format!("3 * candidate != 2^{} + 1", p),
+        };
+    }
+
+    // Check: p should be an odd prime (Wagstaff primes require prime exponent)
+    let p_int = Integer::from(p);
+    if p_int.is_probably_prime(25) == IsPrime::No {
+        return InvariantResult::Failed {
+            check: "wagstaff-form".into(),
+            reason: format!("Exponent p={} is not prime", p),
+        };
+    }
+
+    InvariantResult::Verified {
+        check: "wagstaff-form".into(),
+    }
+}
+
+/// Cullen/Woodall constraint invariant: verify k == n in k·2^n ± 1.
+///
+/// Cullen numbers have the form n·2^n + 1, Woodall numbers n·2^n − 1.
+/// The defining property is that the multiplier k equals the exponent n.
+/// This parses "k*2^n ± 1" and checks k == n.
+fn verify_cullen_woodall_invariant(expression: &str) -> InvariantResult {
+    let expr = expression.trim();
+    let star = match expr.find('*') {
+        Some(p) => p,
+        None => {
+            return InvariantResult::Skipped {
+                reason: "Cannot parse cullen/woodall expression (no '*')".into(),
+            }
+        }
+    };
+    let k: u64 = match expr[..star].trim().parse() {
+        Ok(v) => v,
+        Err(_) => {
+            return InvariantResult::Skipped {
+                reason: "Cannot parse k in cullen/woodall expression".into(),
+            }
+        }
+    };
+    let rest = &expr[star + 1..];
+    let caret = match rest.find('^') {
+        Some(p) => p,
+        None => {
+            return InvariantResult::Skipped {
+                reason: "Cannot parse cullen/woodall expression (no '^')".into(),
+            }
+        }
+    };
+    // Extract n: everything after '^' until space or +/-
+    let after_caret = &rest[caret + 1..];
+    let n_end = after_caret
+        .find(|c: char| c == ' ' || c == '+' || c == '-')
+        .unwrap_or(after_caret.len());
+    let n: u64 = match after_caret[..n_end].trim().parse() {
+        Ok(v) => v,
+        Err(_) => {
+            return InvariantResult::Skipped {
+                reason: "Cannot parse n in cullen/woodall expression".into(),
+            }
+        }
+    };
+
+    if k != n {
+        return InvariantResult::Failed {
+            check: "cullen-woodall-constraint".into(),
+            reason: format!(
+                "k={} != n={} — not a valid Cullen/Woodall number (requires k == n)",
+                k, n
+            ),
+        };
+    }
+    InvariantResult::Verified {
+        check: "cullen-woodall-constraint".into(),
+    }
 }
 
 #[cfg(test)]
@@ -1125,6 +1490,7 @@ mod tests {
             found_at: chrono::Utc::now(),
             search_params: "{}".into(),
             proof_method: "deterministic".into(),
+            tags: vec![],
         };
         match verify_prime(&detail) {
             VerifyResult::Verified { tier, .. } => assert_eq!(tier, 1),
@@ -1148,6 +1514,7 @@ mod tests {
             found_at: chrono::Utc::now(),
             search_params: "{}".into(),
             proof_method: "probabilistic".into(),
+            tags: vec![],
         };
         match verify_prime(&detail) {
             VerifyResult::Verified { tier, .. } => assert_eq!(tier, 2),
@@ -1209,6 +1576,7 @@ mod tests {
             found_at: chrono::Utc::now(),
             search_params: "{}".into(),
             proof_method: "deterministic".into(),
+            tags: vec![],
         };
         match verify_prime(&detail) {
             VerifyResult::Failed { reason } => assert!(reason.contains("Digit count mismatch")),
@@ -1519,6 +1887,7 @@ mod tests {
             found_at: chrono::Utc::now(),
             search_params: "{}".into(),
             proof_method: "deterministic".into(),
+            tags: vec![],
         };
         match verify_prime(&detail) {
             VerifyResult::Verified { tier, .. } => assert_eq!(tier, 1),
@@ -1541,6 +1910,7 @@ mod tests {
             found_at: chrono::Utc::now(),
             search_params: "{}".into(),
             proof_method: "probabilistic".into(),
+            tags: vec![],
         };
         match verify_prime(&detail) {
             VerifyResult::Verified { tier, .. } => assert_eq!(tier, 2),
@@ -1560,6 +1930,7 @@ mod tests {
             found_at: chrono::Utc::now(),
             search_params: "{}".into(),
             proof_method: "deterministic".into(),
+            tags: vec![],
         };
         match verify_prime(&detail) {
             VerifyResult::Failed { reason } => {
@@ -1612,5 +1983,466 @@ mod tests {
     fn repunit_pfgw_format_with_spaces() {
         let result = convert_repunit_to_pfgw("R( 10 , 19 )");
         assert_eq!(result, "(10^19-1)/(9)");
+    }
+
+    // ── Invariant Check Tests ──────────────────────────────────────────
+
+    // ── Twin Invariant ─────────────────────────────────────────────────
+
+    /// Twin prime pair (5, 7): candidate=5 is the smaller twin,
+    /// candidate+2=7 is also prime → invariant passes.
+    #[test]
+    fn twin_invariant_valid_pair() {
+        let candidate = Integer::from(5u32);
+        match verify_twin_invariant("3*2^1 +/- 1", &candidate) {
+            InvariantResult::Verified { check } => assert_eq!(check, "twin-pair"),
+            other => panic!("Expected Verified, got {:?}", other),
+        }
+    }
+
+    /// Twin prime pair (11, 13): classic twin pair.
+    #[test]
+    fn twin_invariant_11_13() {
+        let candidate = Integer::from(11u32);
+        match verify_twin_invariant("3*2^2 - 1", &candidate) {
+            InvariantResult::Verified { check } => assert_eq!(check, "twin-pair"),
+            other => panic!("Expected Verified, got {:?}", other),
+        }
+    }
+
+    /// Non-twin: candidate=23, candidate+2=25=5^2 → invariant fails.
+    #[test]
+    fn twin_invariant_fails_for_non_twin() {
+        let candidate = Integer::from(23u32);
+        match verify_twin_invariant("mock_expr", &candidate) {
+            InvariantResult::Failed { check, reason } => {
+                assert_eq!(check, "twin-pair");
+                assert!(reason.contains("composite"), "reason: {}", reason);
+            }
+            other => panic!("Expected Failed, got {:?}", other),
+        }
+    }
+
+    // ── Sophie Germain Invariant ───────────────────────────────────────
+
+    /// Sophie Germain prime 11: 2·11+1=23 (prime) → passes.
+    #[test]
+    fn sophie_germain_invariant_valid() {
+        let candidate = Integer::from(11u32);
+        match verify_sophie_germain_invariant("11", &candidate) {
+            InvariantResult::Verified { check } => {
+                assert_eq!(check, "sophie-germain-relation")
+            }
+            other => panic!("Expected Verified, got {:?}", other),
+        }
+    }
+
+    /// Sophie Germain prime 23: 2·23+1=47 (prime) → passes.
+    #[test]
+    fn sophie_germain_invariant_23() {
+        let candidate = Integer::from(23u32);
+        match verify_sophie_germain_invariant("23", &candidate) {
+            InvariantResult::Verified { check } => {
+                assert_eq!(check, "sophie-germain-relation")
+            }
+            other => panic!("Expected Verified, got {:?}", other),
+        }
+    }
+
+    /// Not Sophie Germain: 13 → 2·13+1=27=3^3 → fails.
+    #[test]
+    fn sophie_germain_invariant_fails() {
+        let candidate = Integer::from(13u32);
+        match verify_sophie_germain_invariant("13", &candidate) {
+            InvariantResult::Failed { check, reason } => {
+                assert_eq!(check, "sophie-germain-relation");
+                assert!(
+                    reason.contains("composite"),
+                    "reason: {}",
+                    reason
+                );
+            }
+            other => panic!("Expected Failed, got {:?}", other),
+        }
+    }
+
+    // ── Palindrome Invariant ───────────────────────────────────────────
+
+    /// Valid palindromic prime: 10301 (5 digits, odd, palindrome).
+    #[test]
+    fn palindrome_invariant_valid() {
+        let candidate = Integer::from(10301u32);
+        match verify_palindrome_invariant(&candidate) {
+            InvariantResult::Verified { check } => {
+                assert_eq!(check, "palindrome-structure")
+            }
+            other => panic!("Expected Verified, got {:?}", other),
+        }
+    }
+
+    /// Single-digit prime: 7 (1 digit, odd, trivially palindrome).
+    #[test]
+    fn palindrome_invariant_single_digit() {
+        let candidate = Integer::from(7u32);
+        match verify_palindrome_invariant(&candidate) {
+            InvariantResult::Verified { check } => {
+                assert_eq!(check, "palindrome-structure")
+            }
+            other => panic!("Expected Verified, got {:?}", other),
+        }
+    }
+
+    /// Not a palindrome: 12345 → fails.
+    #[test]
+    fn palindrome_invariant_fails_not_palindrome() {
+        let candidate = Integer::from(12345u32);
+        match verify_palindrome_invariant(&candidate) {
+            InvariantResult::Failed { check, reason } => {
+                assert_eq!(check, "palindrome-structure");
+                assert!(reason.contains("Not a palindrome"), "reason: {}", reason);
+            }
+            other => panic!("Expected Failed, got {:?}", other),
+        }
+    }
+
+    /// Even-digit palindrome (4 digits): 1221 → fails (divisible by 11).
+    #[test]
+    fn palindrome_invariant_fails_even_digits() {
+        let candidate = Integer::from(1221u32);
+        match verify_palindrome_invariant(&candidate) {
+            InvariantResult::Failed { check, reason } => {
+                assert_eq!(check, "palindrome-structure");
+                assert!(
+                    reason.contains("Even-digit palindrome"),
+                    "reason: {}",
+                    reason
+                );
+            }
+            other => panic!("Expected Failed, got {:?}", other),
+        }
+    }
+
+    /// 2-digit palindrome 11 should pass (special case: len == 2, not > 2).
+    #[test]
+    fn palindrome_invariant_11_passes() {
+        let candidate = Integer::from(11u32);
+        match verify_palindrome_invariant(&candidate) {
+            InvariantResult::Verified { check } => {
+                assert_eq!(check, "palindrome-structure")
+            }
+            other => panic!("Expected Verified for 11 (2-digit exception), got {:?}", other),
+        }
+    }
+
+    // ── Factorial Invariant ────────────────────────────────────────────
+
+    /// Valid factorial: 5! + 1 = 121 → candidate matches recomputed value.
+    #[test]
+    fn factorial_invariant_valid_plus() {
+        let candidate = Integer::from(Integer::factorial(5)) + 1u32;
+        match verify_factorial_invariant("5! + 1", &candidate) {
+            InvariantResult::Verified { check } => {
+                assert_eq!(check, "factorial-identity")
+            }
+            other => panic!("Expected Verified, got {:?}", other),
+        }
+    }
+
+    /// Valid factorial: 3! - 1 = 5 → candidate matches.
+    #[test]
+    fn factorial_invariant_valid_minus() {
+        let candidate = Integer::from(Integer::factorial(3)) - 1u32;
+        match verify_factorial_invariant("3! - 1", &candidate) {
+            InvariantResult::Verified { check } => {
+                assert_eq!(check, "factorial-identity")
+            }
+            other => panic!("Expected Verified, got {:?}", other),
+        }
+    }
+
+    /// Corrupted factorial: expression says 5! + 1 but candidate is wrong.
+    #[test]
+    fn factorial_invariant_fails_wrong_value() {
+        let candidate = Integer::from(999u32);
+        match verify_factorial_invariant("5! + 1", &candidate) {
+            InvariantResult::Failed { check, reason } => {
+                assert_eq!(check, "factorial-identity");
+                assert!(reason.contains("candidate != 5!"), "reason: {}", reason);
+            }
+            other => panic!("Expected Failed, got {:?}", other),
+        }
+    }
+
+    /// Unparseable factorial expression: no '!' → Skipped.
+    #[test]
+    fn factorial_invariant_skips_bad_expression() {
+        let candidate = Integer::from(121u32);
+        match verify_factorial_invariant("garbage", &candidate) {
+            InvariantResult::Skipped { reason } => {
+                assert!(reason.contains("no '!'"), "reason: {}", reason);
+            }
+            other => panic!("Expected Skipped, got {:?}", other),
+        }
+    }
+
+    // ── Primorial Invariant ────────────────────────────────────────────
+
+    /// Valid primorial: 5# + 1 = 31 → candidate matches (2·3·5 + 1 = 31).
+    #[test]
+    fn primorial_invariant_valid_plus() {
+        let candidate = Integer::from(Integer::primorial(5)) + 1u32;
+        match verify_primorial_invariant("5# + 1", &candidate) {
+            InvariantResult::Verified { check } => {
+                assert_eq!(check, "primorial-identity")
+            }
+            other => panic!("Expected Verified, got {:?}", other),
+        }
+    }
+
+    /// Valid primorial: 7# - 1 = 209 → candidate matches (2·3·5·7 - 1).
+    #[test]
+    fn primorial_invariant_valid_minus() {
+        let candidate = Integer::from(Integer::primorial(7)) - 1u32;
+        match verify_primorial_invariant("7# - 1", &candidate) {
+            InvariantResult::Verified { check } => {
+                assert_eq!(check, "primorial-identity")
+            }
+            other => panic!("Expected Verified, got {:?}", other),
+        }
+    }
+
+    /// Corrupted primorial: wrong candidate value → Failed.
+    #[test]
+    fn primorial_invariant_fails_wrong_value() {
+        let candidate = Integer::from(999u32);
+        match verify_primorial_invariant("5# + 1", &candidate) {
+            InvariantResult::Failed { check, reason } => {
+                assert_eq!(check, "primorial-identity");
+                assert!(reason.contains("candidate != 5#"), "reason: {}", reason);
+            }
+            other => panic!("Expected Failed, got {:?}", other),
+        }
+    }
+
+    /// Unparseable primorial: no '#' → Skipped.
+    #[test]
+    fn primorial_invariant_skips_bad_expression() {
+        let candidate = Integer::from(31u32);
+        match verify_primorial_invariant("garbage", &candidate) {
+            InvariantResult::Skipped { reason } => {
+                assert!(reason.contains("no '#'"), "reason: {}", reason);
+            }
+            other => panic!("Expected Skipped, got {:?}", other),
+        }
+    }
+
+    // ── Wagstaff Invariant ─────────────────────────────────────────────
+
+    /// Valid wagstaff: (2^11+1)/3 = 683 → 3·683 = 2049 = 2^11+1, 11 is prime.
+    #[test]
+    fn wagstaff_invariant_valid() {
+        // (2^11+1)/3 = 683
+        let candidate = (Integer::from(1u32) << 11u32) + Integer::from(1u32);
+        let candidate = candidate / Integer::from(3u32);
+        match verify_wagstaff_invariant("(2^11+1)/3", &candidate) {
+            InvariantResult::Verified { check } => {
+                assert_eq!(check, "wagstaff-form")
+            }
+            other => panic!("Expected Verified, got {:?}", other),
+        }
+    }
+
+    /// Valid wagstaff: (2^5+1)/3 = 11 → 3·11 = 33 = 2^5+1, 5 is prime.
+    #[test]
+    fn wagstaff_invariant_small() {
+        let candidate = Integer::from(11u32);
+        match verify_wagstaff_invariant("(2^5+1)/3", &candidate) {
+            InvariantResult::Verified { check } => {
+                assert_eq!(check, "wagstaff-form")
+            }
+            other => panic!("Expected Verified, got {:?}", other),
+        }
+    }
+
+    /// Wrong candidate for wagstaff: 3·candidate != 2^11+1 → Failed.
+    #[test]
+    fn wagstaff_invariant_fails_wrong_value() {
+        let candidate = Integer::from(100u32);
+        match verify_wagstaff_invariant("(2^11+1)/3", &candidate) {
+            InvariantResult::Failed { check, reason } => {
+                assert_eq!(check, "wagstaff-form");
+                assert!(reason.contains("3 * candidate != 2^11"), "reason: {}", reason);
+            }
+            other => panic!("Expected Failed, got {:?}", other),
+        }
+    }
+
+    /// Wagstaff with composite exponent: (2^9+1)/3 = 171 → p=9=3^2 not prime → Failed.
+    #[test]
+    fn wagstaff_invariant_fails_composite_exponent() {
+        // 2^9+1 = 513, 513/3 = 171. p=9 is not prime.
+        let candidate = Integer::from(171u32);
+        match verify_wagstaff_invariant("(2^9+1)/3", &candidate) {
+            InvariantResult::Failed { check, reason } => {
+                assert_eq!(check, "wagstaff-form");
+                assert!(reason.contains("not prime"), "reason: {}", reason);
+            }
+            other => panic!("Expected Failed, got {:?}", other),
+        }
+    }
+
+    /// Unparseable wagstaff: no '^' → Skipped.
+    #[test]
+    fn wagstaff_invariant_skips_bad_expression() {
+        let candidate = Integer::from(683u32);
+        match verify_wagstaff_invariant("garbage", &candidate) {
+            InvariantResult::Skipped { reason } => {
+                assert!(reason.contains("no '^'"), "reason: {}", reason);
+            }
+            other => panic!("Expected Skipped, got {:?}", other),
+        }
+    }
+
+    // ── Cullen/Woodall Invariant ───────────────────────────────────────
+
+    /// Valid Cullen: 3*2^3 + 1 = 25 → k=3, n=3, k==n → passes.
+    #[test]
+    fn cullen_woodall_invariant_valid() {
+        match verify_cullen_woodall_invariant("3*2^3 + 1") {
+            InvariantResult::Verified { check } => {
+                assert_eq!(check, "cullen-woodall-constraint")
+            }
+            other => panic!("Expected Verified, got {:?}", other),
+        }
+    }
+
+    /// Valid Woodall: 141*2^141 - 1 → k=141, n=141, k==n → passes.
+    #[test]
+    fn cullen_woodall_invariant_large() {
+        match verify_cullen_woodall_invariant("141*2^141 - 1") {
+            InvariantResult::Verified { check } => {
+                assert_eq!(check, "cullen-woodall-constraint")
+            }
+            other => panic!("Expected Verified, got {:?}", other),
+        }
+    }
+
+    /// Invalid: k=5, n=3 (k != n) → fails.
+    #[test]
+    fn cullen_woodall_invariant_fails_k_ne_n() {
+        match verify_cullen_woodall_invariant("5*2^3 + 1") {
+            InvariantResult::Failed { check, reason } => {
+                assert_eq!(check, "cullen-woodall-constraint");
+                assert!(reason.contains("k=5 != n=3"), "reason: {}", reason);
+            }
+            other => panic!("Expected Failed, got {:?}", other),
+        }
+    }
+
+    /// Unparseable cullen/woodall: no '*' → Skipped.
+    #[test]
+    fn cullen_woodall_invariant_skips_no_star() {
+        match verify_cullen_woodall_invariant("garbage") {
+            InvariantResult::Skipped { reason } => {
+                assert!(reason.contains("no '*'"), "reason: {}", reason);
+            }
+            other => panic!("Expected Skipped, got {:?}", other),
+        }
+    }
+
+    /// Unparseable cullen/woodall: no '^' → Skipped.
+    #[test]
+    fn cullen_woodall_invariant_skips_no_caret() {
+        match verify_cullen_woodall_invariant("3*2_3 + 1") {
+            InvariantResult::Skipped { reason } => {
+                assert!(reason.contains("no '^'"), "reason: {}", reason);
+            }
+            other => panic!("Expected Skipped, got {:?}", other),
+        }
+    }
+
+    // ── verify_invariants Dispatcher ───────────────────────────────────
+
+    /// Dispatcher routes twin form correctly.
+    #[test]
+    fn invariants_dispatch_twin() {
+        let candidate = Integer::from(5u32);
+        let results = verify_invariants("twin", "3*2^1 +/- 1", &candidate);
+        assert_eq!(results.len(), 1);
+        assert!(matches!(&results[0], InvariantResult::Verified { check } if check == "twin-pair"));
+    }
+
+    /// Dispatcher routes sophie_germain form correctly.
+    #[test]
+    fn invariants_dispatch_sophie_germain() {
+        let candidate = Integer::from(11u32);
+        let results = verify_invariants("sophie_germain", "11", &candidate);
+        assert_eq!(results.len(), 1);
+        assert!(
+            matches!(&results[0], InvariantResult::Verified { check } if check == "sophie-germain-relation")
+        );
+    }
+
+    /// Dispatcher routes palindromic form correctly.
+    #[test]
+    fn invariants_dispatch_palindromic() {
+        let candidate = Integer::from(10301u32);
+        let results = verify_invariants("palindromic", "10301", &candidate);
+        assert_eq!(results.len(), 1);
+        assert!(
+            matches!(&results[0], InvariantResult::Verified { check } if check == "palindrome-structure")
+        );
+    }
+
+    /// Dispatcher routes near_repdigit to palindrome check.
+    #[test]
+    fn invariants_dispatch_near_repdigit() {
+        let candidate = Integer::from(10301u32);
+        let results = verify_invariants("near_repdigit", "10301", &candidate);
+        assert_eq!(results.len(), 1);
+        assert!(
+            matches!(&results[0], InvariantResult::Verified { check } if check == "palindrome-structure")
+        );
+    }
+
+    /// Dispatcher routes factorial form correctly.
+    #[test]
+    fn invariants_dispatch_factorial() {
+        let candidate = Integer::from(Integer::factorial(5)) + 1u32;
+        let results = verify_invariants("factorial", "5! + 1", &candidate);
+        assert_eq!(results.len(), 1);
+        assert!(
+            matches!(&results[0], InvariantResult::Verified { check } if check == "factorial-identity")
+        );
+    }
+
+    /// Dispatcher routes cullen_woodall form correctly.
+    #[test]
+    fn invariants_dispatch_cullen_woodall() {
+        let results = verify_invariants("cullen_woodall", "3*2^3 + 1", &Integer::from(25u32));
+        assert_eq!(results.len(), 1);
+        assert!(
+            matches!(&results[0], InvariantResult::Verified { check } if check == "cullen-woodall-constraint")
+        );
+    }
+
+    /// Dispatcher routes cullen alias correctly.
+    #[test]
+    fn invariants_dispatch_cullen_alias() {
+        let results = verify_invariants("cullen", "3*2^3 + 1", &Integer::from(25u32));
+        assert_eq!(results.len(), 1);
+        assert!(
+            matches!(&results[0], InvariantResult::Verified { check } if check == "cullen-woodall-constraint")
+        );
+    }
+
+    /// Dispatcher returns empty list for forms with no invariant (kbn, repunit).
+    #[test]
+    fn invariants_dispatch_no_invariant() {
+        let candidate = Integer::from(7u32);
+        assert!(verify_invariants("kbn", "3*2^1+1", &candidate).is_empty());
+        assert!(verify_invariants("repunit", "R(7)", &candidate).is_empty());
+        assert!(verify_invariants("gen_fermat", "2^4+1", &candidate).is_empty());
+        assert!(verify_invariants("carol", "expr", &candidate).is_empty());
     }
 }

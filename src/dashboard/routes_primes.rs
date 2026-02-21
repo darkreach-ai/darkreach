@@ -132,6 +132,8 @@ pub(super) struct PrimesQuery {
     max_digits: Option<i64>,
     sort_by: Option<String>,
     sort_dir: Option<String>,
+    /// Comma-separated tags for containment filtering (e.g., "twin,verified-tier-1").
+    tags: Option<String>,
 }
 
 /// `GET /api/primes?limit=50&offset=0&form=factorial` — Filtered prime listing.
@@ -144,6 +146,9 @@ pub(super) async fn handler_api_primes_list(
 ) -> impl IntoResponse {
     let limit = params.limit.unwrap_or(50).min(1000);
     let offset = params.offset.unwrap_or(0);
+    let tags = params.tags.map(|t| {
+        t.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect()
+    });
     let filter = crate::db::PrimeFilter {
         form: params.form,
         search: params.search,
@@ -151,6 +156,7 @@ pub(super) async fn handler_api_primes_list(
         max_digits: params.max_digits,
         sort_by: params.sort_by,
         sort_dir: params.sort_dir,
+        tags,
     };
 
     let (primes, total) = tokio::join!(

@@ -98,6 +98,7 @@ async fn insert_prime_and_retrieve() {
         r#"{"form":"factorial"}"#,
         "deterministic",
         None,
+        &["factorial"],
     )
     .await
     .unwrap();
@@ -127,12 +128,12 @@ async fn insert_duplicate_expression_ignored() {
     require_db!();
     let db = setup().await;
 
-    db.insert_prime("factorial", "5! + 1", 3, "{}", "deterministic", None)
+    db.insert_prime("factorial", "5! + 1", 3, "{}", "deterministic", None, &["factorial"])
         .await
         .unwrap();
 
     // insert_prime_ignore should not error on duplicate
-    db.insert_prime_ignore("factorial", "5! + 1", 3, "{}", "probabilistic")
+    db.insert_prime_ignore("factorial", "5! + 1", 3, "{}", "probabilistic", &["factorial"])
         .await
         .unwrap();
 
@@ -157,13 +158,13 @@ async fn filter_primes_by_form() {
     require_db!();
     let db = setup().await;
 
-    db.insert_prime("factorial", "5! + 1", 3, "{}", "det", None)
+    db.insert_prime("factorial", "5! + 1", 3, "{}", "det", None, &["factorial"])
         .await
         .unwrap();
-    db.insert_prime("kbn", "3*2^5+1", 2, "{}", "det", None)
+    db.insert_prime("kbn", "3*2^5+1", 2, "{}", "det", None, &["kbn"])
         .await
         .unwrap();
-    db.insert_prime("palindromic", "10301", 5, "{}", "det", None)
+    db.insert_prime("palindromic", "10301", 5, "{}", "det", None, &["palindromic"])
         .await
         .unwrap();
 
@@ -188,13 +189,13 @@ async fn filter_primes_by_digit_range() {
     require_db!();
     let db = setup().await;
 
-    db.insert_prime("factorial", "5! + 1", 3, "{}", "det", None)
+    db.insert_prime("factorial", "5! + 1", 3, "{}", "det", None, &["factorial"])
         .await
         .unwrap();
-    db.insert_prime("kbn", "3*2^100+1", 31, "{}", "det", None)
+    db.insert_prime("kbn", "3*2^100+1", 31, "{}", "det", None, &["kbn"])
         .await
         .unwrap();
-    db.insert_prime("palindromic", "10301", 5, "{}", "det", None)
+    db.insert_prime("palindromic", "10301", 5, "{}", "det", None, &["palindromic"])
         .await
         .unwrap();
 
@@ -219,13 +220,13 @@ async fn filter_primes_search_text() {
     require_db!();
     let db = setup().await;
 
-    db.insert_prime("factorial", "73! + 1", 106, "{}", "det", None)
+    db.insert_prime("factorial", "73! + 1", 106, "{}", "det", None, &["factorial"])
         .await
         .unwrap();
-    db.insert_prime("factorial", "73! - 1", 106, "{}", "det", None)
+    db.insert_prime("factorial", "73! - 1", 106, "{}", "det", None, &["factorial"])
         .await
         .unwrap();
-    db.insert_prime("kbn", "3*2^5+1", 2, "{}", "det", None)
+    db.insert_prime("kbn", "3*2^5+1", 2, "{}", "det", None, &["kbn"])
         .await
         .unwrap();
 
@@ -249,13 +250,13 @@ async fn sort_primes_ascending_descending() {
     require_db!();
     let db = setup().await;
 
-    db.insert_prime("factorial", "A", 10, "{}", "det", None)
+    db.insert_prime("factorial", "A", 10, "{}", "det", None, &["factorial"])
         .await
         .unwrap();
-    db.insert_prime("factorial", "B", 20, "{}", "det", None)
+    db.insert_prime("factorial", "B", 20, "{}", "det", None, &["factorial"])
         .await
         .unwrap();
-    db.insert_prime("factorial", "C", 5, "{}", "det", None)
+    db.insert_prime("factorial", "C", 5, "{}", "det", None, &["factorial"])
         .await
         .unwrap();
 
@@ -296,7 +297,7 @@ async fn paginate_primes() {
     let db = setup().await;
 
     for i in 1..=5 {
-        db.insert_prime("factorial", &format!("{}! + 1", i), i, "{}", "det", None)
+        db.insert_prime("factorial", &format!("{}! + 1", i), i, "{}", "det", None, &["factorial"])
             .await
             .unwrap();
     }
@@ -344,13 +345,13 @@ async fn get_filtered_count() {
     require_db!();
     let db = setup().await;
 
-    db.insert_prime("factorial", "5! + 1", 3, "{}", "det", None)
+    db.insert_prime("factorial", "5! + 1", 3, "{}", "det", None, &["factorial"])
         .await
         .unwrap();
-    db.insert_prime("kbn", "3*2^5+1", 2, "{}", "det", None)
+    db.insert_prime("kbn", "3*2^5+1", 2, "{}", "det", None, &["kbn"])
         .await
         .unwrap();
-    db.insert_prime("kbn", "3*2^7+1", 3, "{}", "det", None)
+    db.insert_prime("kbn", "3*2^7+1", 3, "{}", "det", None, &["kbn"])
         .await
         .unwrap();
 
