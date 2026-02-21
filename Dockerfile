@@ -37,8 +37,11 @@ RUN mkdir src && echo 'fn main() {}' > src/main.rs \
     && rm -rf src
 
 COPY src/ src/
-COPY benches/ benches/
-COPY tests/ tests/
+# Create stub bench/test files so Cargo.toml parses (originals in .dockerignore)
+RUN mkdir -p benches tests \
+    && for b in sieve_bench kbn_bench proof_bench core_bench flint_bench; do \
+         echo "fn main(){}" > "benches/${b}.rs"; \
+       done
 # Touch main.rs so cargo rebuilds it (not the cached dummy)
 RUN touch src/main.rs src/lib.rs \
     && cargo build --release --lib --bins
