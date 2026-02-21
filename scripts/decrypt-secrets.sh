@@ -18,11 +18,13 @@ for cmd in sops yq; do
     fi
 done
 
-if [ ! -f "${HOME}/.config/sops/age/keys.txt" ]; then
-    echo "Error: No age key found at ~/.config/sops/age/keys.txt"
+AGE_KEY_FILE="${SOPS_AGE_KEY_FILE:-${HOME}/.config/sops/age/keys.txt}"
+if [ ! -f "$AGE_KEY_FILE" ]; then
+    echo "Error: No age key found at $AGE_KEY_FILE"
     echo "Generate one with: age-keygen -o ~/.config/sops/age/keys.txt"
     exit 1
 fi
+export SOPS_AGE_KEY_FILE="$AGE_KEY_FILE"
 
 echo "Decrypting secrets..."
 

@@ -15,5 +15,4 @@
 creation_rules:
   - path_regex: ^secrets/.*\.enc\.yaml$
     age: >-
-      age1TODO_ODDURS_PUBLIC_KEY,
-      age1TODO_FRIEND_PUBLIC_KEY
+      age1slazp848j58ttg69pf6vrw367s4f4cq3p44a3wm3u55rc3855qvsua58w5
