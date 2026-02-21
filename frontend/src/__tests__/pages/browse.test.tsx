@@ -2,11 +2,10 @@
  * @file Tests for the Browse page
  * @module __tests__/pages/browse
  *
- * Validates the Browse page at `/browse`, which provides a filterable,
- * infinite-scroll list of all discovered primes. The page consumes usePrimes
- * and useStats hooks via the REST API. Tests verify page heading, subtitle
- * with total prime count, filter controls, list rendering with prime data,
- * and end-of-results indicator.
+ * Validates the Browse page at `/browse`, which provides a sortable,
+ * infinite-scroll table of all discovered primes. Tests verify page heading,
+ * subtitle with total prime count, filter controls, table rendering with
+ * prime data, sortable column headers, and form badges.
  *
  * @see {@link ../../app/browse/page} Source page
  * @see {@link ../../hooks/use-primes} usePrimes hook (data provider)
@@ -14,8 +13,6 @@
  */
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
-
-// Mock hooks used by BrowsePage
 
 const mockFetchPrimeDetail = vi.fn();
 const mockClearSelectedPrime = vi.fn();
@@ -132,25 +129,28 @@ describe("BrowsePage", () => {
 
   it("shows total prime count in subtitle", () => {
     render(<BrowsePage />);
-    expect(screen.getByText("2 primes in the archive")).toBeInTheDocument();
+    const header = screen.getByTestId("view-header");
+    expect(header).toHaveTextContent("2 primes");
   });
 
   it("renders filter controls", () => {
     render(<BrowsePage />);
     expect(screen.getByPlaceholderText("Search expressions...")).toBeInTheDocument();
-    expect(screen.getByPlaceholderText("Min")).toBeInTheDocument();
-    expect(screen.getByPlaceholderText("Max")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Min digits")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Max digits")).toBeInTheDocument();
   });
 
-  it("renders list with prime expressions", () => {
+  it("renders table with prime expressions", () => {
     render(<BrowsePage />);
     expect(screen.getByText("5!+1")).toBeInTheDocument();
     expect(screen.getByText("3*2^10+1")).toBeInTheDocument();
   });
 
-  it("renders end-of-results indicator when all loaded", () => {
+  it("renders sortable column headers", () => {
     render(<BrowsePage />);
-    expect(screen.getByText("2 primes")).toBeInTheDocument();
+    expect(screen.getByText("Expression")).toBeInTheDocument();
+    expect(screen.getByText("Digits")).toBeInTheDocument();
+    expect(screen.getByText("Found")).toBeInTheDocument();
   });
 
   it("renders form badges on rows", () => {

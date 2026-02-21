@@ -3,19 +3,30 @@
 /**
  * @module browse/page
  *
- * Infinite-scroll prime browser with a polished list view. Features:
+ * Full-width sortable prime table with infinite scroll. Features:
  *
+ * - **Sortable columns**: click headers to sort by expression, form, digits, date
  * - **Infinite scroll**: IntersectionObserver pre-fetches 400px before sentinel
- * - **Sticky filter bar**: search, form, digit range, sort — all URL-synced
+ * - **Sticky filter bar**: search, form, digit range — all URL-synced
  * - **Active filter pills**: dismissable badges showing current filters
- * - **List rows**: verification dot, expression, form badge, digits, relative time
+ * - **Verification status**: green checkmark for verified, gray circle for pending
  * - **Detail dialog**: click a row to see full prime details + verify
  * - **Loading states**: skeleton rows, end-of-results, empty state
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { ChevronRight, Download, Search, SearchX, X } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
+  CheckCircle2,
+  Circle,
+  Download,
+  Search,
+  SearchX,
+  X,
+} from "lucide-react";
 import { usePrimes, type PrimeFilter, type PrimeRecord } from "@/hooks/use-primes";
 import { useStats } from "@/hooks/use-stats";
 import {
@@ -31,7 +42,6 @@ import { ViewHeader } from "@/components/view-header";
 import { PrimeDetailDialog } from "@/components/prime-detail-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -48,18 +58,24 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
-const SORT_OPTIONS: Record<string, string> = {
-  "found_at:desc": "Newest first",
-  "found_at:asc": "Oldest first",
-  "digits:desc": "Most digits",
-  "digits:asc": "Fewest digits",
-};
+interface SortState {
+  column: string;
+  dir: "asc" | "desc";
+}
 
 function parsePositiveInteger(value: string): number | null {
   const trimmed = value.trim();
@@ -69,87 +85,26 @@ function parsePositiveInteger(value: string): number | null {
   return parsed;
 }
 
-function SkeletonRow() {
-  return (
-    <div className="flex items-center gap-4 px-4 py-2.5 border-b last:border-b-0">
-      <Skeleton className="size-2 rounded-full shrink-0" />
-      <Skeleton className="h-4 w-48 flex-1 max-w-[280px]" />
-      <Skeleton className="h-5 w-20 rounded-full shrink-0" />
-      <Skeleton className="h-4 w-16 shrink-0" />
-      <Skeleton className="h-4 w-14 shrink-0 hidden sm:block" />
-      <Skeleton className="size-4 shrink-0" />
-    </div>
+function SortIcon({ column, sort }: { column: string; sort: SortState }) {
+  if (sort.column !== column) {
+    return <ArrowUpDown className="size-3.5 text-muted-foreground/40" />;
+  }
+  return sort.dir === "asc" ? (
+    <ArrowUp className="size-3.5 text-foreground" />
+  ) : (
+    <ArrowDown className="size-3.5 text-foreground" />
   );
 }
 
-function PrimeRow({
-  prime,
-  isActive,
-  onClick,
-}: {
-  prime: PrimeRecord;
-  isActive: boolean;
-  onClick: () => void;
-}) {
+function SkeletonRow() {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "group flex items-center gap-4 w-full text-left px-4 py-2.5 border-b last:border-b-0",
-        "transition-colors duration-100 hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:outline-none",
-        isActive && "bg-muted/40"
-      )}
-    >
-      {/* Verification dot */}
-      <span
-        className={cn(
-          "size-2 rounded-full shrink-0",
-          prime.verified ? "bg-green-500" : "bg-muted-foreground/30"
-        )}
-      />
-
-      {/* Expression */}
-      <span className="font-mono text-sm text-primary truncate flex-1 min-w-0">
-        {prime.expression}
-      </span>
-
-      {/* Form badge */}
-      <Link
-        href={`/docs?doc=${formToSlug(prime.form)}`}
-        onClick={(e) => e.stopPropagation()}
-        className="shrink-0"
-      >
-        <Badge
-          variant="outline"
-          className="cursor-pointer hover:bg-secondary/50 text-[11px] px-1.5 py-0"
-        >
-          {formLabels[prime.form] ?? prime.form}
-        </Badge>
-      </Link>
-
-      {/* Digits */}
-      <span className="text-xs text-muted-foreground tabular-nums shrink-0 w-20 text-right">
-        {numberWithCommas(prime.digits)} digits
-      </span>
-
-      {/* Time */}
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span className="text-xs text-muted-foreground shrink-0 w-16 text-right hidden sm:inline-block">
-              {relativeTime(prime.found_at)}
-            </span>
-          </TooltipTrigger>
-          <TooltipContent side="bottom">
-            {formatTime(prime.found_at)}
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-
-      {/* Chevron */}
-      <ChevronRight className="size-4 text-muted-foreground/30 group-hover:text-muted-foreground/70 transition-colors shrink-0" />
-    </button>
+    <TableRow className="hover:bg-transparent">
+      <TableCell className="w-10"><Skeleton className="size-4 mx-auto rounded-full" /></TableCell>
+      <TableCell><Skeleton className="h-4 w-52" /></TableCell>
+      <TableCell><Skeleton className="h-5 w-20 rounded-full" /></TableCell>
+      <TableCell className="text-right"><Skeleton className="h-4 w-16 ml-auto" /></TableCell>
+      <TableCell className="text-right"><Skeleton className="h-4 w-20 ml-auto" /></TableCell>
+    </TableRow>
   );
 }
 
@@ -172,7 +127,7 @@ export default function BrowsePage() {
   const [formFilter, setFormFilter] = useState("");
   const [minDigits, setMinDigits] = useState("");
   const [maxDigits, setMaxDigits] = useState("");
-  const [sortKey, setSortKey] = useState("found_at:desc");
+  const [sort, setSort] = useState<SortState>({ column: "found_at", dir: "desc" });
   const [detailOpen, setDetailOpen] = useState(false);
   const [pendingPrimeId, setPendingPrimeId] = useState<number | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -181,14 +136,13 @@ export default function BrowsePage() {
   const sentinelRef = useRef<HTMLDivElement>(null);
   const total = primes.total;
 
-  // Available form names from stats + loaded primes
   const forms = useMemo(() => {
     const fromStats = stats?.by_form?.map((f) => f.form) ?? [];
     const fromPrimes = primes.primes.map((p) => p.form);
     return Array.from(new Set([...fromStats, ...fromPrimes])).sort();
   }, [stats?.by_form, primes.primes]);
 
-  // Debounce search input
+  // Debounce search
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(searchInput), 300);
     return () => clearTimeout(timer);
@@ -209,7 +163,7 @@ export default function BrowsePage() {
     if (form) setFormFilter(form);
     if (min) setMinDigits(min);
     if (max) setMaxDigits(max);
-    if (sortBy) setSortKey(`${sortBy}:${sortDir || "desc"}`);
+    if (sortBy) setSort({ column: sortBy, dir: (sortDir as "asc" | "desc") || "desc" });
     if (prime) {
       const id = Number(prime);
       if (Number.isInteger(id) && id > 0) {
@@ -228,17 +182,16 @@ export default function BrowsePage() {
     if (formFilter) params.set("form", formFilter);
     if (minDigits.trim()) params.set("min_digits", minDigits.trim());
     if (maxDigits.trim()) params.set("max_digits", maxDigits.trim());
-    const [sortBy, sortDir] = sortKey.split(":");
-    if (sortBy !== "found_at" || sortDir !== "desc") {
-      params.set("sort_by", sortBy);
-      params.set("sort_dir", sortDir);
+    if (sort.column !== "found_at" || sort.dir !== "desc") {
+      params.set("sort_by", sort.column);
+      params.set("sort_dir", sort.dir);
     }
     if (detailOpen && pendingPrimeId !== null) {
       params.set("prime", String(pendingPrimeId));
     }
     const query = params.toString();
     window.history.replaceState({}, "", query ? `/browse?${query}` : "/browse");
-  }, [debouncedSearch, formFilter, minDigits, maxDigits, sortKey, detailOpen, pendingPrimeId, initialized]);
+  }, [debouncedSearch, formFilter, minDigits, maxDigits, sort, detailOpen, pendingPrimeId, initialized]);
 
   // Digit validation
   const parsedMinDigits = useMemo(() => parsePositiveInteger(minDigits), [minDigits]);
@@ -251,28 +204,26 @@ export default function BrowsePage() {
     return null;
   }, [parsedMinDigits, parsedMaxDigits]);
 
-  // Build filter from current state
+  // Build filter
   const buildFilter = useCallback((): PrimeFilter => {
-    const [sortBy, sortDir] = sortKey.split(":");
-    const f: PrimeFilter = { sort_by: sortBy, sort_dir: sortDir };
+    const f: PrimeFilter = { sort_by: sort.column, sort_dir: sort.dir };
     if (formFilter) f.form = formFilter;
     if (debouncedSearch) f.search = debouncedSearch;
     if (parsedMinDigits && parsedMinDigits > 0) f.min_digits = parsedMinDigits;
     if (parsedMaxDigits && parsedMaxDigits > 0) f.max_digits = parsedMaxDigits;
     return f;
-  }, [formFilter, debouncedSearch, parsedMinDigits, parsedMaxDigits, sortKey]);
+  }, [formFilter, debouncedSearch, parsedMinDigits, parsedMaxDigits, sort]);
 
-  // Fetch on filter change
+  // Fetch on filter/sort change
   useEffect(() => {
     if (!initialized || digitsError) return;
     resetAndFetch(buildFilter());
-  }, [debouncedSearch, formFilter, minDigits, maxDigits, sortKey, digitsError, buildFilter, resetAndFetch, initialized]);
+  }, [debouncedSearch, formFilter, minDigits, maxDigits, sort, digitsError, buildFilter, resetAndFetch, initialized]);
 
-  // IntersectionObserver for infinite scroll
+  // Infinite scroll observer
   useEffect(() => {
     const sentinel = sentinelRef.current;
     if (!sentinel) return;
-
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting && hasMore && !isLoadingMore && !isInitialLoading) {
@@ -281,7 +232,6 @@ export default function BrowsePage() {
       },
       { rootMargin: "0px 0px 400px 0px" }
     );
-
     observer.observe(sentinel);
     return () => observer.disconnect();
   }, [hasMore, isLoadingMore, isInitialLoading, fetchNextPage]);
@@ -299,14 +249,18 @@ export default function BrowsePage() {
     if (selectedPrime.id === pendingPrimeId) setDetailLoading(false);
   }, [selectedPrime, pendingPrimeId]);
 
-  // Active filter checks
-  const hasActiveFilters = !!(
-    formFilter ||
-    debouncedSearch ||
-    minDigits ||
-    maxDigits ||
-    sortKey !== "found_at:desc"
-  );
+  // Sort handler
+  function handleSort(column: string) {
+    setSort((prev) => {
+      if (prev.column === column) {
+        return { column, dir: prev.dir === "asc" ? "desc" : "asc" };
+      }
+      return { column, dir: column === "found_at" ? "desc" : "asc" };
+    });
+  }
+
+  // Filters
+  const hasActiveFilters = !!(formFilter || debouncedSearch || minDigits || maxDigits);
 
   function clearFilters() {
     setSearchInput("");
@@ -314,7 +268,6 @@ export default function BrowsePage() {
     setFormFilter("");
     setMinDigits("");
     setMaxDigits("");
-    setSortKey("found_at:desc");
   }
 
   function handleRowClick(id: number) {
@@ -340,13 +293,12 @@ export default function BrowsePage() {
     if (debouncedSearch) params.set("search", debouncedSearch);
     if (parsedMinDigits && parsedMinDigits > 0) params.set("min_digits", String(parsedMinDigits));
     if (parsedMaxDigits && parsedMaxDigits > 0) params.set("max_digits", String(parsedMaxDigits));
-    const [sortBy, sortDir] = sortKey.split(":");
-    params.set("sort_by", sortBy);
-    params.set("sort_dir", sortDir);
+    params.set("sort_by", sort.column);
+    params.set("sort_dir", sort.dir);
     window.open(`${API_BASE}/api/export?${params.toString()}`, "_blank");
   }
 
-  // Build filter pill data
+  // Filter pills
   const filterPills: { key: string; label: string; onClear: () => void }[] = [];
   if (debouncedSearch) {
     filterPills.push({
@@ -365,24 +317,25 @@ export default function BrowsePage() {
   if (minDigits) {
     filterPills.push({
       key: "min",
-      label: `${"\u2265"} ${numberWithCommas(Number(minDigits))} digits`,
+      label: `\u2265 ${numberWithCommas(Number(minDigits))} digits`,
       onClear: () => setMinDigits(""),
     });
   }
   if (maxDigits) {
     filterPills.push({
       key: "max",
-      label: `${"\u2264"} ${numberWithCommas(Number(maxDigits))} digits`,
+      label: `\u2264 ${numberWithCommas(Number(maxDigits))} digits`,
       onClear: () => setMaxDigits(""),
     });
   }
-  if (sortKey !== "found_at:desc") {
-    filterPills.push({
-      key: "sort",
-      label: SORT_OPTIONS[sortKey],
-      onClear: () => setSortKey("found_at:desc"),
-    });
-  }
+
+  const sortLabel = sort.column === "found_at" && sort.dir === "desc" ? null :
+    sort.column === "found_at" && sort.dir === "asc" ? "Oldest first" :
+    sort.column === "digits" && sort.dir === "desc" ? "Most digits" :
+    sort.column === "digits" && sort.dir === "asc" ? "Fewest digits" :
+    sort.column === "expression" && sort.dir === "asc" ? "A\u2192Z" :
+    sort.column === "expression" && sort.dir === "desc" ? "Z\u2192A" :
+    `${sort.column} ${sort.dir}`;
 
   return (
     <>
@@ -391,7 +344,7 @@ export default function BrowsePage() {
         subtitle={
           total === 0 && !isInitialLoading
             ? "No primes yet"
-            : `${numberWithCommas(total)} primes in the archive`
+            : `${numberWithCommas(total)} primes`
         }
         actions={
           <DropdownMenu>
@@ -414,11 +367,11 @@ export default function BrowsePage() {
         className="mb-0"
       />
 
-      {/* Sticky filter bar */}
-      <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm border-b -mx-6 px-6 py-3 space-y-2">
+      {/* Filter bar */}
+      <div className="flex flex-col gap-2 py-4">
         <div className="flex flex-wrap items-center gap-2">
           {/* Search */}
-          <div className="relative flex-1 min-w-[180px] max-w-sm">
+          <div className="relative flex-1 min-w-[180px] max-w-xs">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
             <Input
               value={searchInput}
@@ -437,7 +390,7 @@ export default function BrowsePage() {
             )}
           </div>
 
-          {/* Form select */}
+          {/* Form */}
           <Select
             value={formFilter || "all"}
             onValueChange={(v) => setFormFilter(v === "all" ? "" : v)}
@@ -462,53 +415,35 @@ export default function BrowsePage() {
               min={1}
               value={minDigits}
               onChange={(e) => setMinDigits(e.target.value)}
-              placeholder="Min"
+              placeholder="Min digits"
               aria-invalid={parsedMinDigits === null}
-              className="w-[80px] h-8 text-sm"
+              className="w-[90px] h-8 text-sm"
             />
-            <span className="text-muted-foreground text-xs">-</span>
+            <span className="text-muted-foreground text-xs px-0.5">&ndash;</span>
             <Input
               type="number"
               min={1}
               value={maxDigits}
               onChange={(e) => setMaxDigits(e.target.value)}
-              placeholder="Max"
+              placeholder="Max digits"
               aria-invalid={parsedMaxDigits === null}
-              className="w-[80px] h-8 text-sm"
+              className="w-[90px] h-8 text-sm"
             />
           </div>
 
-          {/* Sort */}
-          <Select value={sortKey} onValueChange={setSortKey}>
-            <SelectTrigger className="w-[140px] h-8 text-sm">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {Object.entries(SORT_OPTIONS).map(([key, label]) => (
-                <SelectItem key={key} value={key}>
-                  {label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
           {/* Result count */}
           {!isInitialLoading && total > 0 && (
-            <span className="text-xs text-muted-foreground ml-auto hidden sm:inline">
+            <span className="text-xs text-muted-foreground ml-auto tabular-nums">
               {numberWithCommas(primes.primes.length)} of {numberWithCommas(total)}
             </span>
           )}
         </div>
 
-        {/* Active filter pills */}
-        {filterPills.length > 0 && (
+        {/* Active pills */}
+        {(filterPills.length > 0 || sortLabel) && (
           <div className="flex flex-wrap items-center gap-1.5">
             {filterPills.map((pill) => (
-              <Badge
-                key={pill.key}
-                variant="secondary"
-                className="text-xs gap-1 pr-1"
-              >
+              <Badge key={pill.key} variant="secondary" className="text-xs gap-1 pr-1 font-normal">
                 {pill.label}
                 <button
                   type="button"
@@ -519,10 +454,22 @@ export default function BrowsePage() {
                 </button>
               </Badge>
             ))}
-            {filterPills.length > 1 && (
+            {sortLabel && (
+              <Badge variant="secondary" className="text-xs gap-1 pr-1 font-normal">
+                {sortLabel}
+                <button
+                  type="button"
+                  onClick={() => setSort({ column: "found_at", dir: "desc" })}
+                  className="ml-0.5 rounded-full hover:bg-foreground/10 p-0.5"
+                >
+                  <X className="size-2.5" />
+                </button>
+              </Badge>
+            )}
+            {(filterPills.length + (sortLabel ? 1 : 0)) > 1 && (
               <button
                 type="button"
-                onClick={clearFilters}
+                onClick={() => { clearFilters(); setSort({ column: "found_at", dir: "desc" }); }}
                 className="text-xs text-muted-foreground hover:text-foreground transition-colors ml-1"
               >
                 Clear all
@@ -536,71 +483,167 @@ export default function BrowsePage() {
         )}
       </div>
 
-      {/* Prime list */}
-      <Card className="mt-4 py-0 overflow-hidden">
-        {/* Initial loading */}
-        {isInitialLoading && (
-          <>
-            {Array.from({ length: 8 }).map((_, i) => (
-              <SkeletonRow key={i} />
-            ))}
-          </>
-        )}
-
-        {/* Rows */}
-        {!isInitialLoading && primes.primes.length > 0 && (
-          <>
-            {primes.primes.map((prime) => (
-              <PrimeRow
-                key={prime.id}
-                prime={prime}
-                isActive={pendingPrimeId === prime.id}
-                onClick={() => handleRowClick(prime.id)}
-              />
-            ))}
-
-            {/* Loading more skeletons */}
-            {isLoadingMore && (
+      {/* Table */}
+      <div className="rounded-lg border">
+        <Table>
+          <TableHeader>
+            <TableRow className="hover:bg-transparent">
+              <TableHead className="w-10 text-center">
+                <span className="sr-only">Status</span>
+              </TableHead>
+              <TableHead>
+                <button
+                  type="button"
+                  onClick={() => handleSort("expression")}
+                  className="inline-flex items-center gap-1.5 hover:text-foreground transition-colors"
+                >
+                  Expression
+                  <SortIcon column="expression" sort={sort} />
+                </button>
+              </TableHead>
+              <TableHead className="w-32">
+                <button
+                  type="button"
+                  onClick={() => handleSort("form")}
+                  className="inline-flex items-center gap-1.5 hover:text-foreground transition-colors"
+                >
+                  Form
+                  <SortIcon column="form" sort={sort} />
+                </button>
+              </TableHead>
+              <TableHead className="w-28 text-right">
+                <button
+                  type="button"
+                  onClick={() => handleSort("digits")}
+                  className="inline-flex items-center gap-1.5 ml-auto hover:text-foreground transition-colors"
+                >
+                  Digits
+                  <SortIcon column="digits" sort={sort} />
+                </button>
+              </TableHead>
+              <TableHead className="w-36 text-right">
+                <button
+                  type="button"
+                  onClick={() => handleSort("found_at")}
+                  className="inline-flex items-center gap-1.5 ml-auto hover:text-foreground transition-colors"
+                >
+                  Found
+                  <SortIcon column="found_at" sort={sort} />
+                </button>
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {/* Initial loading */}
+            {isInitialLoading && (
               <>
-                {Array.from({ length: 3 }).map((_, i) => (
-                  <SkeletonRow key={`loading-${i}`} />
+                {Array.from({ length: 12 }).map((_, i) => (
+                  <SkeletonRow key={i} />
                 ))}
               </>
             )}
 
-            {/* End of results */}
-            {!hasMore && !isLoadingMore && (
-              <div className="flex items-center justify-center py-6 text-xs text-muted-foreground">
-                <span className="border-t w-8 mr-3" />
-                {numberWithCommas(total)} primes
-                <span className="border-t w-8 ml-3" />
-              </div>
-            )}
-          </>
-        )}
-
-        {/* Empty state */}
-        {!isInitialLoading && primes.primes.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
-            <SearchX className="size-10 text-muted-foreground/40 mb-3" />
-            <p className="text-sm text-muted-foreground font-medium">
-              No primes match these filters
-            </p>
-            {hasActiveFilters && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={clearFilters}
-                className="mt-2"
+            {/* Data rows */}
+            {!isInitialLoading && primes.primes.map((prime) => (
+              <TableRow
+                key={prime.id}
+                className={cn(
+                  "cursor-pointer",
+                  pendingPrimeId === prime.id && "bg-muted/60"
+                )}
+                onClick={() => handleRowClick(prime.id)}
+                tabIndex={0}
+                role="button"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    handleRowClick(prime.id);
+                  }
+                }}
               >
-                Clear all filters
-              </Button>
-            )}
-          </div>
-        )}
-      </Card>
+                <TableCell className="w-10 text-center">
+                  {prime.verified ? (
+                    <CheckCircle2 className="size-4 text-green-500 mx-auto" />
+                  ) : (
+                    <Circle className="size-4 text-muted-foreground/25 mx-auto" />
+                  )}
+                </TableCell>
+                <TableCell>
+                  <span className="font-mono text-[13px] text-primary tracking-tight">
+                    {prime.expression}
+                  </span>
+                </TableCell>
+                <TableCell>
+                  <Link
+                    href={`/docs?doc=${formToSlug(prime.form)}`}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <Badge variant="outline" className="cursor-pointer hover:bg-secondary/50 font-normal">
+                      {formLabels[prime.form] ?? prime.form}
+                    </Badge>
+                  </Link>
+                </TableCell>
+                <TableCell className="text-right tabular-nums text-muted-foreground">
+                  {numberWithCommas(prime.digits)}
+                </TableCell>
+                <TableCell className="text-right">
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="text-muted-foreground">
+                          {relativeTime(prime.found_at)}
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent side="left">
+                        {formatTime(prime.found_at)}
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </TableCell>
+              </TableRow>
+            ))}
 
-      {/* IntersectionObserver sentinel */}
+            {/* Loading more */}
+            {isLoadingMore && (
+              <>
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <SkeletonRow key={`more-${i}`} />
+                ))}
+              </>
+            )}
+
+            {/* Empty state */}
+            {!isInitialLoading && primes.primes.length === 0 && (
+              <TableRow className="hover:bg-transparent">
+                <TableCell colSpan={5} className="h-40">
+                  <div className="flex flex-col items-center justify-center text-center">
+                    <SearchX className="size-8 text-muted-foreground/30 mb-2" />
+                    <p className="text-sm text-muted-foreground">
+                      No primes match these filters
+                    </p>
+                    {hasActiveFilters && (
+                      <Button variant="ghost" size="sm" onClick={clearFilters} className="mt-2">
+                        Clear all filters
+                      </Button>
+                    )}
+                  </div>
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </div>
+
+      {/* End of results */}
+      {!isInitialLoading && !hasMore && !isLoadingMore && primes.primes.length > 0 && (
+        <div className="flex items-center justify-center py-6 text-xs text-muted-foreground">
+          <span className="border-t w-8 mr-3" />
+          {numberWithCommas(total)} primes
+          <span className="border-t w-8 ml-3" />
+        </div>
+      )}
+
+      {/* Infinite scroll sentinel */}
       <div ref={sentinelRef} className="h-1" />
 
       <PrimeDetailDialog

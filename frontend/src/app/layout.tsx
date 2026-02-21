@@ -49,7 +49,7 @@ function AuthenticatedApp({ children }: { children: React.ReactNode }) {
         <SidebarInset className="overflow-hidden">
           <TopBar />
           <div className="flex-1 overflow-y-auto">
-            <div className="container mx-auto px-6 py-6">{children}</div>
+            <div className="mx-auto max-w-7xl px-6 py-6">{children}</div>
           </div>
         </SidebarInset>
       </SidebarProvider>
