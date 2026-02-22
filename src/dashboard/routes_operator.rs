@@ -393,10 +393,7 @@ pub(super) async fn handler_v1_work(
                 let trust = state.db.get_operator_trust(vol.id).await.ok().flatten();
                 let trust_level = trust.map(|t| t.trust_level).unwrap_or(1);
                 let quorum = crate::verify::required_quorum(trust_level, search_type);
-                let _ = state
-                    .db
-                    .set_block_quorum(block.block_id, quorum)
-                    .await;
+                let _ = state.db.set_block_quorum(block.block_id, quorum).await;
             }
 
             (
@@ -500,7 +497,7 @@ pub(super) async fn handler_v1_result(
                 // Bonus credit for discoveries (10x block credit)
                 let _ = state
                     .db
-                    .grant_credit(vol.id, payload.block_id, 1000, "prime_discovered")
+                    .grant_credit(vol.id, payload.block_id as i32, 1000, "prime_discovered")
                     .await;
             }
             Err(e) => {
@@ -517,7 +514,7 @@ pub(super) async fn handler_v1_result(
     let credit = payload.tested.max(1);
     let _ = state
         .db
-        .grant_credit(vol.id, payload.block_id, credit, "block_completed")
+        .grant_credit(vol.id, payload.block_id as i32, credit, "block_completed")
         .await;
 
     // Record valid result for trust scoring

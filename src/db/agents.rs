@@ -326,7 +326,7 @@ impl Database {
             "SELECT DATE(completed_at) AS date,
                     COALESCE(agent_model, 'unknown') AS model,
                     COALESCE(SUM(cost_usd::FLOAT8), 0) AS total_cost,
-                    COALESCE(SUM(tokens_used), 0) AS total_tokens,
+                    COALESCE(SUM(tokens_used), 0)::INT8 AS total_tokens,
                     COUNT(*) AS task_count
              FROM agent_tasks
              WHERE completed_at > NOW() - ($1 || ' days')::interval
@@ -346,7 +346,7 @@ impl Database {
                     COUNT(*) AS task_count,
                     COALESCE(SUM(cost_usd::FLOAT8), 0) AS total_cost,
                     COALESCE(AVG(cost_usd::FLOAT8), 0) AS avg_cost,
-                    COALESCE(SUM(tokens_used), 0) AS total_tokens,
+                    COALESCE(SUM(tokens_used), 0)::INT8 AS total_tokens,
                     COALESCE(AVG(tokens_used::FLOAT8), 0) AS avg_tokens
              FROM agent_tasks
              WHERE template_name IS NOT NULL

@@ -306,7 +306,7 @@ impl Database {
     /// for histogram recording.
     pub async fn submit_operator_result(
         &self,
-        block_id: i32,
+        block_id: i64,
         tested: i64,
         found: i64,
     ) -> Result<Option<(f64, String)>> {
@@ -459,7 +459,7 @@ impl Database {
     // ── Quorum & Verification ─────────────────────────────────────
 
     /// Set the minimum quorum for a work block based on volunteer trust.
-    pub async fn set_block_quorum(&self, block_id: i32, min_quorum: i16) -> Result<()> {
+    pub async fn set_block_quorum(&self, block_id: i64, min_quorum: i16) -> Result<()> {
         sqlx::query("UPDATE work_blocks SET min_quorum = $2 WHERE id = $1")
             .bind(block_id)
             .bind(min_quorum)
@@ -527,7 +527,7 @@ pub struct WorkerCapabilities {
 /// Work block assigned to a volunteer (subset of work_blocks columns).
 #[derive(Serialize, sqlx::FromRow)]
 pub struct OperatorWorkBlock {
-    pub block_id: i32,
+    pub block_id: i64,
     pub search_job_id: i64,
     pub block_start: i64,
     pub block_end: i64,
