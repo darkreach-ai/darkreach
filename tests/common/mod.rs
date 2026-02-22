@@ -321,10 +321,12 @@ pub async fn truncate_all_tables(pool: &sqlx::PgPool) {
 /// to execute, since a broken schema makes all subsequent tests meaningless.
 async fn run_migrations(pool: &sqlx::PgPool) {
     // Reset schema to handle re-runs (e.g. api_integration after db_integration)
-    sqlx::raw_sql("DROP SCHEMA public CASCADE; CREATE SCHEMA public;")
-        .execute(pool)
-        .await
-        .expect("Failed to reset schema");
+    sqlx::raw_sql(
+        "DROP SCHEMA public CASCADE; CREATE SCHEMA public; CREATE EXTENSION IF NOT EXISTS pgcrypto;",
+    )
+    .execute(pool)
+    .await
+    .expect("Failed to reset schema");
 
     let migration_files = [
         "supabase/migrations/001_create_primes.sql",
