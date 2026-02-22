@@ -316,7 +316,7 @@ fn factorial_finds_known_primes() {
 ///
 /// With k=1, base=2, this searches for Mersenne primes (OEIS A000043).
 /// Known primes in [2, 20]: p = 2, 3, 5, 7, 13, 17, 19 (seven Mersenne primes).
-/// Timeout: 60 seconds.
+/// Timeout: 120 seconds (BSGS sieve initialization is ~30s on CI runners).
 #[test]
 fn kbn_finds_mersenne_primes() {
     let db_url = db_url_or_skip!();
@@ -335,7 +335,7 @@ fn kbn_finds_mersenne_primes() {
             "--max-n",
             "20",
         ])
-        .timeout(std::time::Duration::from_secs(60))
+        .timeout(std::time::Duration::from_secs(120))
         .assert()
         .success()
         .stderr(predicate::str::contains("prime found"));
