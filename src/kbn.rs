@@ -767,7 +767,7 @@ pub fn search(
                     expression = %expr,
                     digits,
                     certainty = %certainty,
-                    "Prime found"
+                    "prime found"
                 );
             }
             db.insert_prime_sync(

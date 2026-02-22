@@ -285,7 +285,7 @@ macro_rules! db_url_or_skip {
 /// - n!+1 primes: n = 1, 2, 3, 11, 27, 37, 41
 /// - n!-1 primes: n = 3, 4, 6, 7, 12, 14, 30, 32
 ///
-/// The test asserts that at least one "PRIME" message appears in stderr output.
+/// The test asserts that at least one "prime found" message appears in stderr output.
 /// Timeout: 60 seconds (factorial computation is fast for small n).
 #[test]
 fn factorial_finds_known_primes() {
@@ -306,7 +306,7 @@ fn factorial_finds_known_primes() {
         .timeout(std::time::Duration::from_secs(60))
         .assert()
         .success()
-        .stderr(predicate::str::contains("PRIME"));
+        .stderr(predicate::str::contains("prime found"));
 }
 
 /// Verifies the kbn search finds known Mersenne primes 2^p - 1.
@@ -338,7 +338,7 @@ fn kbn_finds_mersenne_primes() {
         .timeout(std::time::Duration::from_secs(60))
         .assert()
         .success()
-        .stderr(predicate::str::contains("PRIME"));
+        .stderr(predicate::str::contains("prime found"));
 }
 
 /// Verifies the palindromic search finds known palindromic primes in base 10.
@@ -373,7 +373,7 @@ fn palindromic_finds_known_primes() {
         .timeout(std::time::Duration::from_secs(60))
         .assert()
         .success()
-        .stderr(predicate::str::contains("PRIME"));
+        .stderr(predicate::str::contains("prime found"));
 }
 
 /// Verifies the Wagstaff search finds known Wagstaff primes (2^p+1)/3.
@@ -402,7 +402,7 @@ fn wagstaff_finds_known_primes() {
         .timeout(std::time::Duration::from_secs(60))
         .assert()
         .success()
-        .stderr(predicate::str::contains("PRIME").or(predicate::str::contains("PRP")));
+        .stderr(predicate::str::contains("prime found"));
 }
 
 /// Verifies the Carol/Kynea search finds known Carol and Kynea primes.
@@ -432,5 +432,5 @@ fn carol_kynea_finds_primes() {
         .timeout(std::time::Duration::from_secs(60))
         .assert()
         .success()
-        .stderr(predicate::str::contains("PRIME"));
+        .stderr(predicate::str::contains("prime found"));
 }
