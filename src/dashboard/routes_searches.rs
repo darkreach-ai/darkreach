@@ -11,6 +11,7 @@ use axum::Json;
 use std::sync::Arc;
 use tracing::info;
 
+use super::middleware_auth::RequireAdmin;
 use super::AppState;
 use crate::search_params::SearchParams;
 
@@ -28,6 +29,7 @@ pub(super) async fn handler_api_searches_list(
 }
 
 pub(super) async fn handler_api_searches_create(
+    _admin: RequireAdmin,
     State(state): State<Arc<AppState>>,
     Json(params): Json<SearchParams>,
 ) -> impl IntoResponse {
@@ -103,6 +105,7 @@ pub(super) async fn handler_api_searches_get(
 }
 
 pub(super) async fn handler_api_searches_stop(
+    _admin: RequireAdmin,
     State(state): State<Arc<AppState>>,
     AxumPath(id): AxumPath<i64>,
 ) -> impl IntoResponse {
@@ -124,6 +127,7 @@ pub(super) async fn handler_api_searches_stop(
 }
 
 pub(super) async fn handler_api_searches_pause(
+    _admin: RequireAdmin,
     State(state): State<Arc<AppState>>,
     AxumPath(id): AxumPath<i64>,
 ) -> impl IntoResponse {
@@ -145,6 +149,7 @@ pub(super) async fn handler_api_searches_pause(
 }
 
 pub(super) async fn handler_api_searches_resume(
+    _admin: RequireAdmin,
     State(state): State<Arc<AppState>>,
     AxumPath(id): AxumPath<i64>,
 ) -> impl IntoResponse {

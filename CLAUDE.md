@@ -24,6 +24,7 @@
 | **Projects** | `src/project/` + frontend | `src/CLAUDE.md` | `docs/roadmaps/projects.md` |
 | **Network** | `src/fleet.rs`, `src/pg_worker.rs` | `src/CLAUDE.md` | `docs/roadmaps/network.md` |
 | **Verification** | `src/verify.rs`, `src/classify.rs` | `src/CLAUDE.md` | `docs/roadmaps/verification.md` |
+| **Resources** | `src/resource.rs`, `src/db/operators.rs` | `src/CLAUDE.md` | `docs/roadmaps/resources.md` |
 
 ## Slash Commands
 

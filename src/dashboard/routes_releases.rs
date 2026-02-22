@@ -1,4 +1,6 @@
 //! Worker release management endpoints (operator control plane).
+//!
+//! Mutating endpoints (upsert, rollout, rollback) require admin authentication.
 
 use axum::extract::{Query, State};
 use axum::http::StatusCode;
@@ -7,6 +9,7 @@ use axum::Json;
 use serde::Deserialize;
 use std::sync::Arc;
 
+use super::middleware_auth::RequireAdmin;
 use super::AppState;
 
 #[derive(Deserialize)]
@@ -134,6 +137,7 @@ pub(super) struct UpsertReleasePayload {
 }
 
 pub(super) async fn handler_releases_upsert(
+    _admin: RequireAdmin,
     State(state): State<Arc<AppState>>,
     Json(payload): Json<UpsertReleasePayload>,
 ) -> impl IntoResponse {
@@ -182,6 +186,7 @@ fn default_rollout() -> i32 {
 }
 
 pub(super) async fn handler_releases_rollout(
+    _admin: RequireAdmin,
     State(state): State<Arc<AppState>>,
     Json(payload): Json<RolloutPayload>,
 ) -> impl IntoResponse {
@@ -217,6 +222,7 @@ pub(super) struct RollbackPayload {
 }
 
 pub(super) async fn handler_releases_rollback(
+    _admin: RequireAdmin,
     State(state): State<Arc<AppState>>,
     Json(payload): Json<RollbackPayload>,
 ) -> impl IntoResponse {

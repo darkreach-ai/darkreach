@@ -62,11 +62,12 @@ impl Database {
         digits: u64,
         search_params: &str,
         proof_method: &str,
+        certificate: Option<&str>,
         tags: &[&str],
     ) -> Result<()> {
         sqlx::query(
-            "INSERT INTO primes (form, expression, digits, found_at, search_params, proof_method, tags)
-             VALUES ($1, $2, $3, NOW(), $4, $5, $6)
+            "INSERT INTO primes (form, expression, digits, found_at, search_params, proof_method, certificate, tags)
+             VALUES ($1, $2, $3, NOW(), $4, $5, $6::jsonb, $7)
              ON CONFLICT (form, expression) DO NOTHING",
         )
         .bind(form)
@@ -74,6 +75,7 @@ impl Database {
         .bind(digits as i64)
         .bind(search_params)
         .bind(proof_method)
+        .bind(certificate)
         .bind(tags)
         .execute(&self.pool)
         .await?;
@@ -117,6 +119,7 @@ impl Database {
         digits: u64,
         search_params: &str,
         proof_method: &str,
+        certificate: Option<&str>,
         tags: &[&str],
     ) -> Result<()> {
         rt.block_on(self.insert_prime_ignore(
@@ -125,6 +128,7 @@ impl Database {
             digits,
             search_params,
             proof_method,
+            certificate,
             tags,
         ))
     }
@@ -425,6 +429,43 @@ impl Database {
         .execute(&self.pool)
         .await?;
         Ok(())
+    }
+
+    /// Get verified primes that may need (re-)classification.
+    ///
+    /// Returns primes that are verified but have no property tags beyond
+    /// structural and proof tags. Used by `darkreach classify --batch` to
+    /// retroactively classify primes that were verified before the classification
+    /// engine was deployed.
+    pub async fn get_primes_for_classification(
+        &self,
+        limit: i64,
+        form: Option<&str>,
+    ) -> Result<Vec<PrimeDetail>> {
+        let (sql, has_form) = if form.is_some() {
+            (
+                "SELECT id, form, expression, digits, found_at, search_params, proof_method, tags
+                 FROM primes WHERE verified AND form = $1 ORDER BY id LIMIT $2"
+                    .to_string(),
+                true,
+            )
+        } else {
+            (
+                "SELECT id, form, expression, digits, found_at, search_params, proof_method, tags
+                 FROM primes WHERE verified ORDER BY id LIMIT $1"
+                    .to_string(),
+                false,
+            )
+        };
+        let mut query = sqlx::query_as::<_, PrimeDetail>(&sql);
+        if has_form {
+            query = query.bind(form.unwrap());
+            query = query.bind(limit);
+        } else {
+            query = query.bind(limit);
+        }
+        let rows = query.fetch_all(&self.read_pool).await?;
+        Ok(rows)
     }
 
     /// Get tag distribution across all primes.

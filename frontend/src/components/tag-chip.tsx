@@ -25,7 +25,7 @@ function categorize(tag: string): TagCategory {
   if (tag === "deterministic" || tag === "probabilistic" || tag === "prp-only") return "proof";
   if (tag.startsWith("verified-") || tag.startsWith("verified_")) return "verification";
   if (tag === "world-record" || tag === "project-record") return "record";
-  if (["safe-prime", "sophie-germain", "palindromic", "twin-prime"].includes(tag)) return "property";
+  if (["safe-prime", "sophie-germain", "palindromic", "twin-prime", "twin", "chen", "balanced"].includes(tag)) return "property";
   return "structural";
 }
 

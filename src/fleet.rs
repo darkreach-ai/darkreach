@@ -131,6 +131,7 @@ mod tests {
             load_avg_1m: 3.5,
             load_avg_5m: 3.2,
             load_avg_15m: 3.0,
+            ..Default::default()
         });
         let json = serde_json::to_value(&worker).unwrap();
         assert!(json["metrics"].is_object());

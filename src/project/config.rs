@@ -123,6 +123,18 @@ pub struct InfrastructureConfig {
     pub required_tools: Vec<String>,
     #[serde(default)]
     pub preferred_tools: Vec<String>,
+    /// Whether this project requires GPU-capable workers.
+    #[serde(default)]
+    pub requires_gpu: Option<bool>,
+    /// Required GPU runtime (e.g., "cuda", "opencl").
+    #[serde(default)]
+    pub gpu_runtime: Option<String>,
+    /// Minimum GPU VRAM in GB required per worker.
+    #[serde(default)]
+    pub min_gpu_vram_gb: Option<u32>,
+    /// Preferred cloud region for worker placement.
+    #[serde(default)]
+    pub preferred_region: Option<String>,
 }
 
 /// The `[budget]` section: cost limits and cloud pricing.
@@ -849,6 +861,78 @@ form = "factorial"
 "#;
         let config = parse_toml(toml_str).unwrap();
         assert!(config.project.tags.is_empty());
+    }
+
+    // ── GPU infrastructure fields ─────────────────────────────
+
+    #[test]
+    fn infrastructure_gpu_fields_deserialize() {
+        let toml_str = r#"
+[project]
+name = "gpu-test"
+objective = "record"
+form = "kbn"
+
+[target]
+target_digits = 100000
+
+[infrastructure]
+min_cores = 8
+requires_gpu = true
+gpu_runtime = "cuda"
+min_gpu_vram_gb = 24
+preferred_region = "eu-west"
+"#;
+        let config = parse_toml(toml_str).unwrap();
+        let infra = config.infrastructure.unwrap();
+        assert_eq!(infra.requires_gpu, Some(true));
+        assert_eq!(infra.gpu_runtime.as_deref(), Some("cuda"));
+        assert_eq!(infra.min_gpu_vram_gb, Some(24));
+        assert_eq!(infra.preferred_region.as_deref(), Some("eu-west"));
+        assert_eq!(infra.min_cores, Some(8));
+    }
+
+    #[test]
+    fn infrastructure_gpu_fields_default_to_none() {
+        let toml_str = r#"
+[project]
+name = "no-gpu"
+objective = "custom"
+form = "factorial"
+
+[infrastructure]
+min_cores = 4
+"#;
+        let config = parse_toml(toml_str).unwrap();
+        let infra = config.infrastructure.unwrap();
+        assert!(infra.requires_gpu.is_none());
+        assert!(infra.gpu_runtime.is_none());
+        assert!(infra.min_gpu_vram_gb.is_none());
+        assert!(infra.preferred_region.is_none());
+    }
+
+    #[test]
+    fn infrastructure_gpu_fields_roundtrip() {
+        let toml_str = r#"
+[project]
+name = "gpu-roundtrip"
+objective = "custom"
+form = "kbn"
+
+[infrastructure]
+requires_gpu = true
+gpu_runtime = "opencl"
+min_gpu_vram_gb = 16
+preferred_region = "us-east"
+"#;
+        let config = parse_toml(toml_str).unwrap();
+        let serialized = toml::to_string(&config).unwrap();
+        let reparsed: ProjectConfig = toml::from_str(&serialized).unwrap();
+        let infra = reparsed.infrastructure.unwrap();
+        assert_eq!(infra.requires_gpu, Some(true));
+        assert_eq!(infra.gpu_runtime.as_deref(), Some("opencl"));
+        assert_eq!(infra.min_gpu_vram_gb, Some(16));
+        assert_eq!(infra.preferred_region.as_deref(), Some("us-east"));
     }
 
     #[test]

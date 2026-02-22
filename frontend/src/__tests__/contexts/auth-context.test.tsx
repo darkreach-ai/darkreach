@@ -24,15 +24,11 @@ import { render, screen } from "@testing-library/react";
 import React from "react";
 
 // --- Supabase auth mock ---
-// Mocks both the auth API methods and the profile table query chain.
+// Mocks the auth API methods. Profile fetching now uses fetch() to /api/auth/me.
 const mockGetSession = vi.fn();
 const mockOnAuthStateChange = vi.fn();
 const mockSignInWithPassword = vi.fn();
 const mockSignOut = vi.fn();
-const mockFromSelect = vi.fn();
-const mockFromEq = vi.fn();
-const mockFromSingle = vi.fn();
-const mockFrom = vi.fn();
 
 vi.mock("@/lib/supabase", () => ({
   supabase: {
@@ -42,8 +38,11 @@ vi.mock("@/lib/supabase", () => ({
       signInWithPassword: (...args: unknown[]) => mockSignInWithPassword(...args),
       signOut: (...args: unknown[]) => mockSignOut(...args),
     },
-    from: (...args: unknown[]) => mockFrom(...args),
   },
+}));
+
+vi.mock("@/lib/format", () => ({
+  API_BASE: "http://localhost:7001",
 }));
 
 import { AuthProvider, useAuth, AuthGuard, RoleGuard } from "@/contexts/auth-context";
@@ -62,16 +61,23 @@ function setupDefaultAuthMocks(session: unknown = null) {
 }
 
 /**
- * Sets up the profile query mock for from("profiles").select().eq("id", userId).single().
+ * Sets up the fetch mock for /api/auth/me profile endpoint.
  * Profile data includes role and operator_id for RBAC.
  */
 function setupProfileMock(profileData: unknown = null, error: unknown = null) {
-  const chain = {
-    select: mockFromSelect.mockReturnThis(),
-    eq: mockFromEq.mockReturnThis(),
-    single: mockFromSingle.mockResolvedValue({ data: profileData, error }),
-  };
-  mockFrom.mockReturnValue(chain);
+  if (error || !profileData) {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 404,
+      json: () => Promise.resolve({ error: "Not found" }),
+    });
+  } else {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve(profileData),
+    });
+  }
 }
 
 /** Test wrapper component that wraps children in AuthProvider. */

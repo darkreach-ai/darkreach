@@ -511,7 +511,7 @@ pub struct BitSieve {
 impl BitSieve {
     /// Create a sieve of `len` bits, all set to 1 (all candidates survive).
     pub fn new_all_set(len: usize) -> Self {
-        let num_words = (len + 63) / 64;
+        let num_words = len.div_ceil(64);
         let mut words = vec![u64::MAX; num_words];
         // Clear unused high bits in the last word
         let extra = num_words * 64 - len;
@@ -523,7 +523,7 @@ impl BitSieve {
 
     /// Create a sieve of `len` bits, all cleared to 0 (all eliminated).
     pub fn new_all_clear(len: usize) -> Self {
-        let num_words = (len + 63) / 64;
+        let num_words = len.div_ceil(64);
         BitSieve {
             words: vec![0u64; num_words],
             len,

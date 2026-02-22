@@ -17,6 +17,8 @@ const columns = [
       { label: "Getting Started", href: "/docs/getting-started" },
       { label: "Architecture", href: "/docs/architecture" },
       { label: "Prime Forms", href: "/docs/prime-forms" },
+      { label: "AI Engine", href: "/docs/ai-engine" },
+      { label: "Verification", href: "/docs/verification" },
       { label: "API Reference", href: "/docs/api" },
     ],
   },

@@ -270,7 +270,27 @@ pub(super) async fn handler_v1_worker_register(
         )
         .await
     {
-        Ok(()) => (StatusCode::OK, Json(serde_json::json!({"ok": true}))),
+        Ok(()) => {
+            // Populate Redis with worker metadata for fast fleet reads
+            if state.db.redis().is_some() {
+                let _ = state
+                    .db
+                    .redis_heartbeat(
+                        &payload.worker_id,
+                        &payload.hostname,
+                        payload.cores,
+                        "",
+                        "",
+                        0,
+                        0,
+                        "",
+                        None,
+                        None,
+                    )
+                    .await;
+            }
+            (StatusCode::OK, Json(serde_json::json!({"ok": true})))
+        }
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({"error": format!("Worker registration failed: {}", e)})),
@@ -296,6 +316,13 @@ pub(super) async fn handler_v1_worker_heartbeat(
     };
 
     let start = std::time::Instant::now();
+
+    // Touch Redis TTL to keep worker visible in fast fleet reads.
+    // The full worker data is populated on registration; heartbeat just refreshes the TTL.
+    if state.db.redis().is_some() {
+        let _ = state.db.redis_touch_worker(&payload.worker_id).await;
+    }
+
     let result = state.db.operator_node_heartbeat(&payload.worker_id).await;
     let rtt = start.elapsed().as_secs_f64();
     state.prom_metrics.heartbeat_rtt.observe(rtt);
@@ -407,7 +434,6 @@ pub(super) struct PrimeReportPayload {
     digits: u64,
     proof_method: String,
     #[serde(default)]
-    #[allow(dead_code)]
     certificate: Option<String>,
 }
 
@@ -454,6 +480,7 @@ pub(super) async fn handler_v1_result(
                 prime.digits,
                 "",
                 &prime.proof_method,
+                prime.certificate.as_deref(),
                 &[prime.form.as_str()],
             )
             .await;

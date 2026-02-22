@@ -499,6 +499,8 @@ fn make_fleet(workers: u32, cores: u32, ram_gb: u32) -> crate::db::FleetSummary 
         total_cores: cores,
         max_ram_gb: ram_gb,
         active_search_types: vec!["factorial".into()],
+        gpu_worker_count: 0,
+        total_gpu_vram_gb: 0,
     }
 }
 

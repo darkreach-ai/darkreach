@@ -626,6 +626,10 @@ mod tests {
             recommended_cores: None,
             required_tools: vec![],
             preferred_tools: vec!["pfgw".to_string()],
+            requires_gpu: None,
+            gpu_runtime: None,
+            min_gpu_vram_gb: None,
+            preferred_region: None,
         });
 
         let est_with_pfgw = estimate_project_cost(&pfgw_config);

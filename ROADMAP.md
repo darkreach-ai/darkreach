@@ -25,6 +25,7 @@
 | **Website** | Public-facing website at darkreach.ai | [docs/roadmaps/website.md](docs/roadmaps/website.md) |
 | **Cluster** | Multi-node cluster management | [docs/roadmaps/cluster.md](docs/roadmaps/cluster.md) |
 | **Competitive Analysis** | Market landscape and competitor research | [docs/roadmaps/competitive-analysis.md](docs/roadmaps/competitive-analysis.md) |
+| **Resources** | Heterogeneous resource pooling (GPU, storage, network relay) | [docs/roadmaps/resources.md](docs/roadmaps/resources.md) |
 
 ---
 
@@ -35,21 +36,30 @@
 - **12 search forms**: factorial, palindromic, kbn, near-repdigit, primorial, Cullen/Woodall, Wagstaff, Carol/Kynea, twin, Sophie Germain, repunit, generalized Fermat
 - **Deterministic proofs**: Proth, LLR, Pocklington, Morrison, BLS, Pepin
 - **Core primitives**: Montgomery multiplication, wheel factorization, BitSieve, Frobenius test, Pollard P-1
-- **External tools**: PFGW subprocess, GWNUM FFI (feature-gated), PRST subprocess, FLINT (feature-gated)
-- **3-tier verification**: deterministic → BPSW+MR → PFGW cross-check
+- **Multi-stage sieving**: Deep sieve → P-1 factoring → quick MR screen → full test → proof → invariant validation
+- **External tools**: PFGW subprocess, GWNUM FFI (feature-gated), PRST subprocess, FLINT (feature-gated), mtsieve OpenCL GPU sieve (6 forms)
+- **3-tier verification**: deterministic → BPSW+MR → PFGW cross-check, plus form-specific invariant validation
+- **Distributed verification queue**: quorum-based distributed verification with `FOR UPDATE SKIP LOCKED`
+- **Classification engine**: discovery-time and verification-time tagging (form, proof, property, tier tags)
+- **Tags system**: `TEXT[]` column with GIN index, tag filtering, tag distribution API
 - **Distributed fleet**: PostgreSQL-based work claiming with `FOR UPDATE SKIP LOCKED`
-- **Dashboard**: 14 pages, 50+ components, real-time via Supabase + WebSocket
+- **Dashboard**: 17 pages, 50+ components, real-time via Supabase + WebSocket
+- **Search management UI**: create/stop/pause/resume searches, all 12 forms, presets, real-time job tracking
 - **Project campaigns**: TOML-defined, multi-phase, with cost tracking and record comparison
-- **AI agent infrastructure**: tasks, budgets, memory, roles, schedules
+- **AI engine**: OODA decision loop, 7-component scoring, cost model fitting, weight learning (EWA), agent integration, fleet rebalancing
+- **AI agent infrastructure**: tasks, budgets, memory, roles, schedules, background task runner
+- **Operator client**: registration, work claiming, auto-update, trust levels, credit system
+- **Prometheus metrics**: 23 metrics (counters, gauges, histograms) with per-form labels
+- **World records tracking**: t5k.org scraping, OEIS cross-references, competitive standing
+- **Adaptive sieve depth**: calibrated from cost model data using GIMPS crossover heuristic
 - **CI/CD**: 10 CI jobs, Docker builds, signed releases (x86_64 + aarch64)
-- **449 unit tests passing**, integration tests, property tests, security tests, E2E tests
+- **1,235 tests passing** (1,010 lib + 225 integration/property/security/E2E), 509 frontend tests
 
 ### In Progress
 
-- Multi-stage sieving pipeline
-- FLINT deep integration for accelerated factorial/primorial
-- Public volunteer compute platform
-- GPU-accelerated sieving
+- Public volunteer compute platform (operator client done, packaging/onboarding WIP)
+- Public-facing website (darkreach.ai)
+- Heterogeneous resource pooling (GPU-aware routing, distributed storage, network relay)
 
 ---
 

@@ -220,6 +220,54 @@ impl Database {
         Ok(rows)
     }
 
+    /// Get cost observations for GPU-accelerated workers, for fitting separate
+    /// GPU timing curves in the LEARN phase. Reconstructs the same digit/secs
+    /// estimates as the `cost_observations` view but filtered to work blocks
+    /// completed by workers registered in `operator_nodes` with a GPU runtime.
+    pub async fn get_gpu_cost_observations(
+        &self,
+        form: &str,
+        limit: i64,
+    ) -> Result<Vec<crate::ai_engine::CostObservation>> {
+        let rows = sqlx::query_as::<_, crate::ai_engine::CostObservation>(
+            "SELECT
+                CASE
+                    WHEN sj.search_type IN ('palindromic', 'near_repdigit', 'repunit') THEN
+                        ((wb.block_start + wb.block_end) / 2.0)
+                    WHEN sj.search_type = 'factorial' THEN
+                        ((wb.block_start + wb.block_end) / 2.0)
+                        * LN((wb.block_start + wb.block_end) / 2.0 / EXP(1.0)) / LN(10.0)
+                    WHEN sj.search_type = 'primorial' THEN
+                        ((wb.block_start + wb.block_end) / 2.0) / LN(10.0)
+                    ELSE
+                        ((wb.block_start + wb.block_end) / 2.0) * 0.301
+                END::float8 AS digits,
+                (EXTRACT(EPOCH FROM (wb.completed_at - wb.claimed_at))::float8 / wb.tested) AS secs
+             FROM work_blocks wb
+             JOIN search_jobs sj ON sj.id = wb.search_job_id
+             JOIN operator_nodes on_ ON on_.worker_id = wb.claimed_by
+             WHERE sj.search_type = $1
+               AND wb.status = 'completed'
+               AND wb.tested > 0
+               AND wb.completed_at IS NOT NULL
+               AND wb.claimed_at IS NOT NULL
+               AND wb.completed_at > wb.claimed_at
+               AND on_.gpu_runtime IS NOT NULL
+               AND on_.gpu_runtime <> 'none'
+             ORDER BY wb.completed_at DESC
+             LIMIT $2",
+        )
+        .bind(form)
+        .bind(limit)
+        .fetch_all(&self.read_pool)
+        .await?;
+        // Filter out invalid results (negative or zero digits/secs)
+        Ok(rows
+            .into_iter()
+            .filter(|o| o.digits > 0.0 && o.secs > 0.0 && o.secs < 86400.0)
+            .collect())
+    }
+
     // ── Phase 6: Outcome measurement ─────────────────────────────
 
     /// Get create_project decisions that need outcome measurement.
@@ -314,6 +362,25 @@ impl Database {
         .fetch_one(&self.read_pool)
         .await?;
         Ok(count)
+    }
+
+    /// Count available work blocks grouped by search form (search_type).
+    ///
+    /// Joins `work_blocks` with `search_jobs` to map blocks back to their form.
+    /// Used by fleet rebalancing to detect forms with queued work vs exhausted forms.
+    pub async fn get_available_blocks_by_form(
+        &self,
+    ) -> Result<std::collections::HashMap<String, i64>> {
+        let rows: Vec<(String, i64)> = sqlx::query_as(
+            "SELECT j.search_type, COUNT(*)::bigint
+             FROM work_blocks b
+             JOIN search_jobs j ON j.id = b.search_job_id
+             WHERE b.status = 'available' AND j.status = 'running'
+             GROUP BY j.search_type",
+        )
+        .fetch_all(&self.read_pool)
+        .await?;
+        Ok(rows.into_iter().collect())
     }
 
     /// Count workers with a recent heartbeat (active in last 120s).

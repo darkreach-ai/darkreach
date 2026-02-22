@@ -141,11 +141,46 @@ impl Database {
         search_types.sort();
         search_types.dedup();
 
+        // Count GPU-capable workers and total VRAM from search_params or metrics.
+        // Workers report has_gpu/gpu_vram_gb in their search_params JSON.
+        let mut gpu_worker_count: u32 = 0;
+        let mut total_gpu_vram_gb: u32 = 0;
+        for w in &active {
+            let has_gpu = w
+                .metrics
+                .as_ref()
+                .and_then(|m| m.get("has_gpu"))
+                .and_then(|v| v.as_bool())
+                .or_else(|| {
+                    serde_json::from_str::<serde_json::Value>(&w.search_params)
+                        .ok()
+                        .and_then(|p| p.get("has_gpu")?.as_bool())
+                })
+                .unwrap_or(false);
+            if has_gpu {
+                gpu_worker_count += 1;
+                let vram = w
+                    .metrics
+                    .as_ref()
+                    .and_then(|m| m.get("gpu_vram_gb"))
+                    .and_then(|v| v.as_u64())
+                    .or_else(|| {
+                        serde_json::from_str::<serde_json::Value>(&w.search_params)
+                            .ok()
+                            .and_then(|p| p.get("gpu_vram_gb")?.as_u64())
+                    })
+                    .unwrap_or(0);
+                total_gpu_vram_gb += vram as u32;
+            }
+        }
+
         Ok(super::FleetSummary {
             worker_count,
             total_cores,
             max_ram_gb,
             active_search_types: search_types,
+            gpu_worker_count,
+            total_gpu_vram_gb,
         })
     }
 
@@ -283,6 +318,29 @@ impl Database {
         }
 
         Ok(workers)
+    }
+
+    /// Refresh a worker's TTL in Redis without updating data fields.
+    ///
+    /// Called on heartbeat to keep the worker key alive. If the key doesn't
+    /// exist (e.g., Redis restarted), this is a no-op — the full worker data
+    /// will be repopulated from PostgreSQL on the next fleet read.
+    pub async fn redis_touch_worker(&self, worker_id: &str) -> Result<()> {
+        let mut conn = self
+            .redis
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("Redis not configured"))?
+            .clone();
+        let key = format!("worker:{}", worker_id);
+        // Refresh TTL and update last_heartbeat timestamp
+        let now = chrono::Utc::now().to_rfc3339();
+        redis::pipe()
+            .hset(&key, "last_heartbeat", &now)
+            .expire(&key, 60)
+            .sadd("workers:active", worker_id)
+            .exec_async(&mut conn)
+            .await?;
+        Ok(())
     }
 
     /// Remove a worker from Redis (DEL hash + SREM from active set).

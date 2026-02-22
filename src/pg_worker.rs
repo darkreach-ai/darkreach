@@ -209,7 +209,7 @@ impl PgWorkerClient {
                         }
 
                         // Report block progress if we're working on a block
-                        let block_id = current_block_id.lock().unwrap().clone();
+                        let block_id = *current_block_id.lock().unwrap();
                         if let Some(bid) = block_id {
                             let _ = rt_handle.block_on(async {
                                 sqlx::query("SELECT update_block_progress($1, $2, $3, NULL)")

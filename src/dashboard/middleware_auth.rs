@@ -26,6 +26,9 @@ struct SupabaseClaims {
     /// Role claim from Supabase (e.g. "authenticated").
     #[serde(default)]
     role: String,
+    /// Email address from Supabase auth.
+    #[serde(default)]
+    email: Option<String>,
 }
 
 /// Authenticated user info, injected into request extensions.
@@ -33,6 +36,7 @@ struct SupabaseClaims {
 pub struct AuthUser {
     pub user_id: String,
     pub role: String,
+    pub email: Option<String>,
 }
 
 /// Extract the JWT secret from environment (Supabase JWT secret).
@@ -84,12 +88,14 @@ pub async fn extract_auth_user(state: &Arc<AppState>, parts: &Parts) -> Option<A
     Some(AuthUser {
         user_id: claims.sub,
         role,
+        email: claims.email,
     })
 }
 
 /// Axum extractor that requires an authenticated admin user.
 ///
 /// Returns 401 if no valid JWT is present, 403 if the user is not an admin.
+/// The inner `AuthUser` is available for handlers that need the admin's identity.
 #[allow(dead_code)]
 pub struct RequireAdmin(pub AuthUser);
 

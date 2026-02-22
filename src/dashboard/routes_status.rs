@@ -49,20 +49,24 @@ pub(super) struct ExportQuery {
     max_digits: Option<i64>,
     sort_by: Option<String>,
     sort_dir: Option<String>,
+    tags: Option<String>,
 }
 
 pub(super) async fn handler_api_export(
     State(state): State<Arc<AppState>>,
     Query(params): Query<ExportQuery>,
 ) -> impl IntoResponse {
+    let tags = params
+        .tags
+        .map(|t| t.split(',').map(|s| s.trim().to_string()).collect());
     let filter = db::PrimeFilter {
-        form: params.form,
+        form: params.form.clone(),
         search: params.search,
         min_digits: params.min_digits,
         max_digits: params.max_digits,
         sort_by: params.sort_by,
         sort_dir: params.sort_dir,
-        tags: None,
+        tags,
     };
     let format = params.format.unwrap_or_else(|| "csv".to_string());
     let primes = match state.db.get_primes_filtered(100_000, 0, &filter).await {
@@ -75,39 +79,43 @@ pub(super) async fn handler_api_export(
                 .into_response();
         }
     };
+    let date = chrono::Utc::now().format("%Y%m%d");
+    let form_suffix = params
+        .form
+        .as_deref()
+        .map(|f| format!("-{f}"))
+        .unwrap_or_default();
     if format == "json" {
         let body = serde_json::to_string_pretty(&primes).unwrap_or_default();
+        let filename =
+            format!("attachment; filename=\"darkreach-primes{form_suffix}-{date}.json\"");
         (
             [
                 (header::CONTENT_TYPE, "application/json"),
-                (
-                    header::CONTENT_DISPOSITION,
-                    "attachment; filename=\"primes.json\"",
-                ),
+                (header::CONTENT_DISPOSITION, &*filename),
             ],
             body,
         )
             .into_response()
     } else {
-        let mut csv = String::from("id,form,expression,digits,found_at,proof_method\n");
+        let mut csv = String::from("id,form,expression,digits,found_at,proof_method,tags\n");
         for p in &primes {
             csv.push_str(&format!(
-                "{},\"{}\",\"{}\",{},{},\"{}\"\n",
+                "{},\"{}\",\"{}\",{},{},\"{}\",\"{}\"\n",
                 p.id,
                 p.form.replace('"', "\"\""),
                 p.expression.replace('"', "\"\""),
                 p.digits,
                 p.found_at.to_rfc3339(),
-                p.proof_method.replace('"', "\"\"")
+                p.proof_method.replace('"', "\"\""),
+                p.tags.join(";")
             ));
         }
+        let filename = format!("attachment; filename=\"darkreach-primes{form_suffix}-{date}.csv\"");
         (
             [
                 (header::CONTENT_TYPE, "text/csv"),
-                (
-                    header::CONTENT_DISPOSITION,
-                    "attachment; filename=\"primes.csv\"",
-                ),
+                (header::CONTENT_DISPOSITION, &*filename),
             ],
             csv,
         )

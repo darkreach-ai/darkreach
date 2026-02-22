@@ -25,6 +25,7 @@ import {
   type ReactNode,
 } from "react";
 import { supabase } from "@/lib/supabase";
+import { API_BASE } from "@/lib/format";
 import type { User, Session } from "@supabase/supabase-js";
 
 export type UserRole = "admin" | "operator";
@@ -48,29 +49,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [role, setRole] = useState<UserRole | null>(null);
   const [operatorId, setOperatorId] = useState<string | null>(null);
 
-  /** Fetch user profile (role + operator_id) from user_profiles table. */
-  const fetchProfile = useCallback(async (userId: string) => {
-    const { data, error } = await supabase
-      .from("user_profiles")
-      .select("role, operator_id")
-      .eq("id", userId)
-      .single();
-    if (error || !data) {
-      // Default to operator if no profile row exists
+  /** Fetch user profile via REST API (auto-provisions operator on first call). */
+  const fetchProfile = useCallback(async (accessToken: string) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/auth/me`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (!res.ok) {
+        setRole("operator");
+        setOperatorId(null);
+        return;
+      }
+      const data = await res.json();
+      setRole((data.role ?? "operator") as UserRole);
+      setOperatorId(data.operator_id ?? null);
+    } catch {
+      // Fallback if API is unreachable
       setRole("operator");
       setOperatorId(null);
-      return;
     }
-    setRole(data.role as UserRole);
-    setOperatorId(data.operator_id ?? null);
   }, []);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
-      if (session?.user) {
-        fetchProfile(session.user.id).then(() => setLoading(false));
+      if (session?.access_token) {
+        fetchProfile(session.access_token).then(() => setLoading(false));
       } else {
         setLoading(false);
       }
@@ -81,8 +86,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
-      if (session?.user) {
-        fetchProfile(session.user.id);
+      if (session?.access_token) {
+        fetchProfile(session.access_token);
       } else {
         setRole(null);
         setOperatorId(null);

@@ -300,6 +300,7 @@ export default function BrowsePage() {
     if (debouncedSearch) params.set("search", debouncedSearch);
     if (parsedMinDigits && parsedMinDigits > 0) params.set("min_digits", String(parsedMinDigits));
     if (parsedMaxDigits && parsedMaxDigits > 0) params.set("max_digits", String(parsedMaxDigits));
+    if (tagFilter.length > 0) params.set("tags", tagFilter.join(","));
     params.set("sort_by", sort.column);
     params.set("sort_dir", sort.dir);
     window.open(`${API_BASE}/api/export?${params.toString()}`, "_blank");

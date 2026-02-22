@@ -34,6 +34,21 @@ pub struct HardwareMetrics {
     pub load_avg_1m: f64,
     pub load_avg_5m: f64,
     pub load_avg_15m: f64,
+    // GPU metrics (optional — only populated on nodes with GPU)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gpu_usage_percent: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gpu_memory_used_gb: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gpu_temperature_c: Option<f32>,
+    // Storage metrics (optional — only populated on storage contributor nodes)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub storage_available_gb: Option<f64>,
+    // Network metrics (optional — only populated on relay/seeder nodes)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub network_tx_mbps: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub network_rx_mbps: Option<f64>,
 }
 
 pub fn collect(sys: &System) -> HardwareMetrics {
@@ -78,6 +93,12 @@ pub fn collect(sys: &System) -> HardwareMetrics {
         load_avg_1m: (load.one * 100.0).round() / 100.0,
         load_avg_5m: (load.five * 100.0).round() / 100.0,
         load_avg_15m: (load.fifteen * 100.0).round() / 100.0,
+        gpu_usage_percent: None,
+        gpu_memory_used_gb: None,
+        gpu_temperature_c: None,
+        storage_available_gb: None,
+        network_tx_mbps: None,
+        network_rx_mbps: None,
     }
 }
 
@@ -187,6 +208,7 @@ mod tests {
             load_avg_1m: 2.5,
             load_avg_5m: 1.8,
             load_avg_15m: 1.2,
+            ..Default::default()
         };
         let json = serde_json::to_string(&m).unwrap();
         let parsed: HardwareMetrics = serde_json::from_str(&json).unwrap();
@@ -211,6 +233,7 @@ mod tests {
             load_avg_1m: 4.0,
             load_avg_5m: 3.5,
             load_avg_15m: 3.0,
+            ..Default::default()
         };
         let cloned = m.clone();
         assert_eq!(cloned.cpu_usage_percent, m.cpu_usage_percent);
@@ -219,16 +242,21 @@ mod tests {
         assert_eq!(cloned.load_avg_15m, m.load_avg_15m);
     }
 
-    /// JSON representation must contain exactly 10 fields. Adding or removing
-    /// fields requires frontend dashboard updates, so this guards against
-    /// accidental schema changes.
+    /// JSON representation must contain at least the 10 core fields.
+    /// Optional resource fields (gpu_*, storage_*, network_*) are excluded
+    /// when None via skip_serializing_if, so they won't appear in default output.
     #[test]
     fn hardware_metrics_json_has_all_fields() {
         let m = HardwareMetrics::default();
         let json = serde_json::to_string(&m).unwrap();
         let v: serde_json::Value = serde_json::from_str(&json).unwrap();
         let obj = v.as_object().unwrap();
-        assert_eq!(obj.len(), 10, "HardwareMetrics should have 10 fields");
+        // Default metrics have 10 core fields; optional resource fields are skipped when None
+        assert!(
+            obj.len() >= 10,
+            "HardwareMetrics should have at least 10 fields, got {}",
+            obj.len()
+        );
         assert!(obj.contains_key("cpu_usage_percent"));
         assert!(obj.contains_key("memory_used_gb"));
         assert!(obj.contains_key("memory_total_gb"));

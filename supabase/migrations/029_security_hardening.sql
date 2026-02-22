@@ -121,7 +121,7 @@ SELECT
   o.primes_found,
   o.joined_at,
   o.last_seen,
-  COALESCE(ot.trust_level, 1) AS trust_level,
+  COALESCE(ot.trust_level, 1::SMALLINT) AS trust_level,
   COUNT(DISTINCT on_node.id) AS worker_count
 FROM operators o
 LEFT JOIN operator_trust ot ON ot.volunteer_id = o.id

@@ -79,170 +79,52 @@ export function AppSidebar() {
     return href === "/" ? pathname === "/" : pathname.startsWith(href);
   }
 
-  if (!isAdmin) {
-    const operatorItems: NavItem[] = [
-      { title: "Dashboard", href: "/", icon: LayoutDashboard },
-      { title: "Browse", href: "/browse", icon: Table },
-      { title: "My Nodes", href: "/my-nodes", icon: Globe },
-      { title: "Leaderboard", href: "/leaderboard", icon: Trophy },
-      { title: "Account", href: "/account", icon: User },
-    ];
-
-    return (
-      <Sidebar side="left" collapsible="icon">
-        <SidebarHeader className="h-12 justify-center border-b border-sidebar-border">
-          <SidebarMenu>
-            <SidebarMenuItem>
-              <SidebarMenuButton size="lg" asChild tooltip="darkreach" className="[&>svg]:size-auto">
-                <Link href="/">
-                  <DarkReachLogo size={32} className="text-[#6366f1] shrink-0" />
-                  <span className="font-semibold tracking-tight text-base">darkreach</span>
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          </SidebarMenu>
-        </SidebarHeader>
-        <SidebarContent>
-          <SidebarGroup>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {operatorItems.map((item) => (
-                  <SidebarMenuItem key={item.href}>
-                    <SidebarMenuButton
-                      asChild
-                      isActive={isActive(item.href)}
-                      tooltip={item.title}
-                      className={cn(
-                        isActive(item.href) &&
-                          "border-l-2 border-[#6366f1]"
-                      )}
-                    >
-                      <Link href={item.href}>
-                        <item.icon />
-                        <span>{item.title}</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ))}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-          <SidebarSeparator />
-          <SidebarGroup>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                <SidebarMenuItem>
-                  <SidebarMenuButton asChild tooltip="Docs">
-                    <Link href="/docs">
-                      <BookOpen />
-                      <span>Docs</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-                <SidebarMenuItem>
-                  <SidebarMenuButton asChild tooltip="Discord">
-                    <a href="https://discord.gg/2Khf4t8M33" target="_blank" rel="noopener noreferrer">
-                      <MessageCircle />
-                      <span>Discord</span>
-                    </a>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        </SidebarContent>
-        <SidebarFooter>
-          {user && (
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  size="lg"
-                  tooltip={user.email?.split("@")[0] ?? "User"}
-                  className="cursor-default"
-                >
-                  <div className="flex size-8 items-center justify-center rounded-full bg-muted text-xs font-semibold shrink-0">
-                    {initials}
-                  </div>
-                  <div className="flex flex-col min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-sm font-medium truncate">
-                        {user.email?.split("@")[0] ?? "User"}
-                      </span>
-                      {role && (
-                        <span className="px-1 py-0.5 rounded text-[9px] font-semibold uppercase leading-none shrink-0 bg-emerald-500/20 text-emerald-400">
-                          {role}
-                        </span>
-                      )}
-                    </div>
-                    <span className="text-xs text-muted-foreground truncate">
-                      {user.email}
-                    </span>
-                  </div>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  onClick={() => signOut()}
-                  tooltip="Sign out"
-                  className="text-muted-foreground hover:text-foreground"
-                >
-                  <LogOut />
-                  <span>Sign out</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
-          )}
-        </SidebarFooter>
-        <SidebarRail />
-      </Sidebar>
-    );
-  }
-
-  // Admin navigation with grouped sections
-  const overview: NavItem[] = [
+  // Operator items — always visible for all users
+  const operatorItems: NavItem[] = [
     { title: "Dashboard", href: "/", icon: LayoutDashboard },
+    { title: "Browse", href: "/browse", icon: Table },
+    { title: "My Nodes", href: "/my-nodes", icon: Globe },
+    { title: "Leaderboard", href: "/leaderboard", icon: Trophy },
+    { title: "Account", href: "/account", icon: User },
   ];
 
-  const discovery: NavSection = {
-    title: "Discovery",
-    items: [
-      { title: "Browse", href: "/browse", icon: Table },
-      {
-        title: "Searches",
-        href: "/searches",
-        icon: Search,
-        badge: runningCount || undefined,
-      },
-      { title: "Verification", href: "/verification", icon: ShieldCheck },
-      { title: "Projects", href: "/projects", icon: FolderKanban },
-      { title: "Leaderboard", href: "/leaderboard", icon: Trophy },
-    ],
-  };
-
-  const operations: NavSection = {
-    title: "Operations",
-    items: [
-      { title: "Network", href: "/network", icon: Globe },
-      { title: "Observability", href: "/performance", icon: BarChart3 },
-      { title: "Logs", href: "/logs", icon: FileText },
-      { title: "Releases", href: "/releases", icon: Rocket },
-      { title: "Strategy", href: "/strategy", icon: Zap },
-    ],
-  };
-
-  const intelligence: NavSection = {
-    title: "Intelligence",
-    items: [
-      {
-        title: "Agents",
-        href: "/agents",
-        icon: Bot,
-        badge: activeAgentCount || undefined,
-      },
-    ],
-  };
-
-  const sections = [discovery, operations, intelligence];
+  // Admin sections — only visible for admin role
+  const adminSections: NavSection[] = [
+    {
+      title: "Discovery",
+      items: [
+        {
+          title: "Searches",
+          href: "/searches",
+          icon: Search,
+          badge: runningCount || undefined,
+        },
+        { title: "Verification", href: "/verification", icon: ShieldCheck },
+        { title: "Projects", href: "/projects", icon: FolderKanban },
+      ],
+    },
+    {
+      title: "Operations",
+      items: [
+        { title: "Network", href: "/network", icon: Globe },
+        { title: "Strategy", href: "/strategy", icon: Zap },
+        {
+          title: "Agents",
+          href: "/agents",
+          icon: Bot,
+          badge: activeAgentCount || undefined,
+        },
+      ],
+    },
+    {
+      title: "System",
+      items: [
+        { title: "Observability", href: "/performance", icon: BarChart3 },
+        { title: "Logs", href: "/logs", icon: FileText },
+        { title: "Releases", href: "/releases", icon: Rocket },
+      ],
+    },
+  ];
 
   return (
     <Sidebar side="left" collapsible="icon">
@@ -259,11 +141,11 @@ export function AppSidebar() {
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
-        {/* Overview (Dashboard) */}
+        {/* Operator section — always visible */}
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
-              {overview.map((item) => (
+              {operatorItems.map((item) => (
                 <SidebarMenuItem key={item.href}>
                   <SidebarMenuButton
                     asChild
@@ -285,8 +167,8 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {/* Grouped sections: Discovery, Operations, Intelligence */}
-        {sections.map((section) => (
+        {/* Admin sections — conditional */}
+        {isAdmin && adminSections.map((section) => (
           <SidebarGroup key={section.title}>
             <SidebarGroupLabel>{section.title}</SidebarGroupLabel>
             <SidebarGroupContent>

@@ -1,4 +1,6 @@
 //! Project management API — CRUD, lifecycle, cost estimation, records.
+//!
+//! Mutating endpoints (create, import, activate, pause, cancel) require admin authentication.
 
 use axum::extract::{Path as AxumPath, Query, State};
 use axum::http::StatusCode;
@@ -8,6 +10,7 @@ use serde::Deserialize;
 use std::sync::Arc;
 use tracing::info;
 
+use super::middleware_auth::RequireAdmin;
 use super::AppState;
 use crate::project;
 
@@ -52,6 +55,7 @@ pub(super) struct CreateProjectPayload {
 
 /// POST /api/projects — Create a project from JSON.
 pub(super) async fn handler_api_projects_create(
+    _admin: RequireAdmin,
     State(state): State<Arc<AppState>>,
     Json(payload): Json<CreateProjectPayload>,
 ) -> impl IntoResponse {
@@ -124,6 +128,7 @@ pub(super) struct ImportTomlPayload {
 
 /// POST /api/projects/import — Import a project from TOML content.
 pub(super) async fn handler_api_projects_import(
+    _admin: RequireAdmin,
     State(state): State<Arc<AppState>>,
     Json(payload): Json<ImportTomlPayload>,
 ) -> impl IntoResponse {
@@ -200,6 +205,7 @@ pub(super) async fn handler_api_project_get(
 
 /// POST /api/projects/{slug}/activate — Start project orchestration.
 pub(super) async fn handler_api_project_activate(
+    _admin: RequireAdmin,
     State(state): State<Arc<AppState>>,
     AxumPath(slug): AxumPath<String>,
 ) -> impl IntoResponse {
@@ -256,6 +262,7 @@ pub(super) async fn handler_api_project_activate(
 
 /// POST /api/projects/{slug}/pause — Pause project orchestration.
 pub(super) async fn handler_api_project_pause(
+    _admin: RequireAdmin,
     State(state): State<Arc<AppState>>,
     AxumPath(slug): AxumPath<String>,
 ) -> impl IntoResponse {
@@ -311,6 +318,7 @@ pub(super) async fn handler_api_project_pause(
 
 /// POST /api/projects/{slug}/cancel — Cancel a project.
 pub(super) async fn handler_api_project_cancel(
+    _admin: RequireAdmin,
     State(state): State<Arc<AppState>>,
     AxumPath(slug): AxumPath<String>,
 ) -> impl IntoResponse {

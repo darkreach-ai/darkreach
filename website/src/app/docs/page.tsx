@@ -1,18 +1,29 @@
 import { Card } from "@/components/ui/card";
-import { BookOpen, Cpu, Layers, Code2, GitPullRequest, Workflow } from "lucide-react";
+import {
+  BookOpen,
+  Cpu,
+  Layers,
+  Code2,
+  GitPullRequest,
+  Workflow,
+  Brain,
+  FolderKanban,
+  Network,
+  ShieldCheck,
+} from "lucide-react";
 import Link from "next/link";
 
 const quickLinks = [
   {
     icon: BookOpen,
     title: "Getting Started",
-    description: "Install, build, and run your first prime search in minutes.",
+    description: "Install, build, run your first search, and join the network.",
     href: "/docs/getting-started",
   },
   {
     icon: Layers,
     title: "Architecture",
-    description: "System diagram, engine/server/frontend breakdown, and data flow.",
+    description: "Five-layer system: engine, AI, server, database, and frontends.",
     href: "/docs/architecture",
   },
   {
@@ -22,15 +33,39 @@ const quickLinks = [
     href: "/docs/prime-forms",
   },
   {
+    icon: Brain,
+    title: "AI Engine",
+    description: "Autonomous OODA decision loop, scoring model, and cost prediction.",
+    href: "/docs/ai-engine",
+  },
+  {
+    icon: FolderKanban,
+    title: "Projects & Campaigns",
+    description: "Multi-phase campaigns with budgets, orchestration, and world records.",
+    href: "/docs/projects",
+  },
+  {
+    icon: Network,
+    title: "Network & Operators",
+    description: "Operators, nodes, work distribution, and joining the fleet.",
+    href: "/docs/network",
+  },
+  {
+    icon: ShieldCheck,
+    title: "Verification",
+    description: "3-tier pipeline, proof types, certificates, and external tools.",
+    href: "/docs/verification",
+  },
+  {
     icon: Code2,
     title: "API Reference",
-    description: "REST endpoints and WebSocket protocol for the coordinator.",
+    description: "REST endpoints, WebSocket protocol, and response schemas.",
     href: "/docs/api",
   },
   {
     icon: GitPullRequest,
     title: "Contributing",
-    description: "Fork/PR workflow, code style, testing, and adding new forms.",
+    description: "Fork/PR workflow, code style, testing, and project structure.",
     href: "/docs/contributing",
   },
   {

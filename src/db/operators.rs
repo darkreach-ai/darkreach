@@ -445,15 +445,14 @@ impl Database {
 
     /// Get the volunteer leaderboard (top N by credit).
     pub async fn get_operator_leaderboard(&self, limit: i64) -> Result<Vec<LeaderboardRow>> {
-        let rows =
-            sqlx::query_as::<_, LeaderboardRow>(
-                "SELECT id, username, team, credit, primes_found, joined_at, last_seen,
+        let rows = sqlx::query_as::<_, LeaderboardRow>(
+            "SELECT id, username, team, credit, primes_found, joined_at, last_seen,
                         trust_level::SMALLINT AS trust_level, worker_count
                  FROM volunteer_leaderboard LIMIT $1",
-            )
-                .bind(limit)
-                .fetch_all(&self.read_pool)
-                .await?;
+        )
+        .bind(limit)
+        .fetch_all(&self.read_pool)
+        .await?;
         Ok(rows)
     }
 

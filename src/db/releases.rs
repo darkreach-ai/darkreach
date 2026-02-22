@@ -336,7 +336,7 @@ fn rollout_bucket(worker_id: &str) -> u8 {
     let mut h = Sha256::new();
     h.update(worker_id.as_bytes());
     let digest = h.finalize();
-    (digest[0] % 100) as u8
+    digest[0] % 100
 }
 
 #[cfg(test)]

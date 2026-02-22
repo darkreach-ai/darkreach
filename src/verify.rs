@@ -934,7 +934,7 @@ fn verify_palindrome_invariant(candidate: &Integer) -> InvariantResult {
     }
 
     // Even-digit palindromes > 11 are always divisible by 11
-    if len % 2 == 0 && len > 2 {
+    if len.is_multiple_of(2) && len > 2 {
         return InvariantResult::Failed {
             check: "palindrome-structure".into(),
             reason: format!(
@@ -1139,7 +1139,7 @@ fn verify_cullen_woodall_invariant(expression: &str) -> InvariantResult {
     // Extract n: everything after '^' until space or +/-
     let after_caret = &rest[caret + 1..];
     let n_end = after_caret
-        .find(|c: char| c == ' ' || c == '+' || c == '-')
+        .find([' ', '+', '-'])
         .unwrap_or(after_caret.len());
     let n: u64 = match after_caret[..n_end].trim().parse() {
         Ok(v) => v,

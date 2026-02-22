@@ -122,7 +122,7 @@ impl Database {
         .bind(&log.component)
         .bind(&log.message)
         .bind(&log.worker_id)
-        .bind(&log.search_job_id)
+        .bind(log.search_job_id)
         .bind(&log.search_id)
         .bind(&log.context)
         .execute(&self.pool)

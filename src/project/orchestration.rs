@@ -268,6 +268,8 @@ async fn orchestrate_project(db: &Database, project: &ProjectRow) -> Result<()> 
             total_cores: 0,
             max_ram_gb: 0,
             active_search_types: vec![],
+            gpu_worker_count: 0,
+            total_gpu_vram_gb: 0,
         });
 
     for phase in phases.iter().filter(|p| p.status == "pending") {
@@ -563,7 +565,7 @@ pub(crate) fn check_fleet_requirements(
     if let Some(min_workers) = project
         .infrastructure
         .get("min_workers")
-        .or_else(|| {
+        .or({
             // Also check top-level workers config stored alongside infrastructure
             // (the dashboard serializes WorkerConfig into the project row)
             None
@@ -627,6 +629,30 @@ pub(crate) fn check_fleet_requirements(
         }
     }
 
+    // Check GPU requirements
+    if let Some(true) = project
+        .infrastructure
+        .get("requires_gpu")
+        .and_then(serde_json::Value::as_bool)
+    {
+        if fleet.gpu_worker_count == 0 {
+            return Some("Requires GPU workers, none available".to_string());
+        }
+    }
+
+    if let Some(min_vram) = project
+        .infrastructure
+        .get("min_gpu_vram_gb")
+        .and_then(serde_json::Value::as_u64)
+    {
+        if (fleet.total_gpu_vram_gb as u64) < min_vram {
+            return Some(format!(
+                "Need {} GB GPU VRAM, fleet has {} GB",
+                min_vram, fleet.total_gpu_vram_gb
+            ));
+        }
+    }
+
     None
 }
 
@@ -652,11 +678,24 @@ async fn activate_phase(
         );
     }
 
+    // Merge GPU infrastructure requirements into search job params so that
+    // claim_operator_block() WHERE clauses (Phase 1) can match against them.
+    let mut params = phase.search_params.clone();
+    if let Some(infra) = project.infrastructure.as_object() {
+        if let Some(obj) = params.as_object_mut() {
+            for key in ["requires_gpu", "gpu_runtime", "min_gpu_vram_gb"] {
+                if let Some(val) = infra.get(key) {
+                    obj.insert(key.to_string(), val.clone());
+                }
+            }
+        }
+    }
+
     // Create search job using existing infrastructure
     let job_id = db
         .create_search_job(
             search_type,
-            &phase.search_params,
+            &params,
             range_start as i64,
             range_end as i64,
             phase.block_size,
@@ -771,6 +810,8 @@ mod tests {
             total_cores: cores,
             max_ram_gb: ram_gb,
             active_search_types: search_types,
+            gpu_worker_count: 0,
+            total_gpu_vram_gb: 0,
         }
     }
 
@@ -1332,6 +1373,70 @@ mod tests {
         // Empty string in required_tools should be skipped
         let project = make_project_row(serde_json::json!({"required_tools": [""]}));
         let fleet = make_fleet(1, 8, 16, vec![]);
+        assert!(check_fleet_requirements(&project, &fleet).is_none());
+    }
+
+    // ── GPU fleet requirements ────────────────────────────────
+
+    #[test]
+    fn fleet_gpu_required_but_none_available() {
+        let project = make_project_row(serde_json::json!({"requires_gpu": true}));
+        let fleet = make_fleet(4, 32, 64, vec!["kbn".into()]);
+        // fleet has gpu_worker_count=0 by default
+        let reason = check_fleet_requirements(&project, &fleet);
+        assert!(reason.is_some());
+        assert!(reason.unwrap().contains("GPU workers"));
+    }
+
+    #[test]
+    fn fleet_gpu_required_and_available() {
+        let project = make_project_row(serde_json::json!({"requires_gpu": true}));
+        let mut fleet = make_fleet(4, 32, 64, vec!["kbn".into()]);
+        fleet.gpu_worker_count = 2;
+        fleet.total_gpu_vram_gb = 48;
+        assert!(check_fleet_requirements(&project, &fleet).is_none());
+    }
+
+    #[test]
+    fn fleet_gpu_not_required_passes_without_gpu() {
+        let project = make_project_row(serde_json::json!({"requires_gpu": false}));
+        let fleet = make_fleet(2, 16, 32, vec![]);
+        assert!(check_fleet_requirements(&project, &fleet).is_none());
+    }
+
+    #[test]
+    fn fleet_insufficient_gpu_vram() {
+        let project = make_project_row(serde_json::json!({
+            "requires_gpu": true,
+            "min_gpu_vram_gb": 80,
+        }));
+        let mut fleet = make_fleet(4, 32, 64, vec![]);
+        fleet.gpu_worker_count = 2;
+        fleet.total_gpu_vram_gb = 48;
+        let reason = check_fleet_requirements(&project, &fleet);
+        assert!(reason.is_some());
+        assert!(reason.unwrap().contains("GPU VRAM"));
+    }
+
+    #[test]
+    fn fleet_sufficient_gpu_vram() {
+        let project = make_project_row(serde_json::json!({
+            "requires_gpu": true,
+            "min_gpu_vram_gb": 48,
+        }));
+        let mut fleet = make_fleet(4, 32, 64, vec![]);
+        fleet.gpu_worker_count = 2;
+        fleet.total_gpu_vram_gb = 48;
+        assert!(check_fleet_requirements(&project, &fleet).is_none());
+    }
+
+    #[test]
+    fn fleet_gpu_vram_check_without_requires_gpu() {
+        // min_gpu_vram_gb check applies independently of requires_gpu
+        let project = make_project_row(serde_json::json!({"min_gpu_vram_gb": 24}));
+        let mut fleet = make_fleet(2, 16, 32, vec![]);
+        fleet.gpu_worker_count = 1;
+        fleet.total_gpu_vram_gb = 24;
         assert!(check_fleet_requirements(&project, &fleet).is_none());
     }
 }

@@ -63,6 +63,14 @@ pub enum Event {
         message: String,
         timestamp: Instant,
     },
+    /// A verified prime was found to have cross-form properties (e.g., a factorial
+    /// prime that is also palindromic, or a kbn prime that is also a twin prime).
+    CrossFormDiscovery {
+        prime_id: i64,
+        expression: String,
+        new_tags: Vec<String>,
+        timestamp: Instant,
+    },
 }
 
 /// A squashed notification ready for delivery to the frontend.
@@ -287,6 +295,34 @@ impl EventBus {
                     kind: "error".into(),
                     title: format!("Error: {}", context),
                     details: vec![message.clone()],
+                    count: 1,
+                    timestamp_ms: now_ms(),
+                });
+            }
+            Event::CrossFormDiscovery {
+                prime_id,
+                expression,
+                new_tags,
+                ..
+            } => {
+                let tags_str = new_tags.join(", ");
+                info!(
+                    prime_id,
+                    expression = %expression,
+                    tags = %tags_str,
+                    elapsed = %tag,
+                    "cross-form discovery"
+                );
+                self.push_record(
+                    "cross_form",
+                    &format!("#{} {} → [{}]", prime_id, expression, tags_str),
+                    elapsed,
+                );
+                self.broadcast_notification(Notification {
+                    id: self.next_id.fetch_add(1, Ordering::Relaxed),
+                    kind: "cross_form".into(),
+                    title: format!("Cross-form: {}", expression),
+                    details: new_tags.clone(),
                     count: 1,
                     timestamp_ms: now_ms(),
                 });
@@ -1060,6 +1096,56 @@ mod tests {
         let events = bus.recent_events(300);
         // Capped at 200, but should have at least that many
         assert_eq!(events.len(), RECENT_EVENTS_CAP);
+    }
+
+    // ── Cross-Form Discovery Events ──────────────────────────────
+
+    /// CrossFormDiscovery events create an immediate notification with the
+    /// discovered property tags. This alerts users when a prime is found to
+    /// have unexpected cross-form memberships (e.g., a factorial prime that
+    /// is also palindromic).
+    #[test]
+    fn emit_cross_form_discovery_creates_notification() {
+        let bus = make_bus();
+        bus.emit(Event::CrossFormDiscovery {
+            prime_id: 42,
+            expression: "100!+1".into(),
+            new_tags: vec!["twin".into(), "palindromic".into()],
+            timestamp: Instant::now(),
+        });
+        let events = bus.recent_events(100);
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].kind, "cross_form");
+        assert!(events[0].message.contains("100!+1"));
+
+        let notifs = bus.recent_notifications(100);
+        assert_eq!(notifs.len(), 1);
+        assert_eq!(notifs[0].kind, "cross_form");
+        assert!(notifs[0].title.contains("100!+1"));
+        assert!(notifs[0].details.contains(&"twin".to_string()));
+        assert!(notifs[0].details.contains(&"palindromic".to_string()));
+    }
+
+    /// CrossFormDiscovery with WebSocket should broadcast the event.
+    #[test]
+    fn ws_cross_form_discovery_broadcast() {
+        let bus = make_bus();
+        let (tx, _rx) = tokio::sync::broadcast::channel::<String>(16);
+        bus.set_ws_sender(tx);
+        let mut receiver = bus.subscribe_ws();
+
+        bus.emit(Event::CrossFormDiscovery {
+            prime_id: 7,
+            expression: "3*2^5+1".into(),
+            new_tags: vec!["safe-prime".into()],
+            timestamp: Instant::now(),
+        });
+
+        let msg = receiver.try_recv();
+        assert!(msg.is_ok());
+        let json_str = msg.unwrap();
+        assert!(json_str.contains("cross_form"));
+        assert!(json_str.contains("safe-prime"));
     }
 
     // ── Default Trait ─────────────────────────────────────────────

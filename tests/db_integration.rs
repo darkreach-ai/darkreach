@@ -1725,7 +1725,10 @@ async fn operator_trust_reset_on_invalid() {
     // One invalid result resets trust to level 0 (untrusted) and zeroes consecutive_valid
     db.record_invalid_result(op.id).await.unwrap();
     let trust = db.get_operator_trust(op.id).await.unwrap().unwrap();
-    assert_eq!(trust.trust_level, 0, "Invalid result resets to level 0 (untrusted)");
+    assert_eq!(
+        trust.trust_level, 0,
+        "Invalid result resets to level 0 (untrusted)"
+    );
     assert_eq!(trust.consecutive_valid, 0);
     assert_eq!(trust.total_invalid, 1);
     assert_eq!(trust.total_valid, 15, "total_valid preserved");

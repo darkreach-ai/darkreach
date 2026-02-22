@@ -14,13 +14,17 @@ export const docsNav: DocNavSection[] = [
     items: [
       { title: "Documentation", href: "/docs" },
       { title: "Getting Started", href: "/docs/getting-started" },
+      { title: "Architecture", href: "/docs/architecture" },
     ],
   },
   {
     title: "Guides",
     items: [
-      { title: "Architecture", href: "/docs/architecture" },
       { title: "Prime Forms", href: "/docs/prime-forms" },
+      { title: "AI Engine", href: "/docs/ai-engine" },
+      { title: "Projects & Campaigns", href: "/docs/projects" },
+      { title: "Network & Operators", href: "/docs/network" },
+      { title: "Verification", href: "/docs/verification" },
     ],
   },
   {

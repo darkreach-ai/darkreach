@@ -384,7 +384,7 @@ export default function AccountPage() {
               </>
             ) : (
               <div className="text-sm text-muted-foreground">
-                No API key found. Contact an administrator to provision one.
+                Setting up your account...
               </div>
             )}
           </CardContent>

@@ -75,7 +75,9 @@ export default function RootLayout({
           content="black-translucent"
         />
         <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-        <link rel="apple-touch-icon" href="/icon-192.png" />
+        <link rel="icon" type="image/png" sizes="32x32" href="/icon-32.png" />
+        <link rel="icon" type="image/png" sizes="16x16" href="/icon-16.png" />
+        <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
         <script
           dangerouslySetInnerHTML={{
             __html: `if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('/sw.js')})}`,

@@ -10,6 +10,7 @@ use serde::Serialize;
 use std::sync::Arc;
 use tracing::{info, warn};
 
+use super::middleware_auth::RequireAdmin;
 use super::AppState;
 use crate::{fleet, metrics};
 
@@ -109,6 +110,7 @@ pub(super) async fn handler_api_fleet(State(state): State<Arc<AppState>>) -> imp
 }
 
 pub(super) async fn handler_fleet_worker_stop(
+    _admin: RequireAdmin,
     State(state): State<Arc<AppState>>,
     AxumPath(worker_id): AxumPath<String>,
 ) -> impl IntoResponse {

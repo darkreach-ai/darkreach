@@ -328,6 +328,7 @@ mod tests {
             load_avg_1m: 2.0,
             load_avg_5m: 1.5,
             load_avg_15m: 1.0,
+            ..Default::default()
         };
         let payload = HeartbeatPayload {
             worker_id: "w1".to_string(),

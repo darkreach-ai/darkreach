@@ -596,6 +596,8 @@ impl AiEngine {
                     total_cores: 0,
                     max_ram_gb: 0,
                     active_search_types: vec![],
+                    gpu_worker_count: 0,
+                    total_gpu_vram_gb: 0,
                 });
 
         // Compute workers per form from active workers

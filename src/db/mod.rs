@@ -401,6 +401,10 @@ pub struct FleetSummary {
     pub max_ram_gb: u32,
     /// Search types currently running across the fleet.
     pub active_search_types: Vec<String>,
+    /// Number of active workers that report GPU capability.
+    pub gpu_worker_count: u32,
+    /// Sum of GPU VRAM (GB) across all GPU-capable active workers.
+    pub total_gpu_vram_gb: u32,
 }
 
 // ── Calibration types ───────────────────────────────────────────
