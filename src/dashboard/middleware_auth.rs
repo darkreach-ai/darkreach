@@ -57,11 +57,14 @@ fn decode_jwt(token: &str) -> Result<SupabaseClaims, String> {
             .map_err(|e| format!("JWT verification failed: {}", e))?;
         Ok(data.claims)
     } else {
-        // Development mode: decode without verification
+        // Development mode: decode without verification.
+        // Clear required_spec_claims so JWTs without `exp` are accepted
+        // (jsonwebtoken v9 requires `exp` by default even when validate_exp is false).
         let mut validation = Validation::new(Algorithm::HS256);
         validation.insecure_disable_signature_validation();
         validation.set_audience(&["authenticated"]);
         validation.validate_exp = false;
+        validation.set_required_spec_claims(&["aud"]);
         let data = decode::<SupabaseClaims>(token, &DecodingKey::from_secret(b""), &validation)
             .map_err(|e| format!("JWT decode failed: {}", e))?;
         Ok(data.claims)

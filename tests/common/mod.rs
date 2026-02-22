@@ -279,18 +279,37 @@ pub const TEST_ADMIN_USER_ID: &str = "00000000-0000-0000-0000-000000000001";
 
 /// Generates a JWT token for the test admin user.
 ///
+/// Uses `jsonwebtoken::encode()` to create a properly signed HS256 token.
 /// In dev mode (no `SUPABASE_JWT_SECRET`), the dashboard decodes JWTs without
-/// signature verification, so this token just needs valid structure and claims.
+/// signature verification, but we still need a structurally valid JWT.
 /// The `sub` matches `TEST_ADMIN_USER_ID` which has an "admin" role in `user_profiles`.
 pub fn test_admin_jwt() -> String {
-    use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
-    let header = URL_SAFE_NO_PAD.encode(r#"{"alg":"HS256","typ":"JWT"}"#);
-    let payload = URL_SAFE_NO_PAD.encode(format!(
-        r#"{{"sub":"{}","role":"authenticated","aud":"authenticated","email":"admin@test.com"}}"#,
-        TEST_ADMIN_USER_ID
-    ));
-    let signature = URL_SAFE_NO_PAD.encode(b"test-signature");
-    format!("{}.{}.{}", header, payload, signature)
+    use jsonwebtoken::{encode, EncodingKey, Header};
+    use serde::Serialize;
+
+    #[derive(Serialize)]
+    struct Claims {
+        sub: String,
+        role: String,
+        aud: String,
+        email: String,
+        exp: u64,
+    }
+
+    let claims = Claims {
+        sub: TEST_ADMIN_USER_ID.to_string(),
+        role: "authenticated".to_string(),
+        aud: "authenticated".to_string(),
+        email: "admin@test.com".to_string(),
+        exp: 9_999_999_999, // far future — test JWT never expires
+    };
+
+    encode(
+        &Header::default(),
+        &claims,
+        &EncodingKey::from_secret(b"test-secret"),
+    )
+    .expect("JWT encoding should not fail")
 }
 
 /// Runs all database migrations against the test database in order.
