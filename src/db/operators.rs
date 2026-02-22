@@ -318,7 +318,7 @@ impl Database {
                completed_at = NOW()
              WHERE id = $1
              RETURNING
-               EXTRACT(EPOCH FROM (NOW() - COALESCE(claimed_at, created_at)))::float8,
+               EXTRACT(EPOCH FROM (NOW() - COALESCE(claimed_at, NOW())))::float8,
                (SELECT search_type FROM search_jobs WHERE id = search_job_id)",
         )
         .bind(block_id)
