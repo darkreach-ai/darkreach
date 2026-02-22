@@ -177,7 +177,8 @@ pub async fn build_test_app() -> axum::Router {
 /// own fixtures, we centralize seeding here for consistency and brevity.
 pub async fn truncate_all_tables(pool: &sqlx::PgPool) {
     sqlx::raw_sql(
-        "TRUNCATE TABLE agent_logs, agent_schedules, agent_role_templates, agent_task_deps, agent_memory,
+        "TRUNCATE TABLE user_profiles,
+                       agent_logs, agent_schedules, agent_role_templates, agent_task_deps, agent_memory,
                        agent_events, agent_tasks, agent_budgets, agent_templates,
                        agent_roles, project_events, project_phases, projects,
                        operator_credits, operator_trust, operator_nodes, operators,
@@ -261,6 +262,35 @@ pub async fn truncate_all_tables(pool: &sqlx::PgPool) {
     .execute(pool)
     .await
     .unwrap();
+
+    // Re-seed an admin user profile for release management tests.
+    // The UUID matches the `sub` claim in the test JWT used by api_integration.
+    sqlx::raw_sql(
+        "INSERT INTO user_profiles (id, role, display_name) VALUES
+          ('00000000-0000-0000-0000-000000000001'::uuid, 'admin', 'Test Admin')",
+    )
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
+/// The test admin user ID (matches the JWT sub claim in `test_admin_jwt()`).
+pub const TEST_ADMIN_USER_ID: &str = "00000000-0000-0000-0000-000000000001";
+
+/// Generates a JWT token for the test admin user.
+///
+/// In dev mode (no `SUPABASE_JWT_SECRET`), the dashboard decodes JWTs without
+/// signature verification, so this token just needs valid structure and claims.
+/// The `sub` matches `TEST_ADMIN_USER_ID` which has an "admin" role in `user_profiles`.
+pub fn test_admin_jwt() -> String {
+    use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
+    let header = URL_SAFE_NO_PAD.encode(r#"{"alg":"HS256","typ":"JWT"}"#);
+    let payload = URL_SAFE_NO_PAD.encode(format!(
+        r#"{{"sub":"{}","role":"authenticated","aud":"authenticated","email":"admin@test.com"}}"#,
+        TEST_ADMIN_USER_ID
+    ));
+    let signature = URL_SAFE_NO_PAD.encode(b"test-signature");
+    format!("{}.{}.{}", header, payload, signature)
 }
 
 /// Runs all database migrations against the test database in order.
@@ -366,6 +396,20 @@ async fn run_migrations(pool: &sqlx::PgPool) {
         "supabase/migrations/034_prime_verification_queue.sql",
     ];
 
+    // Create user_profiles table (simplified: no FK to auth.users which is Supabase-specific)
+    let user_profiles_sql = "
+        CREATE TABLE IF NOT EXISTS user_profiles (
+            id UUID PRIMARY KEY,
+            role TEXT NOT NULL DEFAULT 'operator' CHECK (role IN ('admin', 'operator')),
+            operator_id UUID REFERENCES operators(id) ON DELETE SET NULL,
+            display_name TEXT,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_user_profiles_role ON user_profiles(role);
+        CREATE INDEX IF NOT EXISTS idx_user_profiles_operator_id ON user_profiles(operator_id);
+    ";
+
     for file in &migration_files {
         let path = std::path::Path::new(file);
         if !path.exists() {
@@ -382,6 +426,14 @@ async fn run_migrations(pool: &sqlx::PgPool) {
                 });
         }
     }
+
+    // Apply simplified user_profiles (after operators table exists from migration 019)
+    sqlx::raw_sql(user_profiles_sql)
+        .execute(pool)
+        .await
+        .unwrap_or_else(|e| {
+            panic!("user_profiles creation failed: {}", e);
+        });
 }
 
 /// Strips Supabase-specific SQL directives that fail on plain PostgreSQL.

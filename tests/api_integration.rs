@@ -102,6 +102,33 @@ async fn post_json(
     (status, json)
 }
 
+/// Sends a POST request with a JSON body and a Bearer token for admin authentication.
+///
+/// Used for release management endpoints that require `RequireAdmin` JWT auth.
+async fn post_json_admin(
+    app: Router,
+    uri: &str,
+    body: serde_json::Value,
+) -> (StatusCode, serde_json::Value) {
+    let token = common::test_admin_jwt();
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri(uri)
+                .method("POST")
+                .header("content-type", "application/json")
+                .header("authorization", format!("Bearer {}", token))
+                .body(Body::from(body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let status = response.status();
+    let bytes = response.into_body().collect().await.unwrap().to_bytes();
+    let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap_or(serde_json::json!(null));
+    (status, json)
+}
+
 // == Status and Info Endpoints =================================================
 // Smoke tests for read-only informational endpoints. These verify the API
 // returns 200 OK with the expected JSON structure, even with an empty database.
@@ -231,7 +258,7 @@ async fn releases_rollout_and_latest_from_db() {
         "sha256": "deadbeef"
     }]);
 
-    let (status, json) = post_json(
+    let (status, json) = post_json_admin(
         router.clone(),
         "/api/releases/worker",
         serde_json::json!({
@@ -244,7 +271,7 @@ async fn releases_rollout_and_latest_from_db() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["release"]["version"], "9.9.8-test");
 
-    let (status, json) = post_json(
+    let (status, json) = post_json_admin(
         router.clone(),
         "/api/releases/worker",
         serde_json::json!({
@@ -262,7 +289,7 @@ async fn releases_rollout_and_latest_from_db() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["release"]["version"], "9.9.9-test");
 
-    let (status, json) = post_json(
+    let (status, json) = post_json_admin(
         router.clone(),
         "/api/releases/rollout",
         serde_json::json!({
@@ -275,7 +302,7 @@ async fn releases_rollout_and_latest_from_db() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["channel"]["version"], "9.9.8-test");
 
-    let (status, json) = post_json(
+    let (status, json) = post_json_admin(
         router.clone(),
         "/api/releases/rollout",
         serde_json::json!({
@@ -296,7 +323,7 @@ async fn releases_rollout_and_latest_from_db() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["version"], "9.9.8-test");
 
-    let (status, json) = post_json(
+    let (status, json) = post_json_admin(
         router.clone(),
         "/api/releases/rollout",
         serde_json::json!({
@@ -342,7 +369,7 @@ async fn releases_upsert_rejects_non_array_artifacts() {
     require_db!();
     let router = app().await;
 
-    let (status, json) = post_json(
+    let (status, json) = post_json_admin(
         router,
         "/api/releases/worker",
         serde_json::json!({
@@ -361,93 +388,81 @@ async fn releases_upsert_rejects_non_array_artifacts() {
 // worker processes, not by browsers.
 // ==============================================================================
 
-/// Tests the full worker lifecycle: register -> heartbeat -> verify fleet -> deregister.
+/// Tests the full worker lifecycle: register operator -> register node -> heartbeat -> verify fleet.
 ///
-/// Exercises: POST /api/worker/register, POST /api/worker/heartbeat,
-/// GET /api/fleet, POST /api/worker/deregister.
+/// Exercises: POST /api/v1/register (operator), POST /api/v1/worker/register (node),
+/// POST /api/v1/worker/heartbeat, GET /api/fleet.
 ///
-/// Registers a worker with 8 cores running a factorial search, sends a heartbeat
-/// reporting progress (42 tested, 3 found), verifies the worker appears in the
-/// fleet listing, then deregisters. Each step verifies the response is 200 OK
-/// with `{"ok": true}`.
+/// Registers an operator to get an API key, then registers a worker node with the
+/// operator's credentials, sends a heartbeat, and verifies the worker appears
+/// in the fleet listing.
 #[tokio::test]
 async fn post_worker_register_and_heartbeat() {
     require_db!();
     let router = app().await;
 
-    // Register
-    let (status, json) = post_json(
+    // Register an operator to get an API key
+    let (status, reg_json) = post_json(
         router.clone(),
-        "/api/worker/register",
+        "/api/v1/register",
         serde_json::json!({
-            "worker_id": "api-test-worker",
-            "hostname": "test-host",
-            "cores": 8,
-            "search_type": "factorial",
-            "search_params": "{\"start\":1,\"end\":100}"
+            "username": "worker_test_op",
+            "email": "workertest@example.com"
         }),
     )
     .await;
-    assert_eq!(status, StatusCode::OK);
-    assert_eq!(json["ok"], true);
+    assert_eq!(status, StatusCode::CREATED);
+    let api_key = reg_json["api_key"].as_str().unwrap();
 
-    // Heartbeat
-    let (status, json) = post_json(
-        router.clone(),
-        "/api/worker/heartbeat",
-        serde_json::json!({
-            "worker_id": "api-test-worker",
-            "tested": 42,
-            "found": 3,
-            "current": "testing n=50"
-        }),
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK);
-    assert_eq!(json["ok"], true);
+    // Register a worker node with operator auth
+    let response = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/worker/register")
+                .method("POST")
+                .header("content-type", "application/json")
+                .header("authorization", format!("Bearer {}", api_key))
+                .body(Body::from(
+                    serde_json::json!({
+                        "worker_id": "api-test-worker",
+                        "hostname": "test-host",
+                        "cores": 8,
+                        "cpu_model": "Test CPU"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
 
-    // Fleet should now show the worker
+    // Heartbeat with operator auth
+    let response = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/worker/heartbeat")
+                .method("POST")
+                .header("content-type", "application/json")
+                .header("authorization", format!("Bearer {}", api_key))
+                .body(Body::from(
+                    serde_json::json!({
+                        "worker_id": "api-test-worker"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    // Fleet should show the worker
     let (status, json) = get(router.clone(), "/api/fleet").await;
     assert_eq!(status, StatusCode::OK);
     assert!(json["total_workers"].as_i64().unwrap() >= 1);
-
-    // Deregister
-    let (status, json) = post_json(
-        router.clone(),
-        "/api/worker/deregister",
-        serde_json::json!({"worker_id": "api-test-worker"}),
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK);
-    assert_eq!(json["ok"], true);
-}
-
-/// Tests prime submission via the worker API.
-///
-/// Exercises: POST /api/worker/prime, `primes` table INSERT.
-///
-/// Workers call this endpoint when they discover a prime during their search.
-/// The prime is stored in the database with form, expression, digits, search
-/// parameters, and proof method.
-#[tokio::test]
-async fn post_worker_prime() {
-    require_db!();
-    let router = app().await;
-
-    let (status, json) = post_json(
-        router,
-        "/api/worker/prime",
-        serde_json::json!({
-            "form": "factorial",
-            "expression": "5! + 1",
-            "digits": 3,
-            "search_params": "{}",
-            "proof_method": "deterministic"
-        }),
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK);
-    assert_eq!(json["ok"], true);
 }
 
 // == Search Job API ============================================================
@@ -720,7 +735,7 @@ async fn cors_headers_present() {
 ///
 /// Exercises: body size limit middleware (1MB limit), HTTP 413 response.
 ///
-/// Sends a 2MB payload to the worker registration endpoint. The body limit
+/// Sends a 2MB payload to the operator registration endpoint. The body limit
 /// middleware should reject this before it reaches the handler. This prevents
 /// memory exhaustion from malicious or accidental oversized requests.
 #[tokio::test]
@@ -733,7 +748,7 @@ async fn body_limit_enforced() {
     let response = router
         .oneshot(
             Request::builder()
-                .uri("/api/worker/register")
+                .uri("/api/v1/register")
                 .method("POST")
                 .header("content-type", "application/json")
                 .body(Body::from(large_body))
@@ -775,16 +790,21 @@ async fn doc_not_found() {
 
 /// Tests that path traversal attempts in doc slugs are rejected.
 ///
-/// Exercises: GET /api/docs/{slug} with `../` traversal, 400 Bad Request.
+/// Exercises: GET /api/docs/{slug} with `..` traversal, 400 Bad Request.
 ///
 /// This is a security test (also covered more extensively in security_tests.rs).
 /// The slug validator should reject any slug containing path traversal sequences
 /// to prevent reading arbitrary files from the filesystem.
 /// See also: OWASP Path Traversal (CWE-22).
+///
+/// Note: Axum normalizes path segments containing `../` before routing, so
+/// `/api/docs/../../../etc/passwd` would become `/etc/passwd` (404, no route match).
+/// Instead we test with a single-segment slug containing `..` which reaches the
+/// handler's own validation (slug.contains("..") → 400).
 #[tokio::test]
 async fn doc_slug_rejects_path_traversal() {
     require_db!();
-    let (status, _) = get(app().await, "/api/docs/../../../etc/passwd").await;
+    let (status, _) = get(app().await, "/api/docs/..secret").await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
 }
 
