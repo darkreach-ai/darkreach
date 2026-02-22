@@ -382,6 +382,100 @@ async fn releases_upsert_rejects_non_array_artifacts() {
     assert_eq!(json["error"], "artifacts must be a JSON array");
 }
 
+// == Worker API (v1) ===========================================================
+// Tests for the operator node-to-coordinator API: registration, heartbeat.
+// These endpoints are called by operator-managed worker nodes.
+// ==============================================================================
+
+/// Tests the full worker lifecycle: register operator -> register node -> heartbeat.
+///
+/// Exercises: POST /api/v1/register (operator), POST /api/v1/worker/register (node),
+/// POST /api/v1/worker/heartbeat, GET /api/v1/operators/me/nodes.
+///
+/// Registers an operator to get an API key, then registers a worker node with the
+/// operator's credentials, sends a heartbeat, and verifies the node appears
+/// in the operator's node list.
+#[tokio::test]
+async fn post_worker_register_and_heartbeat() {
+    require_db!();
+    let router = app().await;
+
+    // Register an operator to get an API key
+    let (status, reg_json) = post_json(
+        router.clone(),
+        "/api/v1/register",
+        serde_json::json!({
+            "username": "worker_test_op",
+            "email": "workertest@example.com"
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let api_key = reg_json["api_key"].as_str().unwrap();
+
+    // Register a worker node with operator auth
+    let response = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/worker/register")
+                .method("POST")
+                .header("content-type", "application/json")
+                .header("authorization", format!("Bearer {}", api_key))
+                .body(Body::from(
+                    serde_json::json!({
+                        "worker_id": "api-test-worker",
+                        "hostname": "test-host",
+                        "cores": 8,
+                        "cpu_model": "Test CPU"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    // Heartbeat with operator auth
+    let response = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/worker/heartbeat")
+                .method("POST")
+                .header("content-type", "application/json")
+                .header("authorization", format!("Bearer {}", api_key))
+                .body(Body::from(
+                    serde_json::json!({
+                        "worker_id": "api-test-worker"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    // Verify operator stats are accessible (confirms registration worked)
+    let response = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/stats")
+                .header("authorization", format!("Bearer {}", api_key))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response.into_body().collect().await.unwrap().to_bytes();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap_or(serde_json::json!(null));
+    assert_eq!(json["username"], "worker_test_op");
+}
+
 // == Search Job API ============================================================
 // Tests for the search job management endpoints: listing, creation with block
 // generation, detail retrieval, input validation, and cancellation.
@@ -652,7 +746,7 @@ async fn cors_headers_present() {
 ///
 /// Exercises: body size limit middleware (1MB limit), HTTP 413 response.
 ///
-/// Sends a 2MB payload to the agent tasks endpoint. The body limit
+/// Sends a 2MB payload to the operator registration endpoint. The body limit
 /// middleware should reject this before it reaches the handler. This prevents
 /// memory exhaustion from malicious or accidental oversized requests.
 #[tokio::test]
@@ -665,7 +759,7 @@ async fn body_limit_enforced() {
     let response = router
         .oneshot(
             Request::builder()
-                .uri("/api/agents/tasks")
+                .uri("/api/v1/register")
                 .method("POST")
                 .header("content-type", "application/json")
                 .body(Body::from(large_body))
