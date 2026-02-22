@@ -37,6 +37,7 @@ mod agents;
 pub mod ai_engine;
 mod audit;
 mod calibrations;
+mod commands;
 mod jobs;
 mod memory;
 mod observability;
@@ -73,6 +74,7 @@ pub use releases::{
 };
 pub use strategy::{FormYieldRateRow, StrategyConfigRow, StrategyDecisionRow};
 pub use trust::{NodeReliability, VerificationBlock, VerificationOutcome, WorkBlockWithCheckpoint};
+pub use commands::{CommandType, NodeCommandRow, PendingCommand};
 pub use user_profiles::UserProfile;
 
 use anyhow::Result;
@@ -210,6 +212,23 @@ pub struct WorkBlock {
     pub block_id: i64,
     pub block_start: i64,
     pub block_end: i64,
+}
+
+/// Full work block row including pipeline stage information.
+///
+/// Returned by `claim_block_by_stage` for stage-aware work claiming.
+/// Includes pipeline_stage and stage_data so workers know which stage
+/// to execute and can access intermediate results from prior stages.
+#[derive(Debug, Clone, Serialize, sqlx::FromRow)]
+pub struct WorkBlockRow {
+    pub id: i64,
+    pub search_job_id: i64,
+    pub block_start: i64,
+    pub block_end: i64,
+    /// Current pipeline stage: "sieve", "screen", "test", or "proof".
+    pub pipeline_stage: String,
+    /// Intermediate results from the previous stage (e.g., survivor indices).
+    pub stage_data: Option<Value>,
 }
 
 /// Work block details for verification queue population.

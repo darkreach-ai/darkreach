@@ -12,7 +12,7 @@
 //! 4. `reclaim_stale_blocks` recovers blocks from crashed workers (runs every 30s)
 //! 5. `get_job_block_summary` aggregates block status for progress reporting
 
-use super::{Database, JobBlockSummary, SearchJobRow, WorkBlock, WorkBlockDetails};
+use super::{Database, JobBlockSummary, SearchJobRow, WorkBlock, WorkBlockDetails, WorkBlockRow};
 use anyhow::Result;
 use serde_json::Value;
 
@@ -306,6 +306,86 @@ impl Database {
             .bind(job_id)
             .execute(&self.pool)
             .await?;
+        Ok(())
+    }
+
+    // ── Pipeline Stage Operations ────────────────────────────────
+
+    /// Claim the next available work block at a specific pipeline stage.
+    ///
+    /// Uses `FOR UPDATE SKIP LOCKED` to avoid contention between workers
+    /// targeting the same stage. This enables stage-specialized workers:
+    /// fast-sieve workers claim "sieve" blocks, GPU workers claim "test" blocks, etc.
+    ///
+    /// The pipeline stages are:
+    /// - `sieve`: Run form-specific sieve to eliminate composites
+    /// - `screen`: Quick 2-round Miller-Rabin pre-screen
+    /// - `test`: Full 25-round MR or form-specific primality test
+    /// - `proof`: Deterministic proof attempt (Pocklington/Morrison/BLS/Proth/LLR)
+    ///
+    /// Returns `None` if no blocks are available at the requested stage.
+    pub async fn claim_block_by_stage(
+        &self,
+        worker_id: &str,
+        stage: &str,
+    ) -> Result<Option<WorkBlockRow>> {
+        // Use a single query with CTE to atomically find and claim in one round-trip.
+        // The FOR UPDATE SKIP LOCKED prevents multiple workers from claiming the same block.
+        let row = sqlx::query_as::<_, WorkBlockRow>(
+            "WITH target AS (
+                SELECT id FROM work_blocks
+                WHERE status = 'available' AND pipeline_stage = $2
+                ORDER BY id
+                FOR UPDATE SKIP LOCKED
+                LIMIT 1
+            )
+            UPDATE work_blocks wb
+            SET status = 'claimed', claimed_by = $1, claimed_at = NOW()
+            FROM target
+            WHERE wb.id = target.id
+            RETURNING wb.id, wb.search_job_id, wb.block_start, wb.block_end,
+                      wb.pipeline_stage, wb.stage_data"
+        )
+        .bind(worker_id)
+        .bind(stage)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row)
+    }
+
+    /// Advance a work block to the next pipeline stage.
+    ///
+    /// After a worker completes its stage (e.g., sieve), it calls this to:
+    /// 1. Store intermediate results in `stage_data` (e.g., survivor indices)
+    /// 2. Set the block to the next stage (e.g., "screen")
+    /// 3. Reset status to 'available' so another worker can claim it
+    ///
+    /// This hand-off pattern lets cheap stages (sieve, screen) run on different
+    /// workers than expensive stages (test, proof), maximizing throughput.
+    ///
+    /// # Arguments
+    ///
+    /// * `block_id` - The work block to advance
+    /// * `next_stage` - The next pipeline stage ("screen", "test", or "proof")
+    /// * `stage_data` - Optional intermediate results from the completed stage
+    ///   (e.g., `{"survivors": [3, 7, 11, ...]}` from the sieve stage)
+    pub async fn advance_block_stage(
+        &self,
+        block_id: i64,
+        next_stage: &str,
+        stage_data: Option<serde_json::Value>,
+    ) -> Result<()> {
+        sqlx::query(
+            "UPDATE work_blocks
+             SET pipeline_stage = $2, stage_data = $3,
+                 status = 'available', claimed_by = NULL, claimed_at = NULL
+             WHERE id = $1"
+        )
+        .bind(block_id)
+        .bind(next_stage)
+        .bind(stage_data)
+        .execute(&self.pool)
+        .await?;
         Ok(())
     }
 }
