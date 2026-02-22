@@ -393,7 +393,10 @@ pub(super) async fn handler_v1_work(
                 let trust = state.db.get_operator_trust(vol.id).await.ok().flatten();
                 let trust_level = trust.map(|t| t.trust_level).unwrap_or(1);
                 let quorum = crate::verify::required_quorum(trust_level, search_type);
-                let _ = state.db.set_block_quorum(block.block_id, quorum).await;
+                let _ = state
+                    .db
+                    .set_block_quorum(block.block_id, quorum)
+                    .await;
             }
 
             (
@@ -420,7 +423,7 @@ pub(super) async fn handler_v1_work(
 
 #[derive(Deserialize)]
 pub(super) struct ResultPayload {
-    block_id: i32,
+    block_id: i64,
     tested: i64,
     found: i64,
     #[serde(default)]

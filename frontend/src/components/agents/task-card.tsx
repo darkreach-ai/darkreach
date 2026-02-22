@@ -74,10 +74,10 @@ function TaskEvents({ taskId }: { taskId: number }) {
 
 // --- Subtask Tree ---
 
-function SubtaskTree({ children }: { children: AgentTask[] }) {
-  if (children.length === 0) return null;
+function SubtaskTree({ subtasks }: { subtasks: AgentTask[] }) {
+  if (subtasks.length === 0) return null;
 
-  const completedCount = children.filter(
+  const completedCount = subtasks.filter(
     (c) => c.status === "completed" || c.status === "cancelled"
   ).length;
 
@@ -86,10 +86,10 @@ function SubtaskTree({ children }: { children: AgentTask[] }) {
       <div className="text-xs text-muted-foreground flex items-center gap-1.5">
         <GitBranch className="size-3" />
         <span>
-          {completedCount}/{children.length} steps complete
+          {completedCount}/{subtasks.length} steps complete
         </span>
       </div>
-      {children.map((child, idx) => (
+      {subtasks.map((child, idx) => (
         <div
           key={child.id}
           className="flex items-center gap-2 text-xs pl-4 py-0.5"
@@ -345,14 +345,14 @@ function TaskDetailDialog({
 
 interface TaskCardProps {
   task: AgentTask;
-  children: AgentTask[];
+  subtasks: AgentTask[];
 }
 
-export function TaskCard({ task, children }: TaskCardProps) {
+export function TaskCard({ task, subtasks }: TaskCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
-  const hasChildren = children.length > 0;
+  const hasChildren = subtasks.length > 0;
 
   async function handleCancel() {
     setCancelling(true);
@@ -445,7 +445,7 @@ export function TaskCard({ task, children }: TaskCardProps) {
           )}
           <span className="text-muted-foreground/60">#{task.id}</span>
         </div>
-        {hasChildren && <SubtaskTree children={children} />}
+        {hasChildren && <SubtaskTree subtasks={subtasks} />}
         {expanded && <TaskEvents taskId={task.id} />}
       </CardContent>
       <TaskDetailDialog task={task} open={detailOpen} onOpenChange={setDetailOpen} />

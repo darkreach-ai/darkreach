@@ -20,9 +20,9 @@
  * @see {@link ../../hooks/use-websocket} WebSocket transport
  * @see {@link ../../hooks/use-polling} HTTP polling fallback
  */
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { renderHook } from "@testing-library/react";
-import React from "react";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { render, renderHook } from "@testing-library/react";
+import React, { useEffect } from "react";
 
 // --- Mock useWebSocket and usePolling before imports ---
 // WebSocket mock: simulates a disconnected state with empty data
@@ -174,7 +174,7 @@ describe("WebSocketProvider", () => {
       return <div data-testid="ws-status">{data.connected ? "connected" : "disconnected"}</div>;
     };
 
-    const { container } = require("@testing-library/react").render(
+    const { container } = render(
       <WebSocketProvider>
         <TestChild />
       </WebSocketProvider>
@@ -189,27 +189,27 @@ describe("WebSocketProvider", () => {
    * context sharing without unnecessary re-renders.
    */
   it("provides the same data to multiple consumers", () => {
-    const results: unknown[] = [];
+    const captured: unknown[] = [null, null];
 
     function Consumer1() {
       const data = useWs();
-      results[0] = data;
+      useEffect(() => { captured[0] = data; });
       return null;
     }
 
     function Consumer2() {
       const data = useWs();
-      results[1] = data;
+      useEffect(() => { captured[1] = data; });
       return null;
     }
 
-    require("@testing-library/react").render(
+    render(
       <WebSocketProvider>
         <Consumer1 />
         <Consumer2 />
       </WebSocketProvider>
     );
 
-    expect(results[0]).toBe(results[1]);
+    expect(captured[0]).toBe(captured[1]);
   });
 });

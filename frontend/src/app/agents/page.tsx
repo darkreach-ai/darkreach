@@ -197,7 +197,7 @@ export default function AgentsPage() {
           ) : (
             <div className="space-y-2">
               {filteredTree.map((node: TaskTreeNode) => (
-                <TaskCard key={node.task.id} task={node.task} children={node.children} />
+                <TaskCard key={node.task.id} task={node.task} subtasks={node.children} />
               ))}
             </div>
           )}

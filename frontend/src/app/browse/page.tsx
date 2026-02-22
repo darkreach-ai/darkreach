@@ -27,7 +27,7 @@ import {
   SearchX,
   X,
 } from "lucide-react";
-import { usePrimes, type PrimeFilter, type PrimeRecord } from "@/hooks/use-primes";
+import { usePrimes, type PrimeFilter } from "@/hooks/use-primes";
 import { useStats } from "@/hooks/use-stats";
 import { useTagDistribution } from "@/hooks/use-prime-verification";
 import { TagChip } from "@/components/tag-chip";
@@ -135,7 +135,6 @@ export default function BrowsePage() {
   const [sort, setSort] = useState<SortState>({ column: "found_at", dir: "desc" });
   const [detailOpen, setDetailOpen] = useState(false);
   const [pendingPrimeId, setPendingPrimeId] = useState<number | null>(null);
-  const [detailLoading, setDetailLoading] = useState(false);
   const [initialized, setInitialized] = useState(false);
 
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -153,30 +152,37 @@ export default function BrowsePage() {
     return () => clearTimeout(timer);
   }, [searchInput]);
 
-  // Parse URL params on mount
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const q = params.get("q");
-    const form = params.get("form");
-    const min = params.get("min_digits");
-    const max = params.get("max_digits");
-    const sortBy = params.get("sort_by");
-    const sortDir = params.get("sort_dir");
-    const prime = params.get("prime");
+  // Derive detail loading from existing state (avoids setState in effects)
+  const detailLoading = pendingPrimeId !== null && detailOpen &&
+    (!selectedPrime || selectedPrime.id !== pendingPrimeId);
 
-    if (q) { setSearchInput(q); setDebouncedSearch(q); }
-    if (form) setFormFilter(form);
-    if (min) setMinDigits(min);
-    if (max) setMaxDigits(max);
-    if (sortBy) setSort({ column: sortBy, dir: (sortDir as "asc" | "desc") || "desc" });
-    if (prime) {
-      const id = Number(prime);
-      if (Number.isInteger(id) && id > 0) {
-        setPendingPrimeId(id);
-        setDetailOpen(true);
+  // Parse URL params on mount (setTimeout avoids synchronous setState in effect)
+  useEffect(() => {
+    const id = setTimeout(() => {
+      const params = new URLSearchParams(window.location.search);
+      const q = params.get("q");
+      const form = params.get("form");
+      const min = params.get("min_digits");
+      const max = params.get("max_digits");
+      const sortBy = params.get("sort_by");
+      const sortDir = params.get("sort_dir");
+      const prime = params.get("prime");
+
+      if (q) { setSearchInput(q); setDebouncedSearch(q); }
+      if (form) setFormFilter(form);
+      if (min) setMinDigits(min);
+      if (max) setMaxDigits(max);
+      if (sortBy) setSort({ column: sortBy, dir: (sortDir as "asc" | "desc") || "desc" });
+      if (prime) {
+        const primeId = Number(prime);
+        if (Number.isInteger(primeId) && primeId > 0) {
+          setPendingPrimeId(primeId);
+          setDetailOpen(true);
+        }
       }
-    }
-    setInitialized(true);
+      setInitialized(true);
+    }, 0);
+    return () => clearTimeout(id);
   }, []);
 
   // Sync state to URL
@@ -246,14 +252,8 @@ export default function BrowsePage() {
   useEffect(() => {
     if (pendingPrimeId === null || !detailOpen) return;
     clearSelectedPrime();
-    setDetailLoading(true);
     fetchPrimeDetail(pendingPrimeId);
   }, [pendingPrimeId, detailOpen, fetchPrimeDetail, clearSelectedPrime]);
-
-  useEffect(() => {
-    if (!selectedPrime || pendingPrimeId === null) return;
-    if (selectedPrime.id === pendingPrimeId) setDetailLoading(false);
-  }, [selectedPrime, pendingPrimeId]);
 
   // Sort handler
   function handleSort(column: string) {
@@ -279,7 +279,6 @@ export default function BrowsePage() {
 
   function handleRowClick(id: number) {
     setPendingPrimeId(id);
-    setDetailLoading(true);
     setDetailOpen(true);
   }
 
@@ -287,7 +286,6 @@ export default function BrowsePage() {
     if (!open) {
       setDetailOpen(false);
       setPendingPrimeId(null);
-      setDetailLoading(false);
       clearSelectedPrime();
     }
   }

@@ -56,6 +56,7 @@ vi.mock("@/lib/format", () => ({
 }));
 
 import { TaskCard } from "@/components/agents/task-card";
+import type { AgentTask } from "@/hooks/use-agents";
 
 const baseTask = {
   id: 1,
@@ -78,28 +79,28 @@ const baseTask = {
 // completed state (no Cancel), subtask tree, and cost/budget display.
 describe("TaskCard", () => {
   it("renders task title", () => {
-    render(<TaskCard task={baseTask as any} children={[]} />);
+    render(<TaskCard task={baseTask as unknown as AgentTask} subtasks={[]} />);
     expect(screen.getByText("Optimize sieve module")).toBeInTheDocument();
   });
 
   it("shows status badge", () => {
-    render(<TaskCard task={baseTask as any} children={[]} />);
+    render(<TaskCard task={baseTask as unknown as AgentTask} subtasks={[]} />);
     expect(screen.getByTestId("status-badge")).toHaveTextContent("in_progress");
   });
 
   it("shows Details button", () => {
-    render(<TaskCard task={baseTask as any} children={[]} />);
+    render(<TaskCard task={baseTask as unknown as AgentTask} subtasks={[]} />);
     expect(screen.getByText("Details")).toBeInTheDocument();
   });
 
   it("shows Cancel button for active tasks", () => {
-    render(<TaskCard task={baseTask as any} children={[]} />);
+    render(<TaskCard task={baseTask as unknown as AgentTask} subtasks={[]} />);
     expect(screen.getByText("Cancel")).toBeInTheDocument();
   });
 
   it("hides Cancel button for completed tasks", () => {
     const completedTask = { ...baseTask, status: "completed" };
-    render(<TaskCard task={completedTask as any} children={[]} />);
+    render(<TaskCard task={completedTask as unknown as AgentTask} subtasks={[]} />);
     expect(screen.queryByText("Cancel")).not.toBeInTheDocument();
   });
 
@@ -138,12 +139,12 @@ describe("TaskCard", () => {
         parent_id: 1,
       },
     ];
-    render(<TaskCard task={baseTask as any} children={children as any} />);
+    render(<TaskCard task={baseTask as unknown as AgentTask} subtasks={children as unknown as AgentTask[]} />);
     expect(screen.getByText("1/2 steps complete")).toBeInTheDocument();
   });
 
   it("displays cost information", () => {
-    render(<TaskCard task={baseTask as any} children={[]} />);
+    render(<TaskCard task={baseTask as unknown as AgentTask} subtasks={[]} />);
     expect(screen.getByText("$0.4500")).toBeInTheDocument();
     expect(screen.getByText("max $5.00")).toBeInTheDocument();
   });

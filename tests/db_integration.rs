@@ -147,6 +147,7 @@ async fn insert_duplicate_expression_ignored() {
         3,
         "{}",
         "probabilistic",
+        None,
         &["factorial"],
     )
     .await
