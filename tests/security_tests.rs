@@ -128,10 +128,10 @@ async fn sql_injection_sort_column_sanitized() {
             "Injection attempt should not crash: {}",
             injection
         );
-        // Should return valid JSON array
+        // Should return valid JSON with primes array
         assert!(
-            json.is_array(),
-            "Response should be valid JSON array for: {}",
+            json["primes"].is_array(),
+            "Response should contain primes array for: {}",
             injection
         );
     }
@@ -210,8 +210,8 @@ async fn sql_injection_search_param_escaped() {
             injection
         );
         assert!(
-            json.is_array(),
-            "Should return valid JSON for: {}",
+            json["primes"].is_array(),
+            "Should return valid JSON with primes for: {}",
             injection
         );
     }
@@ -247,7 +247,7 @@ async fn body_size_limit_enforced() {
     let response = router
         .oneshot(
             Request::builder()
-                .uri("/api/worker/register")
+                .uri("/api/agents/tasks")
                 .method(Method::POST)
                 .header("content-type", "application/json")
                 .body(Body::from(large_body))
@@ -476,7 +476,7 @@ async fn malformed_json_returns_error() {
     let response = router
         .oneshot(
             Request::builder()
-                .uri("/api/worker/register")
+                .uri("/api/agents/tasks")
                 .method(Method::POST)
                 .header("content-type", "application/json")
                 .body(Body::from("{invalid json}"))
