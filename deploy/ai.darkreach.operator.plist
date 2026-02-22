@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Darkreach Operator Node — macOS launchd agent
+
+  Install to: ~/Library/LaunchAgents/ai.darkreach.operator.plist
+
+  Usage:
+    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/ai.darkreach.operator.plist
+    launchctl print gui/$(id -u)/ai.darkreach.operator
+    launchctl bootout gui/$(id -u)/ai.darkreach.operator
+    tail -f ~/.darkreach/operator.log
+
+  The install-operator.sh script places this automatically. If installing
+  manually, copy this file and update the ProgramArguments path if your
+  binary is not at ~/.local/bin/darkreach.
+-->
+<plist version="1.0">
+<dict>
+    <!-- Service identifier -->
+    <key>Label</key>
+    <string>ai.darkreach.operator</string>
+
+    <!-- Binary and arguments -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>${HOME}/.local/bin/darkreach</string>
+        <string>run</string>
+    </array>
+
+    <!-- Start when loaded (i.e., at login) -->
+    <key>RunAtLoad</key>
+    <true/>
+
+    <!-- Restart policy: restart on failure, requires network -->
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+        <key>NetworkState</key>
+        <true/>
+    </dict>
+
+    <!-- Minimum seconds between restarts -->
+    <key>ThrottleInterval</key>
+    <integer>30</integer>
+
+    <!-- Environment variables -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>DARKREACH_AUTO_UPDATE</key>
+        <string>1</string>
+        <key>RUST_LOG</key>
+        <string>darkreach=info</string>
+    </dict>
+
+    <!-- Log output -->
+    <key>StandardOutPath</key>
+    <string>${HOME}/.darkreach/operator.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>${HOME}/.darkreach/operator.log</string>
+
+    <!-- Run as background process (low priority) -->
+    <key>ProcessType</key>
+    <string>Background</string>
+
+    <!-- Graceful shutdown timeout (seconds) -->
+    <key>ExitTimeOut</key>
+    <integer>60</integer>
+</dict>
+</plist>

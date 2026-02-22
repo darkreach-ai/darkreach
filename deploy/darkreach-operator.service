@@ -1,0 +1,43 @@
+# Darkreach Operator Node — systemd user unit
+#
+# Install to: ~/.config/systemd/user/darkreach-operator.service
+#
+# Usage:
+#   systemctl --user enable darkreach-operator
+#   systemctl --user start darkreach-operator
+#   systemctl --user status darkreach-operator
+#   journalctl --user -u darkreach-operator -f
+#
+# The install-operator.sh script places this automatically. If installing
+# manually, copy this file and run:
+#   systemctl --user daemon-reload
+#   loginctl enable-linger $(whoami)   # allow service to run without login session
+#
+# The operator binary is expected at ~/.local/bin/darkreach by default.
+# Edit ExecStart if installed elsewhere.
+
+[Unit]
+Description=Darkreach Operator Node
+Documentation=https://darkreach.ai/docs/operator
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/darkreach run
+Restart=on-failure
+RestartSec=30
+
+# Auto-update: the operator will check for new versions and stage them
+Environment=DARKREACH_AUTO_UPDATE=1
+Environment=RUST_LOG=darkreach=info
+
+# Resource limits
+LimitNOFILE=65536
+
+# Graceful shutdown: send SIGTERM, wait up to 60s for current block to finish
+KillSignal=SIGTERM
+TimeoutStopSec=60
+
+[Install]
+WantedBy=default.target
