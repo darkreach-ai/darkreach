@@ -1,5 +1,6 @@
 //! Observability API — metrics, logs, and reports.
 
+use super::middleware_auth::RequireAdmin;
 use super::AppState;
 use axum::extract::{Query, State};
 use axum::http::StatusCode;
@@ -121,6 +122,7 @@ mod tests {
     responses((status = 200, description = "Metric time series data"), (status = 401, description = "Authentication required"))
 )]
 pub(super) async fn handler_metrics(
+    _admin: RequireAdmin,
     State(state): State<Arc<AppState>>,
     Query(q): Query<MetricsQuery>,
 ) -> Response {
@@ -227,6 +229,7 @@ pub(super) async fn handler_metrics(
     responses((status = 200, description = "System logs"), (status = 401, description = "Authentication required"))
 )]
 pub(super) async fn handler_logs(
+    _admin: RequireAdmin,
     State(state): State<Arc<AppState>>,
     Query(q): Query<LogsQuery>,
 ) -> Response {
@@ -291,6 +294,7 @@ pub(super) async fn handler_logs(
     responses((status = 200, description = "Observability report"), (status = 401, description = "Authentication required"))
 )]
 pub(super) async fn handler_report(
+    _admin: RequireAdmin,
     State(state): State<Arc<AppState>>,
     Query(q): Query<ReportQuery>,
 ) -> Response {
@@ -435,6 +439,7 @@ pub(super) async fn handler_report(
     responses((status = 200, description = "Top workers by rate"), (status = 401, description = "Authentication required"))
 )]
 pub(super) async fn handler_top_workers(
+    _admin: RequireAdmin,
     State(state): State<Arc<AppState>>,
     Query(q): Query<TopWorkersQuery>,
 ) -> impl IntoResponse {
@@ -449,7 +454,7 @@ pub(super) async fn handler_top_workers(
 #[utoipa::path(get, path = "/api/observability/catalog", tag = "observability",
     responses((status = 200, description = "Available metrics catalog"))
 )]
-pub(super) async fn handler_catalog() -> impl IntoResponse {
+pub(super) async fn handler_catalog(_admin: RequireAdmin) -> impl IntoResponse {
     Json(serde_json::json!({
         "metrics": crate::prom_metrics::Metrics::catalog()
     }))

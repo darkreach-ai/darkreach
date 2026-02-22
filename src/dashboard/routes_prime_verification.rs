@@ -11,6 +11,7 @@ use axum::Json;
 use serde::Deserialize;
 use std::sync::Arc;
 
+use super::middleware_auth::RequireAdmin;
 use super::AppState;
 
 /// Request body for claiming a verification task.
@@ -123,7 +124,10 @@ pub(super) async fn handler_prime_verifications(
     responses((status = 200, description = "Stale tasks reclaimed"), (status = 401, description = "Authentication required"), (status = 500, description = "Internal server error"))
 )]
 /// `POST /api/prime-verification/reclaim` — trigger stale recovery (admin).
-pub(super) async fn handler_reclaim(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+pub(super) async fn handler_reclaim(
+    _admin: RequireAdmin,
+    State(state): State<Arc<AppState>>,
+) -> impl IntoResponse {
     match state.db.reclaim_stale_prime_verifications(600).await {
         Ok(count) => Json(serde_json::json!({"ok": true, "reclaimed": count})).into_response(),
         Err(e) => (

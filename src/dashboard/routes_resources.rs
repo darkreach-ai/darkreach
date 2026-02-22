@@ -8,11 +8,13 @@ use axum::http::StatusCode;
 use axum::response::Response;
 use std::sync::Arc;
 
+use super::middleware_auth::RequireAdmin;
 use super::response::{api_err, api_ok};
 use super::AppState;
 
 /// `GET /api/resources/summary` — fleet-wide resource capacity and totals.
 pub(super) async fn handler_resources_summary(
+    _admin: RequireAdmin,
     State(state): State<Arc<AppState>>,
 ) -> Response {
     let snapshot = match state.db.get_fleet_resource_snapshot().await {
@@ -27,6 +29,7 @@ pub(super) async fn handler_resources_summary(
 
 /// `GET /api/resources/rates` — credit conversion rates per resource type.
 pub(super) async fn handler_resources_rates(
+    _admin: RequireAdmin,
     State(state): State<Arc<AppState>>,
 ) -> Response {
     match state.db.get_resource_credit_rates().await {

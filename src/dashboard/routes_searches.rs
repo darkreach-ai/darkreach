@@ -27,6 +27,7 @@ use crate::search_params::SearchParams;
     )
 )]
 pub(super) async fn handler_api_searches_list(
+    _admin: RequireAdmin,
     State(state): State<Arc<AppState>>,
 ) -> impl IntoResponse {
     match state.db.get_search_jobs().await {
@@ -123,6 +124,7 @@ pub(super) async fn handler_api_searches_create(
     )
 )]
 pub(super) async fn handler_api_searches_get(
+    _admin: RequireAdmin,
     State(state): State<Arc<AppState>>,
     AxumPath(id): AxumPath<i64>,
 ) -> impl IntoResponse {

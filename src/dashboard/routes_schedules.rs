@@ -11,6 +11,7 @@
 //! | `PUT /api/schedules/{id}/toggle` | `supabase.from("agent_schedules").update({enabled})` |
 //! | `DELETE /api/schedules/{id}` | `supabase.from("agent_schedules").delete()` |
 
+use super::middleware_auth::RequireAdmin;
 use super::AppState;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
@@ -26,6 +27,7 @@ use std::sync::Arc;
 ///
 /// Replaces `supabase.from("agent_schedules").select("*").order("name")`.
 pub(super) async fn handler_api_schedules_list(
+    _admin: RequireAdmin,
     State(state): State<Arc<AppState>>,
 ) -> impl IntoResponse {
     match state.db.get_agent_schedules().await {
@@ -80,6 +82,7 @@ fn default_permission_level() -> i32 {
 ///
 /// Replaces `supabase.from("agent_schedules").insert({...}).select().single()`.
 pub(super) async fn handler_api_schedules_create(
+    _admin: RequireAdmin,
     State(state): State<Arc<AppState>>,
     Json(payload): Json<CreateSchedulePayload>,
 ) -> impl IntoResponse {
@@ -120,6 +123,7 @@ pub(super) async fn handler_api_schedules_create(
 /// Replaces `supabase.from("agent_schedules").update({...}).eq("id", id).select().single()`.
 /// Accepts a partial JSON object with only the fields to update.
 pub(super) async fn handler_api_schedules_update(
+    _admin: RequireAdmin,
     State(state): State<Arc<AppState>>,
     Path(id): Path<i64>,
     Json(updates): Json<serde_json::Value>,
@@ -153,6 +157,7 @@ pub(super) struct TogglePayload {
 ///
 /// Replaces `supabase.from("agent_schedules").update({enabled}).eq("id", id)`.
 pub(super) async fn handler_api_schedules_toggle(
+    _admin: RequireAdmin,
     State(state): State<Arc<AppState>>,
     Path(id): Path<i64>,
     Json(payload): Json<TogglePayload>,
@@ -175,6 +180,7 @@ pub(super) async fn handler_api_schedules_toggle(
 ///
 /// Replaces `supabase.from("agent_schedules").delete().eq("id", id)`.
 pub(super) async fn handler_api_schedules_delete(
+    _admin: RequireAdmin,
     State(state): State<Arc<AppState>>,
     Path(id): Path<i64>,
 ) -> impl IntoResponse {

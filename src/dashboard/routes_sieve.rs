@@ -17,6 +17,7 @@ use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
 
+use super::middleware_auth::RequireAdmin;
 use super::AppState;
 
 /// Maximum sieve blob size: 50 MB.
@@ -41,6 +42,7 @@ pub(super) struct SieveListParams {
 
 /// PUT `/api/v1/sieve/{hash}` — upload a computed sieve blob.
 pub(super) async fn handler_v1_sieve_upload(
+    _admin: RequireAdmin,
     State(state): State<Arc<AppState>>,
     AxumPath(hash): AxumPath<String>,
     Query(params): Query<SieveUploadParams>,
@@ -119,6 +121,7 @@ pub(super) async fn handler_v1_sieve_download(
 /// POST `/api/v1/sieve/{hash}/relay` — relay announces it has cached this sieve.
 /// Called by relay nodes after they download and cache a sieve locally.
 pub(super) async fn handler_v1_sieve_relay_announce(
+    _admin: RequireAdmin,
     State(state): State<Arc<AppState>>,
     AxumPath(hash): AxumPath<String>,
     Json(payload): Json<RelayAnnouncePayload>,

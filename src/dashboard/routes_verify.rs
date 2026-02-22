@@ -6,6 +6,7 @@ use axum::response::IntoResponse;
 use axum::Json;
 use std::sync::Arc;
 
+use super::middleware_auth::RequireAdmin;
 use super::AppState;
 use crate::verify;
 
@@ -14,6 +15,7 @@ use crate::verify;
     responses((status = 200, description = "Verification result"), (status = 401, description = "Authentication required"), (status = 404, description = "Prime not found"), (status = 500, description = "Internal server error"))
 )]
 pub(super) async fn handler_api_prime_verify(
+    _admin: RequireAdmin,
     State(state): State<Arc<AppState>>,
     AxumPath(id): AxumPath<i64>,
 ) -> impl IntoResponse {

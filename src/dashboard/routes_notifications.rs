@@ -5,12 +5,14 @@ use axum::response::IntoResponse;
 use axum::Json;
 use std::sync::Arc;
 
+use super::middleware_auth::RequireAdmin;
 use super::AppState;
 
 #[utoipa::path(get, path = "/api/notifications", tag = "notifications", security(("bearer_jwt" = [])),
     responses((status = 200, description = "Recent notifications"))
 )]
 pub(super) async fn handler_api_notifications(
+    _admin: RequireAdmin,
     State(state): State<Arc<AppState>>,
 ) -> impl IntoResponse {
     let notifications = state.event_bus.recent_notifications(50);
@@ -20,7 +22,10 @@ pub(super) async fn handler_api_notifications(
 #[utoipa::path(get, path = "/api/events", tag = "notifications", security(("bearer_jwt" = [])),
     responses((status = 200, description = "Recent events"))
 )]
-pub(super) async fn handler_api_events(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+pub(super) async fn handler_api_events(
+    _admin: RequireAdmin,
+    State(state): State<Arc<AppState>>,
+) -> impl IntoResponse {
     let events = state.event_bus.recent_events(200);
     Json(serde_json::json!({ "events": events }))
 }

@@ -28,6 +28,7 @@ fn default_limit() -> i64 {
     responses((status = 200, description = "List of releases and channels"), (status = 401, description = "Authentication required"), (status = 500, description = "Internal server error"))
 )]
 pub(super) async fn handler_releases_list(
+    _admin: RequireAdmin,
     State(state): State<Arc<AppState>>,
     Query(query): Query<ListQuery>,
 ) -> impl IntoResponse {
@@ -72,6 +73,7 @@ pub(super) struct EventsQuery {
     responses((status = 200, description = "List of release events"), (status = 401, description = "Authentication required"), (status = 500, description = "Internal server error"))
 )]
 pub(super) async fn handler_releases_events(
+    _admin: RequireAdmin,
     State(state): State<Arc<AppState>>,
     Query(query): Query<EventsQuery>,
 ) -> impl IntoResponse {
@@ -107,6 +109,7 @@ fn default_active_hours() -> i64 {
     responses((status = 200, description = "Release health and adoption stats"), (status = 401, description = "Authentication required"), (status = 500, description = "Internal server error"))
 )]
 pub(super) async fn handler_releases_health(
+    _admin: RequireAdmin,
     State(state): State<Arc<AppState>>,
     Query(query): Query<HealthQuery>,
 ) -> impl IntoResponse {

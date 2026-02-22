@@ -7,6 +7,7 @@ use axum::Json;
 use serde::Deserialize;
 use std::sync::Arc;
 
+use super::middleware_auth::RequireAdmin;
 use super::response::ValidatedJson;
 use super::{lock_or_recover, AppState};
 
@@ -32,6 +33,7 @@ pub(super) struct AgentTasksQuery {
     )
 )]
 pub(super) async fn handler_api_agent_tasks(
+    _admin: RequireAdmin,
     State(state): State<Arc<AppState>>,
     Query(params): Query<AgentTasksQuery>,
 ) -> impl IntoResponse {
@@ -91,6 +93,7 @@ fn default_source() -> String {
     )
 )]
 pub(super) async fn handler_api_agent_task_create(
+    _admin: RequireAdmin,
     State(state): State<Arc<AppState>>,
     Json(payload): Json<CreateAgentTaskPayload>,
 ) -> impl IntoResponse {
@@ -156,6 +159,7 @@ pub(super) async fn handler_api_agent_task_create(
     responses((status = 200, description = "Agent task details"), (status = 401, description = "Authentication required"), (status = 404, description = "Task not found"), (status = 500, description = "Internal server error"))
 )]
 pub(super) async fn handler_api_agent_task_get(
+    _admin: RequireAdmin,
     State(state): State<Arc<AppState>>,
     AxumPath(id): AxumPath<i64>,
 ) -> impl IntoResponse {
@@ -179,6 +183,7 @@ pub(super) async fn handler_api_agent_task_get(
     responses((status = 200, description = "Task cancelled"), (status = 401, description = "Authentication required"), (status = 500, description = "Internal server error"))
 )]
 pub(super) async fn handler_api_agent_task_cancel(
+    _admin: RequireAdmin,
     State(state): State<Arc<AppState>>,
     AxumPath(id): AxumPath<i64>,
 ) -> impl IntoResponse {
@@ -210,6 +215,7 @@ pub(super) struct AgentEventsQuery {
     responses((status = 200, description = "List of agent events"), (status = 401, description = "Authentication required"), (status = 500, description = "Internal server error"))
 )]
 pub(super) async fn handler_api_agent_events(
+    _admin: RequireAdmin,
     State(state): State<Arc<AppState>>,
     Query(params): Query<AgentEventsQuery>,
 ) -> impl IntoResponse {
@@ -228,6 +234,7 @@ pub(super) async fn handler_api_agent_events(
     responses((status = 200, description = "Agent budget information"), (status = 401, description = "Authentication required"), (status = 500, description = "Internal server error"))
 )]
 pub(super) async fn handler_api_agent_budgets(
+    _admin: RequireAdmin,
     State(state): State<Arc<AppState>>,
 ) -> impl IntoResponse {
     match state.db.get_agent_budgets().await {
@@ -251,6 +258,7 @@ pub(super) struct UpdateBudgetPayload {
     responses((status = 200, description = "Budget updated"), (status = 401, description = "Authentication required"), (status = 500, description = "Internal server error"))
 )]
 pub(super) async fn handler_api_agent_budget_update(
+    _admin: RequireAdmin,
     State(state): State<Arc<AppState>>,
     Json(payload): Json<UpdateBudgetPayload>,
 ) -> impl IntoResponse {
@@ -274,6 +282,7 @@ pub(super) async fn handler_api_agent_budget_update(
     responses((status = 200, description = "List of agent memory entries"), (status = 401, description = "Authentication required"), (status = 500, description = "Internal server error"))
 )]
 pub(super) async fn handler_api_agent_memory_list(
+    _admin: RequireAdmin,
     State(state): State<Arc<AppState>>,
 ) -> impl IntoResponse {
     match state.db.get_all_agent_memory().await {
@@ -306,6 +315,7 @@ fn default_memory_category() -> String {
     responses((status = 200, description = "Memory entry upserted"), (status = 400, description = "Invalid key"), (status = 401, description = "Authentication required"), (status = 500, description = "Internal server error"))
 )]
 pub(super) async fn handler_api_agent_memory_upsert(
+    _admin: RequireAdmin,
     State(state): State<Arc<AppState>>,
     ValidatedJson(payload): ValidatedJson<UpsertMemoryPayload>,
 ) -> impl IntoResponse {
@@ -328,6 +338,7 @@ pub(super) async fn handler_api_agent_memory_upsert(
     responses((status = 200, description = "Memory entry deleted"), (status = 401, description = "Authentication required"), (status = 404, description = "Memory entry not found"), (status = 500, description = "Internal server error"))
 )]
 pub(super) async fn handler_api_agent_memory_delete(
+    _admin: RequireAdmin,
     State(state): State<Arc<AppState>>,
     AxumPath(key): AxumPath<String>,
 ) -> impl IntoResponse {
@@ -353,6 +364,7 @@ pub(super) async fn handler_api_agent_memory_delete(
 )]
 /// GET /api/agents/roles — List all agent roles.
 pub(super) async fn handler_api_agent_roles(
+    _admin: RequireAdmin,
     State(state): State<Arc<AppState>>,
 ) -> impl IntoResponse {
     match state.db.get_all_roles().await {
@@ -371,6 +383,7 @@ pub(super) async fn handler_api_agent_roles(
 )]
 /// GET /api/agents/roles/{name} — Get a single role by name.
 pub(super) async fn handler_api_agent_role_get(
+    _admin: RequireAdmin,
     State(state): State<Arc<AppState>>,
     AxumPath(name): AxumPath<String>,
 ) -> impl IntoResponse {
@@ -395,6 +408,7 @@ pub(super) async fn handler_api_agent_role_get(
 )]
 /// GET /api/agents/roles/{name}/templates — Get templates associated with a role.
 pub(super) async fn handler_api_agent_role_templates(
+    _admin: RequireAdmin,
     State(state): State<Arc<AppState>>,
     AxumPath(name): AxumPath<String>,
 ) -> impl IntoResponse {
@@ -415,6 +429,7 @@ pub(super) async fn handler_api_agent_role_templates(
 )]
 /// GET /api/agents/templates — List all workflow templates.
 pub(super) async fn handler_api_agent_templates(
+    _admin: RequireAdmin,
     State(state): State<Arc<AppState>>,
 ) -> impl IntoResponse {
     match state.db.get_all_templates().await {
@@ -433,6 +448,7 @@ pub(super) async fn handler_api_agent_templates(
 )]
 /// POST /api/agents/templates/{name}/expand — Expand a template into parent + child tasks.
 pub(super) async fn handler_api_agent_template_expand(
+    _admin: RequireAdmin,
     State(state): State<Arc<AppState>>,
     AxumPath(name): AxumPath<String>,
     Json(body): Json<serde_json::Value>,
@@ -496,6 +512,7 @@ pub(super) async fn handler_api_agent_template_expand(
 )]
 /// GET /api/agents/tasks/{id}/children — Get child tasks of a parent task.
 pub(super) async fn handler_api_agent_task_children(
+    _admin: RequireAdmin,
     State(state): State<Arc<AppState>>,
     AxumPath(id): AxumPath<i64>,
 ) -> impl IntoResponse {

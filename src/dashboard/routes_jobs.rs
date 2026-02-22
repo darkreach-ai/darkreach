@@ -8,6 +8,7 @@ use serde::Deserialize;
 use std::sync::Arc;
 use tracing::info;
 
+use super::middleware_auth::RequireAdmin;
 use super::AppState;
 
 #[derive(Deserialize, utoipa::ToSchema)]
@@ -36,6 +37,7 @@ fn default_block_size() -> i64 {
     )
 )]
 pub(super) async fn handler_api_search_jobs_list(
+    _admin: RequireAdmin,
     State(state): State<Arc<AppState>>,
 ) -> impl IntoResponse {
     match state.db.get_search_jobs().await {
@@ -62,6 +64,7 @@ pub(super) async fn handler_api_search_jobs_list(
     )
 )]
 pub(super) async fn handler_api_search_jobs_create(
+    _admin: RequireAdmin,
     State(state): State<Arc<AppState>>,
     Json(payload): Json<CreateSearchJobPayload>,
 ) -> impl IntoResponse {
@@ -130,6 +133,7 @@ pub(super) async fn handler_api_search_jobs_create(
     )
 )]
 pub(super) async fn handler_api_search_job_get(
+    _admin: RequireAdmin,
     State(state): State<Arc<AppState>>,
     AxumPath(id): AxumPath<i64>,
 ) -> impl IntoResponse {
@@ -176,6 +180,7 @@ pub(super) async fn handler_api_search_job_get(
     )
 )]
 pub(super) async fn handler_api_search_job_cancel(
+    _admin: RequireAdmin,
     State(state): State<Arc<AppState>>,
     AxumPath(id): AxumPath<i64>,
 ) -> impl IntoResponse {

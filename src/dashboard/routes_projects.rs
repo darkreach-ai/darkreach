@@ -24,6 +24,7 @@ pub(super) struct ProjectListQuery {
     responses((status = 200, description = "List of projects"), (status = 401, description = "Authentication required"), (status = 500, description = "Internal server error"))
 )]
 pub(super) async fn handler_api_projects_list(
+    _admin: RequireAdmin,
     State(state): State<Arc<AppState>>,
     Query(params): Query<ProjectListQuery>,
 ) -> impl IntoResponse {
@@ -179,6 +180,7 @@ pub(super) async fn handler_api_projects_import(
 )]
 /// GET /api/projects/{slug} — Get project details with phases and recent events.
 pub(super) async fn handler_api_project_get(
+    _admin: RequireAdmin,
     State(state): State<Arc<AppState>>,
     AxumPath(slug): AxumPath<String>,
 ) -> impl IntoResponse {
@@ -396,6 +398,7 @@ pub(super) async fn handler_api_project_cancel(
 )]
 /// GET /api/projects/{slug}/events — Get project activity log.
 pub(super) async fn handler_api_project_events(
+    _admin: RequireAdmin,
     State(state): State<Arc<AppState>>,
     AxumPath(slug): AxumPath<String>,
 ) -> impl IntoResponse {
@@ -433,6 +436,7 @@ pub(super) async fn handler_api_project_events(
 )]
 /// GET /api/projects/{slug}/cost — Get cost estimate for a project.
 pub(super) async fn handler_api_project_cost(
+    _admin: RequireAdmin,
     State(state): State<Arc<AppState>>,
     AxumPath(slug): AxumPath<String>,
 ) -> impl IntoResponse {
@@ -495,7 +499,10 @@ pub(super) async fn handler_api_project_cost(
     responses((status = 200, description = "World records with our-best comparison"), (status = 500, description = "Internal server error"))
 )]
 /// GET /api/records — Get all world records with our-best comparison.
-pub(super) async fn handler_api_records(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+pub(super) async fn handler_api_records(
+    _admin: RequireAdmin,
+    State(state): State<Arc<AppState>>,
+) -> impl IntoResponse {
     match state.db.get_records().await {
         Ok(records) => Json(serde_json::json!(records)).into_response(),
         Err(e) => (
@@ -511,6 +518,7 @@ pub(super) async fn handler_api_records(State(state): State<Arc<AppState>>) -> i
 )]
 /// POST /api/records/refresh — Trigger manual records refresh from t5k.org.
 pub(super) async fn handler_api_records_refresh(
+    _admin: RequireAdmin,
     State(state): State<Arc<AppState>>,
 ) -> impl IntoResponse {
     match project::refresh_all_records(&state.db).await {

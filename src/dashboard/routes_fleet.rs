@@ -102,7 +102,10 @@ pub(super) fn build_fleet_data(
 #[utoipa::path(get, path = "/api/fleet", tag = "fleet", security(("bearer_jwt" = [])),
     responses((status = 200, description = "Fleet overview with workers and servers"))
 )]
-pub(super) async fn handler_api_fleet(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+pub(super) async fn handler_api_fleet(
+    _admin: RequireAdmin,
+    State(state): State<Arc<AppState>>,
+) -> impl IntoResponse {
     let workers = state.get_workers_from_pg().await;
     let coord_metrics = lock_or_recover(&state.coordinator_metrics).clone();
     Json(build_fleet_data(
