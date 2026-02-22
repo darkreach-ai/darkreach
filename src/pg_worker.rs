@@ -153,7 +153,14 @@ impl PgWorkerClient {
                     (HEARTBEAT_BASE_SECS * 2u64.saturating_pow(consecutive_failures))
                         .min(HEARTBEAT_MAX_SECS)
                 };
-                thread::sleep(Duration::from_secs(interval_secs));
+                // Sleep in 1-second increments so we respond to shutdown within ~1s
+                // instead of waiting the full heartbeat interval.
+                for _ in 0..interval_secs {
+                    if shutdown.load(Ordering::Relaxed) {
+                        return;
+                    }
+                    thread::sleep(Duration::from_secs(1));
+                }
                 if shutdown.load(Ordering::Relaxed) {
                     break;
                 }

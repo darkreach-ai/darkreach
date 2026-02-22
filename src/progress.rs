@@ -39,7 +39,14 @@ impl Progress {
     pub fn start_reporter(self: &Arc<Self>) -> thread::JoinHandle<()> {
         let progress = Arc::clone(self);
         thread::spawn(move || loop {
-            thread::sleep(Duration::from_secs(30));
+            // Sleep in 1-second increments so we respond to shutdown within ~1s
+            // instead of waiting the full 30-second reporting interval.
+            for _ in 0..30 {
+                if progress.shutdown.load(Ordering::Relaxed) {
+                    return;
+                }
+                thread::sleep(Duration::from_secs(1));
+            }
             if progress.shutdown.load(Ordering::Relaxed) {
                 break;
             }
