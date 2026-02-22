@@ -19,9 +19,9 @@ test.describe("Navigation", () => {
     await expect(page.getByRole("heading", { name: /browse/i })).toBeVisible({ timeout: 10000 });
   });
 
-  test("navigating to /fleet shows Fleet heading", async ({ page }) => {
-    await page.goto("/fleet");
-    await expect(page.getByRole("heading", { name: /fleet/i })).toBeVisible({ timeout: 10000 });
+  test("navigating to /network shows Network heading", async ({ page }) => {
+    await page.goto("/network");
+    await expect(page.getByText("Network").first()).toBeVisible({ timeout: 10000 });
   });
 
   test("navigating to /searches shows page content", async ({ page }) => {

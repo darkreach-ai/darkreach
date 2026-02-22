@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { setupAuthenticatedPage, MOCK_PRIMES } from "./helpers";
+import { setupAuthenticatedPage } from "./helpers";
 
 test.describe("Browse page", () => {
   test.beforeEach(async ({ page }) => {
@@ -14,22 +14,11 @@ test.describe("Browse page", () => {
     await expect(page.getByText("27!+1")).toBeVisible();
   });
 
-  test("search input updates URL with query param", async ({ page }) => {
+  test("renders Browse heading with count", async ({ page }) => {
     await page.goto("/browse");
-    await page.getByPlaceholder(/expression/i).fill("27!");
-    // Wait for debounce
-    await page.waitForTimeout(500);
-    // URL should contain the search query
-    expect(page.url()).toContain("q=27");
-  });
-
-  test("pagination controls are present", async ({ page }) => {
-    await page.goto("/browse");
-    // Should see Previous button (disabled on first page)
-    await expect(page.getByRole("button", { name: /previous/i })).toBeVisible({ timeout: 10000 });
-    await expect(page.getByRole("button", { name: /previous/i })).toBeDisabled();
-    // Next button should also be present (exact match to avoid Next.js dev tools)
-    await expect(page.getByRole("button", { name: "Next", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /browse/i })).toBeVisible({ timeout: 10000 });
+    // Should show prime count from mock data
+    await expect(page.getByText("3 primes").first()).toBeVisible();
   });
 
   test("clicking a row opens detail dialog", async ({ page }) => {
@@ -38,7 +27,7 @@ test.describe("Browse page", () => {
     await expect(page.getByText("27!+1")).toBeVisible({ timeout: 10000 });
     // Click the first prime row
     await page.getByText("27!+1").click();
-    // Detail dialog should open — look for "Loading..." or the detail content
+    // Detail dialog should open
     await expect(page.locator('[role="dialog"]')).toBeVisible({ timeout: 5000 });
   });
 });

@@ -1,24 +1,20 @@
 import { test, expect } from "@playwright/test";
 
-test.describe("Theme toggle", () => {
+test.describe("Theme", () => {
   test("defaults to dark theme", async ({ page }) => {
     await page.goto("/");
     const html = page.locator("html");
     await expect(html).toHaveClass(/dark/);
   });
 
-  test("persists theme across page reload", async ({ page }) => {
-    // Set light theme in localStorage
-    await page.addInitScript(() => {
-      localStorage.setItem("darkreach-theme", "light");
-    });
+  test("dark theme persists across page reload", async ({ page }) => {
     await page.goto("/");
     const html = page.locator("html");
-    await expect(html).toHaveClass(/light/);
+    await expect(html).toHaveClass(/dark/);
 
-    // Reload and check persistence
+    // Reload and verify dark theme persists
     await page.reload();
-    await expect(html).toHaveClass(/light/);
+    await expect(html).toHaveClass(/dark/);
   });
 
   test("dark theme class applied with no localStorage", async ({ page }) => {

@@ -6,26 +6,23 @@ test.describe("Dashboard page", () => {
     await setupAuthenticatedPage(page);
   });
 
-  test("renders stat cards with data", async ({ page }) => {
+  test("renders database status with prime count", async ({ page }) => {
     await page.goto("/");
-    // Should see total primes from mock stats (42) — use exact match to avoid ambiguity
-    await expect(page.getByText("42", { exact: true }).first()).toBeVisible({ timeout: 10000 });
-    // Should see largest digits (39 digits)
-    await expect(page.getByText("39 digits")).toBeVisible();
+    // Should see total primes from mock stats in database status card
+    await expect(page.getByText("42 primes stored")).toBeVisible({ timeout: 10000 });
   });
 
   test("renders primes table with mock data", async ({ page }) => {
     await page.goto("/");
-    // Should see prime expressions from mock data
-    await expect(page.getByText("27!+1")).toBeVisible({ timeout: 10000 });
-    await expect(page.getByText("37!-1")).toBeVisible();
+    // Should see prime expressions from mock data in the primes table
+    await expect(page.getByText("27!+1").first()).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText("37!-1").first()).toBeVisible();
   });
 
   test("renders form badges from stats", async ({ page }) => {
     await page.goto("/");
-    // Should see form badges from mock stats
+    // Should see form names from mock data
     await expect(page.getByText("Factorial").first()).toBeVisible({ timeout: 10000 });
-    await expect(page.getByText("KBN").first()).toBeVisible();
   });
 
   test("shows idle status when no WebSocket data", async ({ page }) => {

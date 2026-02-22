@@ -58,9 +58,9 @@ export async function mockAuthApi(page: Page) {
 }
 
 export const MOCK_PRIMES = [
-  { id: 1, form: "Factorial", expression: "27!+1", digits: 29, found_at: "2025-06-01T12:00:00Z", proof_method: "Pocklington", verified: true },
-  { id: 2, form: "Factorial", expression: "37!-1", digits: 44, found_at: "2025-06-02T14:00:00Z", proof_method: "Morrison", verified: true },
-  { id: 3, form: "KBN", expression: "3*2^127-1", digits: 39, found_at: "2025-06-03T10:00:00Z", proof_method: "LLR", verified: false },
+  { id: 1, form: "Factorial", expression: "27!+1", digits: 29, found_at: "2025-06-01T12:00:00Z", proof_method: "Pocklington", verified: true, verified_at: null, verification_method: null, verification_tier: null, tags: [] },
+  { id: 2, form: "Factorial", expression: "37!-1", digits: 44, found_at: "2025-06-02T14:00:00Z", proof_method: "Morrison", verified: true, verified_at: null, verification_method: null, verification_tier: null, tags: [] },
+  { id: 3, form: "KBN", expression: "3*2^127-1", digits: 39, found_at: "2025-06-03T10:00:00Z", proof_method: "LLR", verified: false, verified_at: null, verification_method: null, verification_tier: null, tags: [] },
 ];
 
 export const MOCK_STATS = {
@@ -85,17 +85,31 @@ export const MOCK_DISTRIBUTION = [
   { bucket: 30, form: "Palindromic", count: 4 },
 ];
 
-/** Mock all Supabase REST/RPC endpoints with test data. */
+/** Mock all REST API endpoints with test data. */
 export async function mockSupabaseData(page: Page) {
-  await page.route(`${SUPABASE_URL}/rest/v1/rpc/get_stats`, (route) =>
+  // Auth profile — return admin role for tests
+  await page.route("**/api/auth/me**", (route) =>
     route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify(MOCK_STATS),
+      body: JSON.stringify({ role: "admin", operator_id: "00000000-0000-0000-0000-000000000001" }),
     }),
   );
 
-  await page.route(`${SUPABASE_URL}/rest/v1/rpc/get_discovery_timeline`, (route) =>
+  await page.route("**/api/stats", (route) => {
+    const url = route.request().url();
+    // Only match /api/stats exactly, not /api/stats/timeline etc.
+    if (url.match(/\/api\/stats\/?(\?|$)/)) {
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(MOCK_STATS),
+      });
+    }
+    return route.fallback();
+  });
+
+  await page.route("**/api/stats/timeline**", (route) =>
     route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -103,7 +117,7 @@ export async function mockSupabaseData(page: Page) {
     }),
   );
 
-  await page.route(`${SUPABASE_URL}/rest/v1/rpc/get_digit_distribution`, (route) =>
+  await page.route("**/api/stats/distribution**", (route) =>
     route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -111,31 +125,67 @@ export async function mockSupabaseData(page: Page) {
     }),
   );
 
-  // Primes query — mock the Supabase PostgREST response
-  await page.route(`${SUPABASE_URL}/rest/v1/primes**`, (route) => {
+  await page.route("**/api/stats/leaderboard**", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify([]),
+    }),
+  );
+
+  await page.route("**/api/stats/tags**", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify([]),
+    }),
+  );
+
+  await page.route("**/api/prime-verification/**", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ ok: true, stats: { pending: 0, claimed: 0, verified: 0, failed: 0, total_primes: 0, quorum_met: 0 }, results: [] }),
+    }),
+  );
+
+  // Primes list and detail — REST API returns { primes: [], total: N }
+  await page.route("**/api/primes**", (route) => {
     const url = route.request().url();
-    // Detail query (select=* with id filter)
-    if (url.includes("select=*") && url.includes("id=eq.")) {
+    // Verifications sub-endpoint: /api/primes/:id/verifications
+    if (url.match(/\/api\/primes\/\d+\/verifications/)) {
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ ok: true, results: [] }),
+      });
+    }
+    // Detail query: /api/primes/:id (numeric ID at end, no further path)
+    if (url.match(/\/api\/primes\/\d+\/?(\?|$)/)) {
       const detail = {
         ...MOCK_PRIMES[0],
         search_params: JSON.stringify({ start: 1, end: 100 }),
         verification_tier: 1,
         verification_method: "GMP MR-25",
         verified_at: "2025-06-01T12:30:00Z",
+        tags: [],
       };
       return route.fulfill({
         status: 200,
         contentType: "application/json",
-        headers: { "content-range": "0-0/1" },
-        body: JSON.stringify([detail]),
+        body: JSON.stringify(detail),
       });
     }
-    // List query
+    // List query: /api/primes?limit=...&offset=...
     return route.fulfill({
       status: 200,
       contentType: "application/json",
-      headers: { "content-range": `0-${MOCK_PRIMES.length - 1}/${MOCK_PRIMES.length}` },
-      body: JSON.stringify(MOCK_PRIMES),
+      body: JSON.stringify({
+        primes: MOCK_PRIMES,
+        total: MOCK_PRIMES.length,
+        limit: 50,
+        offset: 0,
+      }),
     });
   });
 }
