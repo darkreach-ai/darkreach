@@ -217,3 +217,59 @@ Display false positive probability. Recommendation engine for round count.
 | 9. Polish | Medium | Medium | All |
 
 **Recommended order:** 1 -> 4 -> 2 -> 3 -> 5 -> 6 -> 9 -> 7 -> 8
+
+---
+
+## Phase 10: Compute Marketplace UI
+
+> See [Path C Roadmap](path-c.md) for the full platform strategy.
+
+### 10.1 Operator Earnings Dashboard
+- **Earnings summary**: Lifetime earnings, pending balance, monthly trend chart
+- **Per-job breakdown**: Which jobs earned how much, when, duration, type (open/priority/enterprise)
+- **Trust level impact**: Show how trust level affects earning potential
+- **Payout history**: Past payouts with amounts, dates, methods
+
+### 10.2 Job Submission Portal
+- **Self-service job creation**: Upload container image, define input/output schema, set budget
+- **Job monitoring**: Real-time progress (blocks completed, estimated time remaining)
+- **Result download**: Retrieve verified outputs when job completes
+- **Cost estimation**: Before submission, estimate cost based on job parameters and current network capacity
+
+### 10.3 Marketplace Overview
+- **Network capacity dashboard**: Total cores, GPU hours available, current utilization by tier
+- **Price transparency**: Current rates for priority and enterprise tiers
+- **Problem domain showcase**: Active domains (primes, protein folding, climate, etc.) with stats
+- **Open science impact**: Total free compute donated, discoveries made, papers published
+
+---
+
+## Phase 11: Browser-Based Contribution & Protocol Dashboard
+
+> See [Technology Vision](technology-vision.md) for the full protocol architecture.
+
+### 11.1 Browser Operator Experience
+- **`darkreach.ai/contribute` page**: one-click compute contribution from any browser tab
+- **WASM execution**: prime search runs as a WASM module in a Web Worker (zero install)
+- **WebGPU sieving**: GPU-accelerated sieving via WebGPU compute shaders (when available)
+- **Contribution meter**: real-time display of CPU/GPU usage, candidates tested, primes found
+- **Anonymous contribution**: DID-based identity, no account required to start contributing
+- **Gamification**: live contribution counter, session stats, "your browser found a prime!" notification
+
+### 11.2 Decentralized Network Visualization
+- **P2P topology map**: real-time visualization of the libp2p gossip network
+- **Gossip propagation**: animated flow of job announcements and results through the network
+- **CRDT state viewer**: current state of distributed data structures (operator registry, trust scores)
+- **Supernode dashboard**: coordinator status, commercial job routing, SLA compliance
+
+### 11.3 Trust Credential Viewer
+- **Operator credential wallet**: display W3C Verifiable Credentials earned by the operator
+- **Trust progression**: visual timeline of trust level advancement with milestone markers
+- **Credential export**: download credentials for use on other platforms
+- **ZK proof generation**: generate privacy-preserving proofs of trust level for verification
+
+### 11.4 Merkle DAG Audit Explorer
+- **Computation chain viewer**: interactive DAG visualization for any completed job
+- **Hash verification**: click any node to verify its content address against stored data
+- **GxP compliance export**: generate compliance-ready audit reports from Merkle DAG
+- **Provenance tracking**: trace any result back through its entire computation chain

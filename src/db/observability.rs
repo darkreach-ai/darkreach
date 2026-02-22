@@ -178,7 +178,7 @@ impl Database {
         }
         let hour_end = hour_start + chrono::Duration::hours(1);
         sqlx::query(
-            "INSERT INTO metric_rollups_hourly (bucket_start, scope, metric, labels, count, sum, min, max)\n             SELECT date_trunc('hour', ts) AS bucket_start, scope, metric, labels,\n                    COUNT(*)::BIGINT, SUM(value)::DOUBLE PRECISION, MIN(value)::DOUBLE PRECISION, MAX(value)::DOUBLE PRECISION\n             FROM metric_samples\n             WHERE ts >= $1 AND ts < $2\n             GROUP BY bucket_start, scope, metric, labels\n             ON CONFLICT (bucket_start, scope, metric, labels)\n             DO UPDATE SET count = EXCLUDED.count, sum = EXCLUDED.sum, min = EXCLUDED.min, max = EXCLUDED.max",
+            "INSERT INTO metric_rollups_hourly (bucket_start, scope, metric, labels, count, sum, min, max)\n             SELECT date_trunc('hour', ts) AS bucket_start, scope, metric, COALESCE(labels, '{}'::jsonb),\n                    COUNT(*)::BIGINT, COALESCE(SUM(value), 0)::DOUBLE PRECISION, COALESCE(MIN(value), 0)::DOUBLE PRECISION, COALESCE(MAX(value), 0)::DOUBLE PRECISION\n             FROM metric_samples\n             WHERE ts >= $1 AND ts < $2\n             GROUP BY bucket_start, scope, metric, COALESCE(labels, '{}'::jsonb)\n             ON CONFLICT (bucket_start, scope, metric, labels)\n             DO UPDATE SET count = EXCLUDED.count, sum = EXCLUDED.sum, min = EXCLUDED.min, max = EXCLUDED.max",
         )
         .bind(hour_start)
         .bind(hour_end)
@@ -193,7 +193,7 @@ impl Database {
         }
         let day_end = day_start + chrono::Duration::days(1);
         sqlx::query(
-            "INSERT INTO metric_rollups_daily (bucket_start, scope, metric, labels, count, sum, min, max)\n             SELECT date_trunc('day', ts) AS bucket_start, scope, metric, labels,\n                    COUNT(*)::BIGINT, SUM(value)::DOUBLE PRECISION, MIN(value)::DOUBLE PRECISION, MAX(value)::DOUBLE PRECISION\n             FROM metric_samples\n             WHERE ts >= $1 AND ts < $2\n             GROUP BY bucket_start, scope, metric, labels\n             ON CONFLICT (bucket_start, scope, metric, labels)\n             DO UPDATE SET count = EXCLUDED.count, sum = EXCLUDED.sum, min = EXCLUDED.min, max = EXCLUDED.max",
+            "INSERT INTO metric_rollups_daily (bucket_start, scope, metric, labels, count, sum, min, max)\n             SELECT date_trunc('day', ts) AS bucket_start, scope, metric, COALESCE(labels, '{}'::jsonb),\n                    COUNT(*)::BIGINT, COALESCE(SUM(value), 0)::DOUBLE PRECISION, COALESCE(MIN(value), 0)::DOUBLE PRECISION, COALESCE(MAX(value), 0)::DOUBLE PRECISION\n             FROM metric_samples\n             WHERE ts >= $1 AND ts < $2\n             GROUP BY bucket_start, scope, metric, COALESCE(labels, '{}'::jsonb)\n             ON CONFLICT (bucket_start, scope, metric, labels)\n             DO UPDATE SET count = EXCLUDED.count, sum = EXCLUDED.sum, min = EXCLUDED.min, max = EXCLUDED.max",
         )
         .bind(day_start)
         .bind(day_end)

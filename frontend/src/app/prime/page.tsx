@@ -92,10 +92,16 @@ export default function PrimePage() {
         `${API_BASE}/api/primes/${prime.id}/verify`,
         { method: "POST" }
       );
-      const data = await res.json();
+      const json = await res.json();
       if (!res.ok) {
-        throw new Error(data.error || `HTTP ${res.status}`);
+        throw new Error(json.error || `HTTP ${res.status}`);
       }
+      const data = (json.data ?? json) as {
+        result: string;
+        method?: string;
+        tier?: number;
+        reason?: string;
+      };
       if (data.result === "verified") {
         toast.success(`Verified: ${data.method} (Tier ${data.tier})`);
         setPrime((prev) =>
@@ -103,8 +109,8 @@ export default function PrimePage() {
             ? {
                 ...prev,
                 verified: true,
-                verification_method: data.method,
-                verification_tier: data.tier,
+                verification_method: data.method ?? null,
+                verification_tier: data.tier ?? null,
                 verified_at: new Date().toISOString(),
               }
             : prev

@@ -107,6 +107,19 @@ mod tests {
         assert_eq!(select_rollup(Some("raw"), from, now), "raw");
     }
 }
+#[utoipa::path(get, path = "/api/observability/metrics", tag = "observability", security(("bearer_jwt" = [])),
+    params(
+        ("metric" = Option<String>, Query, description = "Single metric name"),
+        ("metrics" = Option<String>, Query, description = "Comma-separated metric names"),
+        ("scope" = Option<String>, Query, description = "Metric scope filter"),
+        ("worker_id" = Option<String>, Query, description = "Filter by worker ID"),
+        ("from" = Option<String>, Query, description = "Start time (RFC3339)"),
+        ("to" = Option<String>, Query, description = "End time (RFC3339)"),
+        ("rollup" = Option<String>, Query, description = "Rollup interval (raw, hour, day, auto)"),
+        ("format" = Option<String>, Query, description = "Response format (json, csv)"),
+    ),
+    responses((status = 200, description = "Metric time series data"), (status = 401, description = "Authentication required"))
+)]
 pub(super) async fn handler_metrics(
     State(state): State<Arc<AppState>>,
     Query(q): Query<MetricsQuery>,
@@ -200,6 +213,19 @@ pub(super) async fn handler_metrics(
     .into_response()
 }
 
+#[utoipa::path(get, path = "/api/observability/logs", tag = "observability", security(("bearer_jwt" = [])),
+    params(
+        ("from" = Option<String>, Query, description = "Start time (RFC3339)"),
+        ("to" = Option<String>, Query, description = "End time (RFC3339)"),
+        ("level" = Option<String>, Query, description = "Log level filter"),
+        ("source" = Option<String>, Query, description = "Source filter"),
+        ("component" = Option<String>, Query, description = "Component filter"),
+        ("worker_id" = Option<String>, Query, description = "Worker ID filter"),
+        ("limit" = Option<i64>, Query, description = "Max logs (default 200, max 2000)"),
+        ("format" = Option<String>, Query, description = "Response format (json, csv)"),
+    ),
+    responses((status = 200, description = "System logs"), (status = 401, description = "Authentication required"))
+)]
 pub(super) async fn handler_logs(
     State(state): State<Arc<AppState>>,
     Query(q): Query<LogsQuery>,
@@ -256,6 +282,14 @@ pub(super) async fn handler_logs(
     }
 }
 
+#[utoipa::path(get, path = "/api/observability/report", tag = "observability", security(("bearer_jwt" = [])),
+    params(
+        ("from" = Option<String>, Query, description = "Start time (RFC3339, default 7 days ago)"),
+        ("to" = Option<String>, Query, description = "End time (RFC3339, default now)"),
+        ("format" = Option<String>, Query, description = "Response format (json, csv)"),
+    ),
+    responses((status = 200, description = "Observability report"), (status = 401, description = "Authentication required"))
+)]
 pub(super) async fn handler_report(
     State(state): State<Arc<AppState>>,
     Query(q): Query<ReportQuery>,
@@ -393,6 +427,13 @@ pub(super) async fn handler_report(
     Json(payload).into_response()
 }
 
+#[utoipa::path(get, path = "/api/observability/workers/top", tag = "observability", security(("bearer_jwt" = [])),
+    params(
+        ("limit" = Option<i64>, Query, description = "Max workers to return (default 10, max 50)"),
+        ("window_minutes" = Option<i64>, Query, description = "Time window in minutes (default 30, max 240)"),
+    ),
+    responses((status = 200, description = "Top workers by rate"), (status = 401, description = "Authentication required"))
+)]
 pub(super) async fn handler_top_workers(
     State(state): State<Arc<AppState>>,
     Query(q): Query<TopWorkersQuery>,
@@ -405,6 +446,9 @@ pub(super) async fn handler_top_workers(
     }
 }
 
+#[utoipa::path(get, path = "/api/observability/catalog", tag = "observability",
+    responses((status = 200, description = "Available metrics catalog"))
+)]
 pub(super) async fn handler_catalog() -> impl IntoResponse {
     Json(serde_json::json!({
         "metrics": crate::prom_metrics::Metrics::catalog()

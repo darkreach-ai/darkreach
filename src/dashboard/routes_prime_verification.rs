@@ -14,13 +14,13 @@ use std::sync::Arc;
 use super::AppState;
 
 /// Request body for claiming a verification task.
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub(super) struct ClaimRequest {
     worker_id: String,
 }
 
 /// Request body for submitting a verification result.
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub(super) struct SubmitRequest {
     worker_id: String,
     tier: i16,
@@ -30,6 +30,9 @@ pub(super) struct SubmitRequest {
     error_reason: Option<String>,
 }
 
+#[utoipa::path(get, path = "/api/prime-verification/stats", tag = "verification",
+    responses((status = 200, description = "Verification queue stats"), (status = 500, description = "Internal server error"))
+)]
 /// `GET /api/prime-verification/stats` — queue depth, completion rate.
 pub(super) async fn handler_stats(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     match state.db.get_prime_verification_stats().await {
@@ -42,6 +45,10 @@ pub(super) async fn handler_stats(State(state): State<Arc<AppState>>) -> impl In
     }
 }
 
+#[utoipa::path(post, path = "/api/prime-verification/claim", tag = "verification",
+    request_body = serde_json::Value,
+    responses((status = 200, description = "Verification task claimed or null"), (status = 500, description = "Internal server error"))
+)]
 /// `POST /api/prime-verification/claim` — claim next verification task.
 pub(super) async fn handler_claim(
     State(state): State<Arc<AppState>>,
@@ -58,6 +65,11 @@ pub(super) async fn handler_claim(
     }
 }
 
+#[utoipa::path(post, path = "/api/prime-verification/{id}/submit", tag = "verification",
+    params(("id" = i64, Path, description = "Verification task ID")),
+    request_body = serde_json::Value,
+    responses((status = 200, description = "Verification result submitted"), (status = 500, description = "Internal server error"))
+)]
 /// `POST /api/prime-verification/{id}/submit` — submit verification result.
 pub(super) async fn handler_submit(
     State(state): State<Arc<AppState>>,
@@ -88,6 +100,10 @@ pub(super) async fn handler_submit(
     }
 }
 
+#[utoipa::path(get, path = "/api/primes/{id}/verifications", tag = "verification",
+    params(("id" = i64, Path, description = "Prime ID")),
+    responses((status = 200, description = "Verification history for the prime"), (status = 500, description = "Internal server error"))
+)]
 /// `GET /api/primes/{id}/verifications` — verification history for a prime.
 pub(super) async fn handler_prime_verifications(
     State(state): State<Arc<AppState>>,
@@ -103,6 +119,9 @@ pub(super) async fn handler_prime_verifications(
     }
 }
 
+#[utoipa::path(post, path = "/api/prime-verification/reclaim", tag = "verification", security(("bearer_jwt" = [])),
+    responses((status = 200, description = "Stale tasks reclaimed"), (status = 401, description = "Authentication required"), (status = 500, description = "Internal server error"))
+)]
 /// `POST /api/prime-verification/reclaim` — trigger stale recovery (admin).
 pub(super) async fn handler_reclaim(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     match state.db.reclaim_stale_prime_verifications(600).await {

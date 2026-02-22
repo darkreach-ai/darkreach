@@ -21,6 +21,9 @@ use axum::Json;
 use serde::Deserialize;
 use std::sync::Arc;
 
+#[utoipa::path(get, path = "/api/stats", tag = "primes",
+    responses((status = 200, description = "Dashboard summary statistics"), (status = 500, description = "Internal server error"))
+)]
 /// `GET /api/stats` — Dashboard summary statistics.
 ///
 /// Replaces `supabase.rpc("get_stats")`. Returns total prime count,
@@ -45,6 +48,10 @@ pub(super) struct TimelineQuery {
     bucket_type: Option<String>,
 }
 
+#[utoipa::path(get, path = "/api/stats/timeline", tag = "primes",
+    params(("bucket_type" = Option<String>, Query, description = "Time bucket (day, week, month)")),
+    responses((status = 200, description = "Discovery timeline data"), (status = 500, description = "Internal server error"))
+)]
 /// `GET /api/stats/timeline?bucket_type=day` — Discovery timeline.
 ///
 /// Replaces `supabase.rpc("get_discovery_timeline", { bucket_type })`.
@@ -74,6 +81,10 @@ pub(super) struct DistributionQuery {
     bucket_size: Option<i64>,
 }
 
+#[utoipa::path(get, path = "/api/stats/distribution", tag = "primes",
+    params(("bucket_size" = Option<i64>, Query, description = "Digit bucket size (default 10)")),
+    responses((status = 200, description = "Digit distribution data"), (status = 500, description = "Internal server error"))
+)]
 /// `GET /api/stats/distribution?bucket_size=100` — Digit distribution.
 ///
 /// Replaces `supabase.rpc("get_digit_distribution", { bucket_size_param })`.
@@ -98,6 +109,9 @@ pub(super) async fn handler_api_distribution(
     }
 }
 
+#[utoipa::path(get, path = "/api/stats/leaderboard", tag = "primes",
+    responses((status = 200, description = "Form leaderboard"), (status = 500, description = "Internal server error"))
+)]
 /// `GET /api/stats/leaderboard` — Form leaderboard.
 ///
 /// Replaces `supabase.rpc("get_form_leaderboard")`. Returns per-form
@@ -132,6 +146,20 @@ pub(super) struct PrimesQuery {
     tags: Option<String>,
 }
 
+#[utoipa::path(get, path = "/api/primes", tag = "primes",
+    params(
+        ("limit" = Option<i64>, Query, description = "Max results (default 50, max 1000)"),
+        ("offset" = Option<i64>, Query, description = "Pagination offset"),
+        ("form" = Option<String>, Query, description = "Filter by form"),
+        ("search" = Option<String>, Query, description = "Search expression"),
+        ("min_digits" = Option<i64>, Query, description = "Minimum digit count"),
+        ("max_digits" = Option<i64>, Query, description = "Maximum digit count"),
+        ("sort_by" = Option<String>, Query, description = "Sort column"),
+        ("sort_dir" = Option<String>, Query, description = "Sort direction (asc, desc)"),
+        ("tags" = Option<String>, Query, description = "Comma-separated tag filter"),
+    ),
+    responses((status = 200, description = "Filtered prime listing with total count"), (status = 500, description = "Internal server error"))
+)]
 /// `GET /api/primes?limit=50&offset=0&form=factorial` — Filtered prime listing.
 ///
 /// Replaces `supabase.from("primes").select()` with filters and pagination.
@@ -179,6 +207,9 @@ pub(super) async fn handler_api_primes_list(
     }
 }
 
+#[utoipa::path(get, path = "/api/stats/tags", tag = "primes",
+    responses((status = 200, description = "Tag distribution"), (status = 500, description = "Internal server error"))
+)]
 /// `GET /api/stats/tags` — Tag distribution across all primes.
 ///
 /// Returns `[{tag, count}]` pairs from the `tags` column, ordered by
@@ -202,6 +233,10 @@ pub(super) async fn handler_api_tag_distribution(
     }
 }
 
+#[utoipa::path(get, path = "/api/primes/{id}", tag = "primes",
+    params(("id" = i64, Path, description = "Prime ID")),
+    responses((status = 200, description = "Prime details"), (status = 404, description = "Prime not found"), (status = 500, description = "Internal server error"))
+)]
 /// `GET /api/primes/{id}` — Single prime detail.
 ///
 /// Replaces `supabase.from("primes").eq("id", id).single()`.

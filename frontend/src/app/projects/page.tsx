@@ -321,7 +321,7 @@ function ProjectDetail({ slug }: { slug: string }) {
       const res = await fetch(`${API_BASE}/api/projects/${slug}`);
       if (res.ok) {
         const json = await res.json();
-        setData(json);
+        setData((json.data ?? json) as ProjectDetailData);
       }
     } catch {
       // ignore
@@ -564,7 +564,7 @@ function ProjectDetail({ slug }: { slug: string }) {
                         );
                         if (res.ok) {
                           const json = await res.json();
-                          setTomlData(json);
+                          setTomlData((json.data ?? json) as { original_toml: string | null; current_toml: string });
                           setShowToml(true);
                         }
                       } catch {

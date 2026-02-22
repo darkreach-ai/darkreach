@@ -7,6 +7,7 @@ use axum::Json;
 use serde::Deserialize;
 use std::sync::Arc;
 
+use super::response::ValidatedJson;
 use super::{lock_or_recover, AppState};
 
 #[derive(Deserialize)]
@@ -15,6 +16,21 @@ pub(super) struct AgentTasksQuery {
     limit: Option<i64>,
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/agents/tasks",
+    tag = "agents",
+    security(("bearer_jwt" = [])),
+    params(
+        ("status" = Option<String>, Query, description = "Filter by task status"),
+        ("limit" = Option<i64>, Query, description = "Max results (default 100, max 1000)"),
+    ),
+    responses(
+        (status = 200, description = "List of agent tasks"),
+        (status = 401, description = "Authentication required"),
+        (status = 500, description = "Internal server error"),
+    )
+)]
 pub(super) async fn handler_api_agent_tasks(
     State(state): State<Arc<AppState>>,
     Query(params): Query<AgentTasksQuery>,
@@ -34,7 +50,7 @@ pub(super) async fn handler_api_agent_tasks(
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub(super) struct CreateAgentTaskPayload {
     title: String,
     #[serde(default)]
@@ -62,6 +78,18 @@ fn default_source() -> String {
     "manual".to_string()
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/agents/tasks",
+    tag = "agents",
+    security(("bearer_jwt" = [])),
+    request_body = serde_json::Value,
+    responses(
+        (status = 201, description = "Agent task created"),
+        (status = 401, description = "Authentication required"),
+        (status = 500, description = "Internal server error"),
+    )
+)]
 pub(super) async fn handler_api_agent_task_create(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<CreateAgentTaskPayload>,
@@ -123,6 +151,10 @@ pub(super) async fn handler_api_agent_task_create(
     }
 }
 
+#[utoipa::path(get, path = "/api/agents/tasks/{id}", tag = "agents", security(("bearer_jwt" = [])),
+    params(("id" = i64, Path, description = "Agent task ID")),
+    responses((status = 200, description = "Agent task details"), (status = 401, description = "Authentication required"), (status = 404, description = "Task not found"), (status = 500, description = "Internal server error"))
+)]
 pub(super) async fn handler_api_agent_task_get(
     State(state): State<Arc<AppState>>,
     AxumPath(id): AxumPath<i64>,
@@ -142,6 +174,10 @@ pub(super) async fn handler_api_agent_task_get(
     }
 }
 
+#[utoipa::path(post, path = "/api/agents/tasks/{id}/cancel", tag = "agents", security(("bearer_jwt" = [])),
+    params(("id" = i64, Path, description = "Agent task ID to cancel")),
+    responses((status = 200, description = "Task cancelled"), (status = 401, description = "Authentication required"), (status = 500, description = "Internal server error"))
+)]
 pub(super) async fn handler_api_agent_task_cancel(
     State(state): State<Arc<AppState>>,
     AxumPath(id): AxumPath<i64>,
@@ -169,6 +205,10 @@ pub(super) struct AgentEventsQuery {
     limit: Option<i64>,
 }
 
+#[utoipa::path(get, path = "/api/agents/events", tag = "agents", security(("bearer_jwt" = [])),
+    params(("task_id" = Option<i64>, Query, description = "Filter events by task ID"), ("limit" = Option<i64>, Query, description = "Max results (default 100, max 1000)")),
+    responses((status = 200, description = "List of agent events"), (status = 401, description = "Authentication required"), (status = 500, description = "Internal server error"))
+)]
 pub(super) async fn handler_api_agent_events(
     State(state): State<Arc<AppState>>,
     Query(params): Query<AgentEventsQuery>,
@@ -184,6 +224,9 @@ pub(super) async fn handler_api_agent_events(
     }
 }
 
+#[utoipa::path(get, path = "/api/agents/budgets", tag = "agents", security(("bearer_jwt" = [])),
+    responses((status = 200, description = "Agent budget information"), (status = 401, description = "Authentication required"), (status = 500, description = "Internal server error"))
+)]
 pub(super) async fn handler_api_agent_budgets(
     State(state): State<Arc<AppState>>,
 ) -> impl IntoResponse {
@@ -197,12 +240,16 @@ pub(super) async fn handler_api_agent_budgets(
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub(super) struct UpdateBudgetPayload {
     id: i64,
     budget_usd: f64,
 }
 
+#[utoipa::path(put, path = "/api/agents/budgets", tag = "agents", security(("bearer_jwt" = [])),
+    request_body = serde_json::Value,
+    responses((status = 200, description = "Budget updated"), (status = 401, description = "Authentication required"), (status = 500, description = "Internal server error"))
+)]
 pub(super) async fn handler_api_agent_budget_update(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<UpdateBudgetPayload>,
@@ -223,6 +270,9 @@ pub(super) async fn handler_api_agent_budget_update(
 
 // --- Agent Memory API ---
 
+#[utoipa::path(get, path = "/api/agents/memory", tag = "agents", security(("bearer_jwt" = [])),
+    responses((status = 200, description = "List of agent memory entries"), (status = 401, description = "Authentication required"), (status = 500, description = "Internal server error"))
+)]
 pub(super) async fn handler_api_agent_memory_list(
     State(state): State<Arc<AppState>>,
 ) -> impl IntoResponse {
@@ -236,11 +286,14 @@ pub(super) async fn handler_api_agent_memory_list(
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, garde::Validate)]
 pub(super) struct UpsertMemoryPayload {
+    #[garde(length(min = 1, max = 200))]
     key: String,
+    #[garde(length(min = 1, max = 50_000))]
     value: String,
     #[serde(default = "default_memory_category")]
+    #[garde(length(min = 1, max = 50))]
     category: String,
 }
 
@@ -248,17 +301,14 @@ fn default_memory_category() -> String {
     "general".to_string()
 }
 
+#[utoipa::path(post, path = "/api/agents/memory", tag = "agents", security(("bearer_jwt" = [])),
+    request_body = serde_json::Value,
+    responses((status = 200, description = "Memory entry upserted"), (status = 400, description = "Invalid key"), (status = 401, description = "Authentication required"), (status = 500, description = "Internal server error"))
+)]
 pub(super) async fn handler_api_agent_memory_upsert(
     State(state): State<Arc<AppState>>,
-    Json(payload): Json<UpsertMemoryPayload>,
+    ValidatedJson(payload): ValidatedJson<UpsertMemoryPayload>,
 ) -> impl IntoResponse {
-    if payload.key.trim().is_empty() {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(serde_json::json!({"error": "key must not be empty"})),
-        )
-            .into_response();
-    }
     match state
         .db
         .upsert_agent_memory(&payload.key, &payload.value, &payload.category, None)
@@ -273,6 +323,10 @@ pub(super) async fn handler_api_agent_memory_upsert(
     }
 }
 
+#[utoipa::path(delete, path = "/api/agents/memory/{key}", tag = "agents", security(("bearer_jwt" = [])),
+    params(("key" = String, Path, description = "Memory entry key")),
+    responses((status = 200, description = "Memory entry deleted"), (status = 401, description = "Authentication required"), (status = 404, description = "Memory entry not found"), (status = 500, description = "Internal server error"))
+)]
 pub(super) async fn handler_api_agent_memory_delete(
     State(state): State<Arc<AppState>>,
     AxumPath(key): AxumPath<String>,
@@ -294,6 +348,9 @@ pub(super) async fn handler_api_agent_memory_delete(
 
 // --- Agent role endpoints ---
 
+#[utoipa::path(get, path = "/api/agents/roles", tag = "agents", security(("bearer_jwt" = [])),
+    responses((status = 200, description = "List of agent roles"), (status = 401, description = "Authentication required"), (status = 500, description = "Internal server error"))
+)]
 /// GET /api/agents/roles — List all agent roles.
 pub(super) async fn handler_api_agent_roles(
     State(state): State<Arc<AppState>>,
@@ -308,6 +365,10 @@ pub(super) async fn handler_api_agent_roles(
     }
 }
 
+#[utoipa::path(get, path = "/api/agents/roles/{name}", tag = "agents", security(("bearer_jwt" = [])),
+    params(("name" = String, Path, description = "Role name")),
+    responses((status = 200, description = "Role details"), (status = 401, description = "Authentication required"), (status = 404, description = "Role not found"), (status = 500, description = "Internal server error"))
+)]
 /// GET /api/agents/roles/{name} — Get a single role by name.
 pub(super) async fn handler_api_agent_role_get(
     State(state): State<Arc<AppState>>,
@@ -328,6 +389,10 @@ pub(super) async fn handler_api_agent_role_get(
     }
 }
 
+#[utoipa::path(get, path = "/api/agents/roles/{name}/templates", tag = "agents", security(("bearer_jwt" = [])),
+    params(("name" = String, Path, description = "Role name")),
+    responses((status = 200, description = "Templates for the role"), (status = 401, description = "Authentication required"), (status = 500, description = "Internal server error"))
+)]
 /// GET /api/agents/roles/{name}/templates — Get templates associated with a role.
 pub(super) async fn handler_api_agent_role_templates(
     State(state): State<Arc<AppState>>,
@@ -345,6 +410,9 @@ pub(super) async fn handler_api_agent_role_templates(
 
 // --- Agent template & decomposition endpoints ---
 
+#[utoipa::path(get, path = "/api/agents/templates", tag = "agents", security(("bearer_jwt" = [])),
+    responses((status = 200, description = "List of workflow templates"), (status = 401, description = "Authentication required"), (status = 500, description = "Internal server error"))
+)]
 /// GET /api/agents/templates — List all workflow templates.
 pub(super) async fn handler_api_agent_templates(
     State(state): State<Arc<AppState>>,
@@ -359,6 +427,10 @@ pub(super) async fn handler_api_agent_templates(
     }
 }
 
+#[utoipa::path(post, path = "/api/agents/templates/{name}/expand", tag = "agents", security(("bearer_jwt" = [])),
+    params(("name" = String, Path, description = "Template name")),
+    responses((status = 200, description = "Template expanded into task tree"), (status = 400, description = "Template not found or invalid"), (status = 401, description = "Authentication required"))
+)]
 /// POST /api/agents/templates/{name}/expand — Expand a template into parent + child tasks.
 pub(super) async fn handler_api_agent_template_expand(
     State(state): State<Arc<AppState>>,
@@ -418,6 +490,10 @@ pub(super) async fn handler_api_agent_template_expand(
     }
 }
 
+#[utoipa::path(get, path = "/api/agents/tasks/{id}/children", tag = "agents", security(("bearer_jwt" = [])),
+    params(("id" = i64, Path, description = "Parent task ID")),
+    responses((status = 200, description = "Child tasks of the parent"), (status = 401, description = "Authentication required"), (status = 500, description = "Internal server error"))
+)]
 /// GET /api/agents/tasks/{id}/children — Get child tasks of a parent task.
 pub(super) async fn handler_api_agent_task_children(
     State(state): State<Arc<AppState>>,

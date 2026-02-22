@@ -7,7 +7,7 @@
  * - Fetch: cache-first for static assets, network-first for API, skip WebSocket
  */
 
-const CACHE_NAME = "darkreach-v2";
+const CACHE_NAME = "darkreach-v3";
 
 const SHELL_URLS = [
   "/",

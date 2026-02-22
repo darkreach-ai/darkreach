@@ -1612,19 +1612,19 @@ async fn operator_register_and_retrieve() {
     let db = setup().await;
 
     // Register a new operator
-    let op = db
+    let (op, api_key) = db
         .register_operator("alice", "alice@example.com")
         .await
         .unwrap();
     assert_eq!(op.username, "alice");
     assert_eq!(op.email, "alice@example.com");
-    assert!(!op.api_key.is_empty(), "API key should be generated");
+    assert!(!api_key.is_empty(), "API key should be generated");
     assert_eq!(op.credit, 0);
     assert_eq!(op.primes_found, 0);
 
     // Look up by API key
     let found = db
-        .get_operator_by_api_key(&op.api_key)
+        .get_operator_by_api_key(&api_key)
         .await
         .unwrap()
         .expect("Operator should be found by API key");
@@ -1658,7 +1658,7 @@ async fn operator_trust_progression() {
     require_db!();
     let db = setup().await;
 
-    let op = db
+    let (op, _api_key) = db
         .register_operator("trusty", "trusty@example.com")
         .await
         .unwrap();
@@ -1711,7 +1711,7 @@ async fn operator_trust_reset_on_invalid() {
     require_db!();
     let db = setup().await;
 
-    let op = db
+    let (op, _api_key) = db
         .register_operator("cheater", "cheater@example.com")
         .await
         .unwrap();
@@ -1749,7 +1749,7 @@ async fn operator_credit_grant_and_accumulate() {
     require_db!();
     let db = setup().await;
 
-    let op = db
+    let (op, api_key) = db
         .register_operator("miner", "miner@example.com")
         .await
         .unwrap();
@@ -1776,7 +1776,7 @@ async fn operator_credit_grant_and_accumulate() {
 
     // Verify accumulation on operator record
     let found = db
-        .get_operator_by_api_key(&op.api_key)
+        .get_operator_by_api_key(&api_key)
         .await
         .unwrap()
         .unwrap();
@@ -1787,7 +1787,7 @@ async fn operator_credit_grant_and_accumulate() {
         .await
         .unwrap();
     let found = db
-        .get_operator_by_api_key(&op.api_key)
+        .get_operator_by_api_key(&api_key)
         .await
         .unwrap()
         .unwrap();
@@ -1808,7 +1808,7 @@ async fn operator_node_register_and_heartbeat() {
     require_db!();
     let db = setup().await;
 
-    let op = db
+    let (op, _api_key) = db
         .register_operator("noderunner", "nodes@example.com")
         .await
         .unwrap();
@@ -1879,7 +1879,7 @@ async fn operator_block_claim_and_submit() {
     require_db!();
     let db = setup().await;
 
-    let op = db
+    let (op, _api_key) = db
         .register_operator("claimer", "claimer@example.com")
         .await
         .unwrap();
@@ -1935,15 +1935,15 @@ async fn operator_leaderboard_ordering() {
     let db = setup().await;
 
     // Create 3 operators with different credit levels
-    let op1 = db
+    let (op1, _api_key1) = db
         .register_operator("low_rank", "low@example.com")
         .await
         .unwrap();
-    let op2 = db
+    let (op2, _api_key2) = db
         .register_operator("mid_rank", "mid@example.com")
         .await
         .unwrap();
-    let op3 = db
+    let (op3, _api_key3) = db
         .register_operator("top_rank", "top@example.com")
         .await
         .unwrap();
@@ -2000,7 +2000,7 @@ async fn operator_stale_block_reclaim() {
     require_db!();
     let db = setup().await;
 
-    let op = db
+    let (op, _api_key) = db
         .register_operator("stale_op", "stale@example.com")
         .await
         .unwrap();

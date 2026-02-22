@@ -19,6 +19,10 @@ pub(super) struct ProjectListQuery {
     status: Option<String>,
 }
 
+#[utoipa::path(get, path = "/api/projects", tag = "projects", security(("bearer_jwt" = [])),
+    params(("status" = Option<String>, Query, description = "Filter by project status")),
+    responses((status = 200, description = "List of projects"), (status = 401, description = "Authentication required"), (status = 500, description = "Internal server error"))
+)]
 pub(super) async fn handler_api_projects_list(
     State(state): State<Arc<AppState>>,
     Query(params): Query<ProjectListQuery>,
@@ -33,7 +37,7 @@ pub(super) async fn handler_api_projects_list(
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub(super) struct CreateProjectPayload {
     name: String,
     description: Option<String>,
@@ -53,6 +57,10 @@ pub(super) struct CreateProjectPayload {
     workers: serde_json::Value,
 }
 
+#[utoipa::path(post, path = "/api/projects", tag = "projects", security(("bearer_jwt" = [])),
+    request_body = serde_json::Value,
+    responses((status = 201, description = "Project created"), (status = 400, description = "Invalid objective"), (status = 401, description = "Authentication required"), (status = 500, description = "Internal server error"))
+)]
 /// POST /api/projects — Create a project from JSON.
 pub(super) async fn handler_api_projects_create(
     _admin: RequireAdmin,
@@ -121,11 +129,15 @@ pub(super) async fn handler_api_projects_create(
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub(super) struct ImportTomlPayload {
     toml: String,
 }
 
+#[utoipa::path(post, path = "/api/projects/import", tag = "projects", security(("bearer_jwt" = [])),
+    request_body = serde_json::Value,
+    responses((status = 201, description = "Project imported"), (status = 400, description = "TOML parse error"), (status = 401, description = "Authentication required"), (status = 500, description = "Internal server error"))
+)]
 /// POST /api/projects/import — Import a project from TOML content.
 pub(super) async fn handler_api_projects_import(
     _admin: RequireAdmin,
@@ -161,6 +173,10 @@ pub(super) async fn handler_api_projects_import(
     }
 }
 
+#[utoipa::path(get, path = "/api/projects/{slug}", tag = "projects", security(("bearer_jwt" = [])),
+    params(("slug" = String, Path, description = "Project slug")),
+    responses((status = 200, description = "Project details with phases and events"), (status = 401, description = "Authentication required"), (status = 404, description = "Project not found"), (status = 500, description = "Internal server error"))
+)]
 /// GET /api/projects/{slug} — Get project details with phases and recent events.
 pub(super) async fn handler_api_project_get(
     State(state): State<Arc<AppState>>,
@@ -203,6 +219,10 @@ pub(super) async fn handler_api_project_get(
     .into_response()
 }
 
+#[utoipa::path(post, path = "/api/projects/{slug}/activate", tag = "projects", security(("bearer_jwt" = [])),
+    params(("slug" = String, Path, description = "Project slug")),
+    responses((status = 200, description = "Project activated"), (status = 400, description = "Invalid project status for activation"), (status = 401, description = "Authentication required"), (status = 404, description = "Project not found"), (status = 500, description = "Internal server error"))
+)]
 /// POST /api/projects/{slug}/activate — Start project orchestration.
 pub(super) async fn handler_api_project_activate(
     _admin: RequireAdmin,
@@ -260,6 +280,10 @@ pub(super) async fn handler_api_project_activate(
     Json(serde_json::json!({"ok": true, "status": "active"})).into_response()
 }
 
+#[utoipa::path(post, path = "/api/projects/{slug}/pause", tag = "projects", security(("bearer_jwt" = [])),
+    params(("slug" = String, Path, description = "Project slug")),
+    responses((status = 200, description = "Project paused"), (status = 400, description = "Project not active"), (status = 401, description = "Authentication required"), (status = 404, description = "Project not found"), (status = 500, description = "Internal server error"))
+)]
 /// POST /api/projects/{slug}/pause — Pause project orchestration.
 pub(super) async fn handler_api_project_pause(
     _admin: RequireAdmin,
@@ -316,6 +340,10 @@ pub(super) async fn handler_api_project_pause(
     Json(serde_json::json!({"ok": true, "status": "paused"})).into_response()
 }
 
+#[utoipa::path(post, path = "/api/projects/{slug}/cancel", tag = "projects", security(("bearer_jwt" = [])),
+    params(("slug" = String, Path, description = "Project slug")),
+    responses((status = 200, description = "Project cancelled"), (status = 401, description = "Authentication required"), (status = 404, description = "Project not found"), (status = 500, description = "Internal server error"))
+)]
 /// POST /api/projects/{slug}/cancel — Cancel a project.
 pub(super) async fn handler_api_project_cancel(
     _admin: RequireAdmin,
@@ -362,6 +390,10 @@ pub(super) async fn handler_api_project_cancel(
     Json(serde_json::json!({"ok": true, "status": "cancelled"})).into_response()
 }
 
+#[utoipa::path(get, path = "/api/projects/{slug}/events", tag = "projects", security(("bearer_jwt" = [])),
+    params(("slug" = String, Path, description = "Project slug")),
+    responses((status = 200, description = "Project event log"), (status = 401, description = "Authentication required"), (status = 404, description = "Project not found"), (status = 500, description = "Internal server error"))
+)]
 /// GET /api/projects/{slug}/events — Get project activity log.
 pub(super) async fn handler_api_project_events(
     State(state): State<Arc<AppState>>,
@@ -395,6 +427,10 @@ pub(super) async fn handler_api_project_events(
     }
 }
 
+#[utoipa::path(get, path = "/api/projects/{slug}/cost", tag = "projects", security(("bearer_jwt" = [])),
+    params(("slug" = String, Path, description = "Project slug")),
+    responses((status = 200, description = "Project cost estimate"), (status = 401, description = "Authentication required"), (status = 404, description = "Project not found"), (status = 500, description = "Internal server error"))
+)]
 /// GET /api/projects/{slug}/cost — Get cost estimate for a project.
 pub(super) async fn handler_api_project_cost(
     State(state): State<Arc<AppState>>,
@@ -455,6 +491,9 @@ pub(super) async fn handler_api_project_cost(
 
 // ── Records Endpoints ───────────────────────────────────────────
 
+#[utoipa::path(get, path = "/api/records", tag = "projects", security(("bearer_jwt" = [])),
+    responses((status = 200, description = "World records with our-best comparison"), (status = 500, description = "Internal server error"))
+)]
 /// GET /api/records — Get all world records with our-best comparison.
 pub(super) async fn handler_api_records(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     match state.db.get_records().await {
@@ -467,6 +506,9 @@ pub(super) async fn handler_api_records(State(state): State<Arc<AppState>>) -> i
     }
 }
 
+#[utoipa::path(post, path = "/api/records/refresh", tag = "projects", security(("bearer_jwt" = [])),
+    responses((status = 200, description = "Records refreshed"), (status = 401, description = "Authentication required"), (status = 500, description = "Internal server error"))
+)]
 /// POST /api/records/refresh — Trigger manual records refresh from t5k.org.
 pub(super) async fn handler_api_records_refresh(
     State(state): State<Arc<AppState>>,

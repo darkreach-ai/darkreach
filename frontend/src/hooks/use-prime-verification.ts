@@ -45,7 +45,8 @@ export function usePrimeVerificationStats() {
     try {
       const res = await fetch(`${API_BASE}/api/prime-verification/stats`);
       if (res.ok) {
-        const data = await res.json();
+        const json = await res.json();
+        const data = json.data ?? json;
         if (data.ok && data.stats) {
           setStats(data.stats);
         }
@@ -76,7 +77,8 @@ export function usePrimeVerifications(primeId: number | null) {
     try {
       const res = await fetch(`${API_BASE}/api/primes/${id}/verifications`);
       if (res.ok) {
-        const data = await res.json();
+        const json = await res.json();
+        const data = json.data ?? json;
         if (data.ok && data.results) {
           setResults(data.results);
         }
@@ -108,7 +110,8 @@ export function useTagDistribution() {
     try {
       const res = await fetch(`${API_BASE}/api/stats/tags`);
       if (res.ok) {
-        const data = await res.json();
+        const json = await res.json();
+        const data = json.data ?? json;
         setTags(Array.isArray(data) ? data : []);
       }
     } catch {

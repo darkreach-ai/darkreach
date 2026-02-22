@@ -75,11 +75,11 @@
   --chart-4: #a78bfa;
   --chart-5: #f87171;
 
-  /* Sidebar */
-  --sidebar: #0c0c0f;
-  --sidebar-foreground: #fafafa;
-  --sidebar-border: #27272a;
-  --sidebar-accent: #1a1a2e;
+  /* Sidebar — deep space feel */
+  --sidebar: #08080c;
+  --sidebar-foreground: #e4e4e7;
+  --sidebar-border: #18181b;
+  --sidebar-accent: #15152a;
   --sidebar-accent-foreground: #e0e7ff;
   --sidebar-ring: #6366f1;
   --sidebar-primary: #6366f1;

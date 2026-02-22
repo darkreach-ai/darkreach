@@ -150,7 +150,8 @@ async function fetchMetrics(
   if (label_value) params.set("label_value", label_value);
   const res = await fetch(`${API_BASE}/api/observability/metrics?${params}`);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const data = (await res.json()) as { series: MetricSeriesResponse[] };
+  const json = await res.json();
+  const data = (json.data ?? json) as { series: MetricSeriesResponse[] };
   return data.series;
 }
 
@@ -165,14 +166,16 @@ async function fetchLogs(
   if (filters.worker) params.set("worker_id", filters.worker);
   const res = await fetch(`${API_BASE}/api/observability/logs?${params}`);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return (await res.json()) as LogsResponse;
+  const json = await res.json();
+  return (json.data ?? json) as LogsResponse;
 }
 
 async function fetchReport(from: string, to: string) {
   const params = new URLSearchParams({ from, to });
   const res = await fetch(`${API_BASE}/api/observability/report?${params}`);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return (await res.json()) as ReportResponse;
+  const json = await res.json();
+  return (json.data ?? json) as ReportResponse;
 }
 
 async function fetchTopWorkers(limit: number, windowMinutes: number) {
@@ -182,7 +185,8 @@ async function fetchTopWorkers(limit: number, windowMinutes: number) {
   });
   const res = await fetch(`${API_BASE}/api/observability/workers/top?${params}`);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const data = (await res.json()) as { workers: TopWorkerRow[] };
+  const json = await res.json();
+  const data = (json.data ?? json) as { workers: TopWorkerRow[] };
   return data.workers ?? [];
 }
 

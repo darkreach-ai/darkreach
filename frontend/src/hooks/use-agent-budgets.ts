@@ -52,7 +52,8 @@ export function useAgentBudgets() {
     try {
       const res = await fetch(`${API_BASE}/api/agents/budgets`);
       if (res.ok) {
-        const data = await res.json();
+        const json = await res.json();
+        const data = json.data ?? json;
         setBudgets(data as AgentBudget[]);
       }
     } catch {
@@ -79,8 +80,11 @@ export function useAgentDailyCosts(days: number = 30) {
     setLoading(true);
     try {
       const resp = await fetch(`${API_BASE}/api/agents/analytics/daily-costs?days=${days}`);
-      const body = await resp.json();
-      if (resp.ok) setData(body as DailyCostRow[]);
+      const json = await resp.json();
+      if (resp.ok) {
+        const body = json.data ?? json;
+        setData(body as DailyCostRow[]);
+      }
     } catch { /* ignore */ }
     setLoading(false);
   }, [days]);
@@ -101,8 +105,11 @@ export function useAgentTemplateCosts() {
     setLoading(true);
     try {
       const resp = await fetch(`${API_BASE}/api/agents/analytics/template-costs`);
-      const body = await resp.json();
-      if (resp.ok) setData(body as TemplateCostRow[]);
+      const json = await resp.json();
+      if (resp.ok) {
+        const body = json.data ?? json;
+        setData(body as TemplateCostRow[]);
+      }
     } catch { /* ignore */ }
     setLoading(false);
   }, []);
@@ -123,8 +130,11 @@ export function useAgentAnomalies(threshold: number = 3) {
     setLoading(true);
     try {
       const resp = await fetch(`${API_BASE}/api/agents/analytics/anomalies?threshold=${threshold}`);
-      const body = await resp.json();
-      if (resp.ok) setData(body as AgentTask[]);
+      const json = await resp.json();
+      if (resp.ok) {
+        const body = json.data ?? json;
+        setData(body as AgentTask[]);
+      }
     } catch { /* ignore */ }
     setLoading(false);
   }, [threshold]);

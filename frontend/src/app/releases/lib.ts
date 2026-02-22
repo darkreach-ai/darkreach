@@ -73,7 +73,8 @@ export async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> 
         : `HTTP ${res.status}`;
     throw new Error(message);
   }
-  return body as T;
+  const unwrapped = typeof body === "object" && body !== null && "data" in body ? (body as Record<string, unknown>).data : body;
+  return unwrapped as T;
 }
 
 export function rolloutBadgeClass(percent: number): string {

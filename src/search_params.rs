@@ -12,7 +12,7 @@
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(tag = "search_type")]
 pub enum SearchParams {
     #[serde(rename = "factorial")]

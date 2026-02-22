@@ -25,6 +25,8 @@
 | **Network** | `src/fleet.rs`, `src/pg_worker.rs` | `src/CLAUDE.md` | `docs/roadmaps/network.md` |
 | **Verification** | `src/verify.rs`, `src/classify.rs` | `src/CLAUDE.md` | `docs/roadmaps/verification.md` |
 | **Resources** | `src/resource.rs`, `src/db/operators.rs` | `src/CLAUDE.md` | `docs/roadmaps/resources.md` |
+| **Technology Vision** | Protocol architecture | — | `docs/roadmaps/technology-vision.md` |
+| **OpenClaw** | `deploy/docker-compose.openclaw.yml` | `docs/internal/openclaw.md` | `docs/roadmaps/openclaw.md` |
 
 ## Slash Commands
 

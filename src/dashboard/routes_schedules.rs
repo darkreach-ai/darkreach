@@ -19,6 +19,9 @@ use axum::Json;
 use serde::Deserialize;
 use std::sync::Arc;
 
+#[utoipa::path(get, path = "/api/schedules", tag = "schedules", security(("bearer_jwt" = [])),
+    responses((status = 200, description = "List of agent schedules"), (status = 401, description = "Authentication required"), (status = 500, description = "Internal server error"))
+)]
 /// `GET /api/schedules` — List all agent schedules.
 ///
 /// Replaces `supabase.from("agent_schedules").select("*").order("name")`.
@@ -35,7 +38,7 @@ pub(super) async fn handler_api_schedules_list(
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub(super) struct CreateSchedulePayload {
     name: String,
     #[serde(default)]
@@ -69,6 +72,10 @@ fn default_permission_level() -> i32 {
     1
 }
 
+#[utoipa::path(post, path = "/api/schedules", tag = "schedules", security(("bearer_jwt" = [])),
+    request_body = serde_json::Value,
+    responses((status = 201, description = "Schedule created"), (status = 401, description = "Authentication required"), (status = 500, description = "Internal server error"))
+)]
 /// `POST /api/schedules` — Create a new agent schedule.
 ///
 /// Replaces `supabase.from("agent_schedules").insert({...}).select().single()`.
@@ -104,6 +111,10 @@ pub(super) async fn handler_api_schedules_create(
     }
 }
 
+#[utoipa::path(put, path = "/api/schedules/{id}", tag = "schedules", security(("bearer_jwt" = [])),
+    params(("id" = i64, Path, description = "Schedule ID")),
+    responses((status = 200, description = "Schedule updated"), (status = 401, description = "Authentication required"), (status = 404, description = "Schedule not found"), (status = 500, description = "Internal server error"))
+)]
 /// `PUT /api/schedules/{id}` — Update an existing schedule.
 ///
 /// Replaces `supabase.from("agent_schedules").update({...}).eq("id", id).select().single()`.
@@ -128,11 +139,16 @@ pub(super) async fn handler_api_schedules_update(
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub(super) struct TogglePayload {
     enabled: bool,
 }
 
+#[utoipa::path(put, path = "/api/schedules/{id}/toggle", tag = "schedules", security(("bearer_jwt" = [])),
+    params(("id" = i64, Path, description = "Schedule ID")),
+    request_body = serde_json::Value,
+    responses((status = 200, description = "Schedule toggled"), (status = 401, description = "Authentication required"), (status = 500, description = "Internal server error"))
+)]
 /// `PUT /api/schedules/{id}/toggle` — Toggle schedule enabled/disabled.
 ///
 /// Replaces `supabase.from("agent_schedules").update({enabled}).eq("id", id)`.
@@ -151,6 +167,10 @@ pub(super) async fn handler_api_schedules_toggle(
     }
 }
 
+#[utoipa::path(delete, path = "/api/schedules/{id}", tag = "schedules", security(("bearer_jwt" = [])),
+    params(("id" = i64, Path, description = "Schedule ID")),
+    responses((status = 200, description = "Schedule deleted"), (status = 401, description = "Authentication required"), (status = 404, description = "Schedule not found"), (status = 500, description = "Internal server error"))
+)]
 /// `DELETE /api/schedules/{id}` — Delete a schedule.
 ///
 /// Replaces `supabase.from("agent_schedules").delete().eq("id", id)`.

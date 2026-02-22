@@ -82,13 +82,14 @@ export function NewProjectDialog({ open, onOpenChange }: Props) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      const data = await res.json();
+      const json = await res.json();
       if (res.ok) {
+        const data = json.data ?? json;
         toast.success(`Project '${name}' created (slug: ${data.slug})`);
         onOpenChange(false);
         resetForm();
       } else {
-        toast.error(data.error || "Failed to create project");
+        toast.error(json.error || "Failed to create project");
       }
     } catch {
       toast.error("Failed to create project");
@@ -109,13 +110,14 @@ export function NewProjectDialog({ open, onOpenChange }: Props) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ toml: toml.trim() }),
       });
-      const data = await res.json();
+      const json = await res.json();
       if (res.ok) {
+        const data = json.data ?? json;
         toast.success(`Project imported (slug: ${data.slug})`);
         onOpenChange(false);
         setToml("");
       } else {
-        toast.error(data.error || "Failed to import project");
+        toast.error(json.error || "Failed to import project");
       }
     } catch {
       toast.error("Failed to import project");

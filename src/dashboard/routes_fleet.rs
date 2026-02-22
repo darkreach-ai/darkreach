@@ -99,6 +99,9 @@ pub(super) fn build_fleet_data(
     }
 }
 
+#[utoipa::path(get, path = "/api/fleet", tag = "fleet", security(("bearer_jwt" = [])),
+    responses((status = 200, description = "Fleet overview with workers and servers"))
+)]
 pub(super) async fn handler_api_fleet(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let workers = state.get_workers_from_pg().await;
     let coord_metrics = lock_or_recover(&state.coordinator_metrics).clone();
@@ -109,6 +112,10 @@ pub(super) async fn handler_api_fleet(State(state): State<Arc<AppState>>) -> imp
     ))
 }
 
+#[utoipa::path(post, path = "/api/fleet/workers/{worker_id}/stop", tag = "fleet", security(("bearer_jwt" = [])),
+    params(("worker_id" = String, Path, description = "Worker ID to stop")),
+    responses((status = 200, description = "Stop command queued"), (status = 401, description = "Authentication required"))
+)]
 pub(super) async fn handler_fleet_worker_stop(
     _admin: RequireAdmin,
     State(state): State<Arc<AppState>>,

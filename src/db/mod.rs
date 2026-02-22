@@ -35,6 +35,7 @@
 
 mod agents;
 pub mod ai_engine;
+mod audit;
 mod calibrations;
 mod jobs;
 mod memory;
@@ -46,7 +47,9 @@ mod projects;
 mod records;
 mod releases;
 mod roles;
+mod resources;
 mod schedules;
+mod sieves;
 pub mod strategy;
 pub mod trust;
 /// Backward compatibility re-export.
@@ -420,6 +423,27 @@ pub struct CostCalibrationRow {
     pub sample_count: i64,
     pub avg_error_pct: Option<f64>,
     pub fitted_at: chrono::DateTime<chrono::Utc>,
+}
+
+// ── Audit log types ─────────────────────────────────────────────
+
+/// A single audit log entry recording an API access event.
+///
+/// Captures who performed what action, from where, and when. Used
+/// for security monitoring and compliance reporting.
+#[derive(Serialize, sqlx::FromRow)]
+pub struct AuditLogEntry {
+    pub id: i64,
+    pub user_id: String,
+    pub user_email: Option<String>,
+    pub action: String,
+    pub resource: Option<String>,
+    pub method: String,
+    pub status_code: Option<i32>,
+    pub ip_address: Option<String>,
+    pub user_agent: Option<String>,
+    pub payload: Option<Value>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
 // ── Database struct and connection ──────────────────────────────

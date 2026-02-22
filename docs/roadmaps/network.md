@@ -2,7 +2,7 @@
 
 > Renamed from fleet.md. See also: [architecture.md](architecture.md) for the master migration plan.
 
-The roadmap for transforming darkreach from a private network tool into a modern, open distributed prime-hunting platform — the cloud-native successor to PrimeGrid.
+The roadmap for transforming darkreach from a private network tool into a modern, open distributed compute platform — starting with prime discovery, expanding to general verified computation. The cloud-native successor to PrimeGrid and BOINC.
 
 **Vision:** A multi-form, AI-powered prime discovery platform where anyone can contribute compute via a native client or Docker container. Modern infra (Rust, PostgreSQL, WebSocket, Docker) replaces 2005-era BOINC. AI agents autonomously research forms, design campaigns, and coordinate nodes.
 
@@ -277,6 +277,37 @@ Each stage is independently distributable. Nodes can specialize:
 
 ---
 
+## Phase 8: Generalized Compute Platform
+
+> See [Path C Roadmap](path-c.md) for the full business and strategy context.
+
+### 8.1 Containerized Work Blocks
+**Current:** Work blocks encode prime search ranges with form-specific parameters.
+**Target:** Work blocks include a container image, input data, and output schema — any computation that can be packaged in a container runs on the network.
+- Sandboxed runtime (gVisor or Firecracker) — operators never execute arbitrary code with host access
+- Input data is content-addressed (SHA-256) for deterministic verification
+- Output validated against declared schema before acceptance
+- Operators can opt out of container workloads (primes-only mode)
+
+### 8.2 Task Graphs (DAGs)
+Complex computations decomposed into directed acyclic graphs of blocks with dependencies.
+- Stages released as dependencies complete
+- AI engine optimizes for pipeline throughput
+- Natural extension of existing search_jobs → work_blocks model
+
+### 8.3 Multi-Tier Scheduling
+- **Open tier:** Free for academic/public science, best-effort, fills idle capacity
+- **Priority tier:** Paid, deadline-aware scheduling, $0.02-0.05/core-hour
+- **Enterprise tier:** Dedicated capacity, 99.9% SLA, full audit trail, $0.08-0.15/core-hour
+- Prime hunting runs as the default background job (network heartbeat)
+
+### 8.4 Operator Revenue Share
+- Commercial job revenue split: 60-70% to operators, 30-40% to platform
+- Trust level determines eligible work tiers (Level 3+ for enterprise)
+- Transparent earnings dashboard: breakdown by job type, hours contributed, revenue earned
+
+---
+
 ## Relationship to Infrastructure Roadmap
 
 The infrastructure track (K8s, Docker CI/CD, Helm, Terraform, operator accounts, monitoring) is being developed concurrently. This network roadmap focuses on **distributed computing correctness and algorithms** — the two tracks are complementary:
@@ -307,6 +338,7 @@ Phase 4: Proofs           ← Parallel with Phase 3. Enables trustless verificat
 Phase 5: Multi-stage      ← After proofs. Optimizes throughput per compute-hour.
 Phase 6: AI agents        ← Ongoing. Unique differentiator, build incrementally.
 Phase 7: GPU              ← When GPU-capable FFT (GWNUM) is integrated.
+Phase 8: General compute  ← After proving the network with primes. Containerized blocks, commercial tiers.
 ```
 
 ---
@@ -322,6 +354,9 @@ Phase 7: GPU              ← When GPU-capable FFT (GWNUM) is integrated.
 | **100 operators** | Sustainable community | Monthly active nodes, retention rate |
 | **World record** | Top5000 submission | Verified prime in underserved form |
 | **AI-found record** | Agent-designed campaign finds a record prime | Fully autonomous discovery |
+| **First commercial job** | Paid compute on the network | Verified result delivered to paying customer |
+| **1,000 operators** | Sustainable compute supply | Monthly active nodes, operator retention rate |
+| **$100K ARR** | Sustainable revenue | Operator payouts flowing, infrastructure covered |
 
 ---
 
@@ -337,3 +372,52 @@ Phase 7: GPU              ← When GPU-capable FFT (GWNUM) is integrated.
 | **GPU** | GpuOwl/PRPLL | GeneferOCL | **Planned** |
 | **DX** | 1990s web UI | 2010s BOINC UI | **Modern Next.js dashboard** |
 | **Onboarding** | Install Prime95, configure | Install BOINC, attach | **`docker run` or download binary (operator self-service)** |
+| **General compute** | No | No | **Planned (WASM-based, multi-domain)** |
+
+---
+
+## Phase 9: Decentralized Protocol
+
+> See [Technology Vision](technology-vision.md) for the full protocol architecture.
+
+**Goal:** Evolve from centralized PostgreSQL coordination to a decentralized gossip protocol. The coordinator becomes a supernode; the open science network operates without it.
+
+### 9.1 libp2p Integration
+
+Replace HTTP heartbeats with libp2p gossip:
+- **Kademlia DHT** for operator discovery — no central registry needed
+- **GossipSub** for job announcements, result propagation, trust updates
+- **Hole punching** — NAT traversal so operators behind firewalls participate
+- **mTLS** on every connection — authenticated and encrypted by default
+
+### 9.2 CRDT State
+
+Replace centralized state with Conflict-free Replicated Data Types:
+- **OR-Set** for operator registry (join/leave events)
+- **LWW-Register** for job status transitions (pending → assigned → completed)
+- **G-Counter** for trust scores (monotonically increasing, merge = max)
+- **LWW-Map** for capacity advertisements (latest snapshot per operator)
+- **G-Set** for discovery log (prime discoveries are permanent)
+
+### 9.3 Hybrid Coordination Model
+
+- **Open science jobs**: fully decentralized via gossip — no coordinator dependency
+- **Commercial jobs**: route through coordinator supernode for SLA guarantees, billing, audit trail
+- **Enterprise jobs**: coordinator + TEE attestation for confidential computing
+- **Resilience guarantee**: if darkreach the company disappeared, the open science network keeps running
+
+### 9.4 W3C Verifiable Credentials for Trust
+
+Replace database trust scores with cryptographic credentials:
+- Operators accumulate W3C Verifiable Credentials as they complete verified computations
+- Credentials are operator-owned, portable, and composable
+- ZK proofs allow proving "trust ≥ Level 3" without revealing identity or history
+- Revocation published to the gossip network when operators produce bad results
+- See [Technology Vision § Portable Trust](technology-vision.md#primitive-4-portable-trust-verifiable-credentials)
+
+### 9.5 Browser-Based Operators
+
+- WASM execution in browser tabs via `darkreach.ai/contribute`
+- WebRTC for peer-to-peer communication within the gossip network
+- WebGPU for GPU-accelerated sieving from the browser
+- Zero installation barrier — dramatically expands operator pool

@@ -18,6 +18,9 @@ use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use std::sync::Arc;
 
+#[utoipa::path(get, path = "/healthz", tag = "health",
+    responses((status = 200, description = "Process is alive"))
+)]
 /// Liveness probe: returns 200 if the process is running.
 ///
 /// K8s uses this to determine if the container needs to be restarted.
@@ -26,6 +29,9 @@ pub async fn handler_healthz() -> impl IntoResponse {
     (StatusCode::OK, "ok")
 }
 
+#[utoipa::path(get, path = "/readyz", tag = "health",
+    responses((status = 200, description = "Coordinator ready"), (status = 503, description = "Database unreachable"))
+)]
 /// Readiness probe: returns 200 if the coordinator can serve requests.
 ///
 /// Checks database connectivity (primary + read replica + Redis) with a

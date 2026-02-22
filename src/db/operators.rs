@@ -6,7 +6,9 @@
 
 use super::Database;
 use anyhow::Result;
+use rand::Rng;
 use serde::Serialize;
+use sha2::{Digest, Sha256};
 
 /// Operator account row from the `operators` table.
 #[derive(Serialize, sqlx::FromRow)]
@@ -14,7 +16,10 @@ pub struct OperatorRow {
     pub id: uuid::Uuid,
     pub username: String,
     pub email: String,
-    pub api_key: String,
+    pub api_key_hash: String,
+    pub is_active: bool,
+    pub allowed_ips: Option<Vec<String>>,
+    pub key_rotated_at: chrono::DateTime<chrono::Utc>,
     pub team: Option<String>,
     pub credit: i64,
     pub primes_found: i32,
@@ -49,15 +54,29 @@ pub struct LeaderboardRow {
 impl Database {
     // ── Registration ──────────────────────────────────────────────
 
-    /// Register a new operator account. Returns the generated API key and username.
-    pub async fn register_operator(&self, username: &str, email: &str) -> Result<OperatorRow> {
+    /// Register a new operator account. Returns the operator row and the
+    /// plaintext API key (which is never stored — only its SHA-256 hash is persisted).
+    pub async fn register_operator(
+        &self,
+        username: &str,
+        email: &str,
+    ) -> Result<(OperatorRow, String)> {
+        // Generate a random 32-byte hex API key
+        let key: String = rand::rng()
+            .random::<[u8; 32]>()
+            .iter()
+            .map(|b| format!("{:02x}", b))
+            .collect::<String>();
+        let hash = format!("{:x}", Sha256::digest(key.as_bytes()));
+
         let row = sqlx::query_as::<_, OperatorRow>(
-            "INSERT INTO operators (username, email)
-             VALUES ($1, $2)
+            "INSERT INTO operators (username, email, api_key_hash)
+             VALUES ($1, $2, $3)
              RETURNING *",
         )
         .bind(username)
         .bind(email)
+        .bind(&hash)
         .fetch_one(&self.pool)
         .await?;
 
@@ -70,15 +89,20 @@ impl Database {
         .execute(&self.pool)
         .await?;
 
-        Ok(row)
+        Ok((row, key))
     }
 
     /// Look up an operator by API key (used for authentication).
+    /// The input key is hashed with SHA-256 before lookup — the database
+    /// only stores the hash, never the plaintext key.
     pub async fn get_operator_by_api_key(&self, api_key: &str) -> Result<Option<OperatorRow>> {
-        let row = sqlx::query_as::<_, OperatorRow>("SELECT * FROM operators WHERE api_key = $1")
-            .bind(api_key)
-            .fetch_optional(&self.read_pool)
-            .await?;
+        let hash = format!("{:x}", Sha256::digest(api_key.as_bytes()));
+        let row = sqlx::query_as::<_, OperatorRow>(
+            "SELECT * FROM operators WHERE api_key_hash = $1",
+        )
+        .bind(hash)
+        .fetch_optional(&self.read_pool)
+        .await?;
         Ok(row)
     }
 
@@ -177,6 +201,28 @@ impl Database {
         Ok(rows)
     }
 
+    /// Look up which operator owns a given node (by worker_id).
+    pub async fn get_node_owner(&self, worker_id: &str) -> Result<Option<uuid::Uuid>> {
+        let row: Option<(uuid::Uuid,)> = sqlx::query_as(
+            "SELECT volunteer_id FROM operator_nodes WHERE worker_id = $1",
+        )
+        .bind(worker_id)
+        .fetch_optional(&self.read_pool)
+        .await?;
+        Ok(row.map(|(id,)| id))
+    }
+
+    /// Look up which operator claimed a given work block.
+    pub async fn get_block_claimer_operator(&self, block_id: i64) -> Result<Option<uuid::Uuid>> {
+        let row: Option<(Option<uuid::Uuid>,)> = sqlx::query_as(
+            "SELECT volunteer_id FROM work_blocks WHERE id = $1",
+        )
+        .bind(block_id)
+        .fetch_optional(&self.read_pool)
+        .await?;
+        Ok(row.and_then(|(id,)| id))
+    }
+
     /// Get operator account by ID.
     pub async fn get_operator_by_id(&self, id: uuid::Uuid) -> Result<Option<OperatorRow>> {
         let row = sqlx::query_as::<_, OperatorRow>("SELECT * FROM operators WHERE id = $1")
@@ -186,15 +232,23 @@ impl Database {
         Ok(row)
     }
 
-    /// Rotate an operator's API key and return the new key.
+    /// Rotate an operator's API key and return the new plaintext key.
+    /// Only the SHA-256 hash is stored in the database.
     pub async fn rotate_operator_api_key(&self, volunteer_id: uuid::Uuid) -> Result<String> {
-        let new_key: String = sqlx::query_scalar(
-            "UPDATE operators SET api_key = encode(gen_random_bytes(32), 'hex')
-             WHERE id = $1
-             RETURNING api_key",
+        let new_key: String = rand::rng()
+            .random::<[u8; 32]>()
+            .iter()
+            .map(|b| format!("{:02x}", b))
+            .collect::<String>();
+        let hash = format!("{:x}", Sha256::digest(new_key.as_bytes()));
+
+        sqlx::query(
+            "UPDATE operators SET api_key_hash = $2, key_rotated_at = NOW()
+             WHERE id = $1",
         )
         .bind(volunteer_id)
-        .fetch_one(&self.pool)
+        .bind(&hash)
+        .execute(&self.pool)
         .await?;
         Ok(new_key)
     }

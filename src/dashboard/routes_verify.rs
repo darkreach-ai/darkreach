@@ -9,6 +9,10 @@ use std::sync::Arc;
 use super::AppState;
 use crate::verify;
 
+#[utoipa::path(post, path = "/api/primes/{id}/verify", tag = "verification", security(("bearer_jwt" = [])),
+    params(("id" = i64, Path, description = "Prime ID to verify")),
+    responses((status = 200, description = "Verification result"), (status = 401, description = "Authentication required"), (status = 404, description = "Prime not found"), (status = 500, description = "Internal server error"))
+)]
 pub(super) async fn handler_api_prime_verify(
     State(state): State<Arc<AppState>>,
     AxumPath(id): AxumPath<i64>,

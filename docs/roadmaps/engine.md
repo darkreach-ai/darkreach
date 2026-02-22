@@ -440,3 +440,43 @@ fn llr_test(k: u64, n: u64) -> bool {
 | Error detection | None | None | Gerbicz checking |
 | Result quality | Probabilistic | Deterministic (base-2) | + verifiable certificates |
 | Arithmetic library | GMP (~1x) | GMP (~1x) | GWNUM (~10-100x for large n) |
+
+---
+
+## Phase 6: WASM Compilation Target
+
+> See [Technology Vision](technology-vision.md) for the full protocol architecture.
+
+### 6.1 Compile Engine to `wasm32-wasi`
+
+**Current:** Engine compiles only to native targets (x86-64, aarch64).
+
+**Target:** The core engine (sieve, primality tests, proof generation) compiles to `wasm32-wasi` via Wasmtime. This enables:
+- **Browser-based operators** contributing compute from a browser tab (zero install)
+- **Sandboxed execution** on operator hardware with mathematical security guarantees
+- **Universal portability** — same WASM module runs on any CPU architecture
+
+**Approach:**
+- GMP (`rug`) won't compile to WASM — need a pure-Rust bignum backend (`num-bigint` or `crypto-bigint`) as a fallback behind a feature flag
+- Core sieve and primality testing logic is already pure Rust — compiles cleanly
+- PFGW/GWNUM/PRST subprocess calls need a WASI shim or exclusion in WASM builds
+- Feature gates: `#[cfg(target_arch = "wasm32")]` for WASM-specific paths
+
+**Trade-offs:**
+- WASM bignum ~5-10x slower than GMP assembly — acceptable for browser contribution, not for serious operators
+- Serious operators continue running native binaries for maximum performance
+- Browser operators contribute volume; native operators contribute throughput
+
+### 6.2 Content-Addressed Results
+
+**Target:** Every computation result is content-addressed:
+
+```
+result_hash = SHA-256(module_hash || input_hash || output_bytes)
+```
+
+Verification becomes hash comparison: if two operators produce the same `result_hash`, the result is correct. The `PrimalityCertificate` enum becomes a special case of a `ComputationCertificate` with a Merkle proof linking inputs to outputs.
+
+### 6.3 WebGPU Sieving in Browser
+
+**Target:** GPU-accelerated sieving via WebGPU for browser-based operators. The sieve is embarrassingly parallel and maps well to GPU compute shaders. This makes browser operators competitive for the sieve stage, even if primality testing remains CPU-bound.

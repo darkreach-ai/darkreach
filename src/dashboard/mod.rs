@@ -5,7 +5,9 @@
 //! WebSocket and HTTP heartbeat.
 
 pub(crate) mod middleware_auth;
+mod openapi;
 mod routes_agents;
+mod routes_audit;
 mod routes_auth;
 mod routes_docs;
 mod routes_fleet;
@@ -18,8 +20,11 @@ mod routes_prime_verification;
 mod routes_primes;
 mod routes_projects;
 mod routes_releases;
+mod routes_resources;
+pub(crate) mod response;
 mod routes_schedules;
 mod routes_searches;
+mod routes_sieve;
 mod routes_status;
 mod routes_strategy;
 mod routes_verify;
@@ -28,16 +33,21 @@ mod websocket;
 use crate::{agent, ai_engine, db, events, fleet, metrics, project, prom_metrics, verify};
 use anyhow::Result;
 use axum::extract::Request;
-use axum::http::{HeaderValue, StatusCode};
+use axum::http::{HeaderValue, Method, StatusCode};
 use axum::middleware::Next;
+use axum::response::IntoResponse;
 use axum::routing::{get, post};
-use axum::Router;
+use axum::{Json, Router};
 use chrono::{DateTime, Timelike, Utc};
+use governor::clock::{Clock, DefaultClock};
+use governor::state::keyed::DefaultKeyedStateStore;
+use governor::{Quota, RateLimiter};
+use std::num::NonZeroU32;
 use std::path::PathBuf;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 use tower_http::catch_panic::CatchPanicLayer;
-use tower_http::cors::{Any, CorsLayer};
+use tower_http::cors::CorsLayer;
 use tower_http::limit::RequestBodyLimitLayer;
 use tower_http::services::ServeDir;
 use tower_http::timeout::TimeoutLayer;
@@ -52,6 +62,121 @@ pub(super) fn lock_or_recover<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
+// ── Per-route rate limiting ────────────────────────────────────────────
+//
+// Requests are classified into tiers based on HTTP method and path. Each
+// tier carries its own governor rate limiter keyed by client IP, so bursty
+// operator heartbeats (600/min) can't starve public read traffic (300/min)
+// and vice-versa. A high-limit global limiter (1000/min) acts as a safety
+// net across all tiers.
+
+/// Alias for a governor rate limiter keyed by IP address string.
+type KeyedLimiter = RateLimiter<String, DefaultKeyedStateStore<String>, DefaultClock>;
+
+/// Rate limit tiers — each maps to an independent token-bucket limiter.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RateLimitTier {
+    /// GET /api/primes/*, GET /api/stats/*, /healthz, /readyz, /metrics — 300/min
+    PublicRead,
+    /// POST /api/v1/operators/register — 30/min
+    PublicWrite,
+    /// /api/auth/* and POST /api/v1/operators/rotate-key — 60/min
+    Auth,
+    /// /api/v1/nodes/heartbeat, /api/v1/nodes/work, /api/v1/nodes/result — 600/min
+    Operator,
+    /// All other admin routes under /api/ — 180/min
+    Admin,
+    /// Everything else (static files, /ws, etc.) — 120/min
+    Default,
+}
+
+/// Classify an incoming request into a rate limit tier based on method and path.
+fn classify_rate_limit(method: &Method, path: &str) -> RateLimitTier {
+    match (method, path) {
+        // Health / readiness / metrics probes
+        (&Method::GET, "/healthz" | "/readyz" | "/metrics") => RateLimitTier::PublicRead,
+        // Public read endpoints — primes, stats, and their sub-routes
+        (&Method::GET, p)
+            if p.starts_with("/api/primes") || p.starts_with("/api/stats") =>
+        {
+            RateLimitTier::PublicRead
+        }
+        // Operator registration (unauthenticated, expensive) — tightest limit
+        (&Method::POST, "/api/v1/operators/register" | "/api/v1/register") => {
+            RateLimitTier::PublicWrite
+        }
+        // Auth-related routes
+        (_, p) if p.starts_with("/api/auth/") => RateLimitTier::Auth,
+        (&Method::POST, "/api/v1/operators/rotate-key") => RateLimitTier::Auth,
+        // Operator node hot-path: heartbeat, work claiming, result submission
+        (_, "/api/v1/nodes/heartbeat" | "/api/v1/nodes/work" | "/api/v1/nodes/result") => {
+            RateLimitTier::Operator
+        }
+        // Legacy worker routes that map to the same handlers
+        (_, "/api/v1/worker/heartbeat" | "/api/v1/work" | "/api/v1/result") => {
+            RateLimitTier::Operator
+        }
+        // Everything else under /api/ is admin
+        (_, p) if p.starts_with("/api/") => RateLimitTier::Admin,
+        // Non-API requests (static files, WebSocket upgrade, index)
+        _ => RateLimitTier::Default,
+    }
+}
+
+/// Collection of per-tier rate limiters, each a governor token-bucket keyed
+/// by client IP address.
+pub struct RateLimiters {
+    public_read: Arc<KeyedLimiter>,
+    public_write: Arc<KeyedLimiter>,
+    auth: Arc<KeyedLimiter>,
+    operator: Arc<KeyedLimiter>,
+    admin: Arc<KeyedLimiter>,
+    default: Arc<KeyedLimiter>,
+    /// Safety-net global limiter applied to every request regardless of tier.
+    global: Arc<KeyedLimiter>,
+}
+
+impl RateLimiters {
+    /// Build all tier limiters with their configured quotas.
+    fn new() -> Self {
+        Self {
+            public_read: Arc::new(RateLimiter::keyed(
+                Quota::per_minute(NonZeroU32::new(300).unwrap()),
+            )),
+            public_write: Arc::new(RateLimiter::keyed(
+                Quota::per_minute(NonZeroU32::new(30).unwrap()),
+            )),
+            auth: Arc::new(RateLimiter::keyed(
+                Quota::per_minute(NonZeroU32::new(60).unwrap()),
+            )),
+            operator: Arc::new(RateLimiter::keyed(
+                Quota::per_minute(NonZeroU32::new(600).unwrap()),
+            )),
+            admin: Arc::new(RateLimiter::keyed(
+                Quota::per_minute(NonZeroU32::new(180).unwrap()),
+            )),
+            default: Arc::new(RateLimiter::keyed(
+                Quota::per_minute(NonZeroU32::new(120).unwrap()),
+            )),
+            global: Arc::new(RateLimiter::keyed(
+                Quota::per_minute(NonZeroU32::new(1000).unwrap()),
+            )),
+        }
+    }
+
+    /// Return the tier-specific limiter for a given tier.
+    fn limiter_for(&self, tier: RateLimitTier) -> &KeyedLimiter {
+        match tier {
+            RateLimitTier::PublicRead => &self.public_read,
+            RateLimitTier::PublicWrite => &self.public_write,
+            RateLimitTier::Auth => &self.auth,
+            RateLimitTier::Operator => &self.operator,
+            RateLimitTier::Admin => &self.admin,
+            RateLimitTier::Default => &self.default,
+        }
+    }
+}
+
 pub struct AppState {
     pub db: db::Database,
     pub database_url: String,
@@ -62,6 +187,7 @@ pub struct AppState {
     pub agents: Mutex<agent::AgentManager>,
     pub prom_metrics: prom_metrics::Metrics,
     pub ai_engine: tokio::sync::Mutex<ai_engine::AiEngine>,
+    pub rate_limiters: RateLimiters,
 }
 
 impl AppState {
@@ -140,6 +266,7 @@ impl AppState {
             agents: Mutex::new(agent::AgentManager::new()),
             prom_metrics: prom_metrics::Metrics::new(),
             ai_engine: tokio::sync::Mutex::new(ai_engine::AiEngine::new()),
+            rate_limiters: RateLimiters::new(),
         })
     }
 }
@@ -217,307 +344,469 @@ fn normalize_path(path: &str) -> String {
         .join("/")
 }
 
-pub fn build_router(state: Arc<AppState>, static_dir: Option<&Path>) -> Router {
-    let mut app = Router::new()
-        .route("/ws", get(websocket::handler_ws))
-        .route("/api/status", get(routes_status::handler_api_status))
-        .route("/api/docs", get(routes_docs::handler_api_docs))
-        .route(
-            "/api/docs/search",
-            get(routes_docs::handler_api_docs_search),
+/// Extract client IP from the request for rate-limit keying.
+///
+/// Checks (in order): `X-Forwarded-For` first entry, `X-Real-Ip`, then
+/// falls back to the connected peer address from axum's `ConnectInfo`.
+/// Returns `"unknown"` if none are available.
+fn extract_client_ip(req: &Request) -> String {
+    // X-Forwarded-For may contain a comma-separated list; take the first (client) IP.
+    if let Some(xff) = req
+        .headers()
+        .get("x-forwarded-for")
+        .and_then(|v| v.to_str().ok())
+    {
+        if let Some(first) = xff.split(',').next() {
+            let trimmed = first.trim();
+            if !trimmed.is_empty() {
+                return trimmed.to_string();
+            }
+        }
+    }
+    if let Some(real_ip) = req
+        .headers()
+        .get("x-real-ip")
+        .and_then(|v| v.to_str().ok())
+    {
+        return real_ip.trim().to_string();
+    }
+    // Fallback: peer address from the socket (only available with ConnectInfo).
+    req.extensions()
+        .get::<axum::extract::connect_info::ConnectInfo<std::net::SocketAddr>>()
+        .map(|ci| ci.0.ip().to_string())
+        .unwrap_or_else(|| "unknown".to_string())
+}
+
+/// Rate-limit middleware that enforces per-tier and global token-bucket limits.
+///
+/// The request is classified into a [`RateLimitTier`] via [`classify_rate_limit`],
+/// and both the tier-specific and global limiters are checked against the
+/// client's IP address. If either rejects, a `429 Too Many Requests` response
+/// is returned with a `Retry-After` header indicating seconds until the next
+/// token is available.
+async fn rate_limit_middleware(
+    axum::extract::State(state): axum::extract::State<Arc<AppState>>,
+    req: Request,
+    next: Next,
+) -> axum::response::Response {
+    let client_ip = extract_client_ip(&req);
+    let method = req.method().clone();
+    let path = req.uri().path().to_string();
+    let tier = classify_rate_limit(&method, &path);
+    let limiter = state.rate_limiters.limiter_for(tier);
+
+    // Check the tier-specific limiter first.
+    if let Err(not_until) = limiter.check_key(&client_ip) {
+        let retry_after = not_until.wait_time_from(DefaultClock::default().now());
+        let secs = retry_after.as_secs().max(1);
+        tracing::debug!(
+            ip = %client_ip,
+            tier = ?tier,
+            retry_after_secs = secs,
+            "rate limited"
+        );
+        return (
+            StatusCode::TOO_MANY_REQUESTS,
+            [
+                ("retry-after", secs.to_string()),
+                ("x-ratelimit-tier", format!("{:?}", tier)),
+            ],
+            Json(serde_json::json!({
+                "error": "Too many requests",
+                "tier": format!("{:?}", tier),
+                "retry_after_secs": secs,
+            })),
         )
+            .into_response();
+    }
+
+    // Check the global safety-net limiter.
+    if let Err(not_until) = state.rate_limiters.global.check_key(&client_ip) {
+        let retry_after = not_until.wait_time_from(DefaultClock::default().now());
+        let secs = retry_after.as_secs().max(1);
+        tracing::debug!(
+            ip = %client_ip,
+            tier = ?tier,
+            retry_after_secs = secs,
+            "global rate limited"
+        );
+        return (
+            StatusCode::TOO_MANY_REQUESTS,
+            [
+                ("retry-after", secs.to_string()),
+                ("x-ratelimit-tier", "Global".to_string()),
+            ],
+            Json(serde_json::json!({
+                "error": "Too many requests",
+                "tier": "Global",
+                "retry_after_secs": secs,
+            })),
+        )
+            .into_response();
+    }
+
+    next.run(req).await
+}
+
+/// Middleware that inserts the `X-API-Version: 1` header into every HTTP response.
+/// This allows clients to detect which API version they are communicating with,
+/// enabling forward-compatible version negotiation.
+async fn api_version_middleware(req: Request, next: Next) -> axum::response::Response {
+    let mut response = next.run(req).await;
+    response
+        .headers_mut()
+        .insert("X-API-Version", HeaderValue::from_static("1"));
+    response
+}
+
+/// Handler for `/api/version` — returns the current API version metadata.
+///
+/// Response format:
+/// ```json
+/// {"data": {"version": "1", "supported": ["1"], "deprecated": []}}
+/// ```
+///
+/// Clients can use the `supported` array to discover available API versions
+/// and the `deprecated` array to plan migrations away from sunset versions.
+async fn handler_api_version() -> impl IntoResponse {
+    Json(serde_json::json!({
+        "data": {
+            "version": "1",
+            "supported": ["1"],
+            "deprecated": []
+        }
+    }))
+}
+
+/// Build the public API routes shared between `/api` (unversioned) and `/api/v1` (versioned).
+///
+/// Returns a `Router` with relative paths (e.g., `/status`, `/primes`, `/stats`).
+/// The caller nests this under the desired prefix via `Router::nest()` so that the
+/// same handler functions serve both `/api/status` and `/api/v1/status`, etc.
+fn public_api_routes() -> Router<Arc<AppState>> {
+    Router::new()
+        .route("/status", get(routes_status::handler_api_status))
+        .route("/docs", get(routes_docs::handler_api_docs))
+        .route("/docs/search", get(routes_docs::handler_api_docs_search))
         .route(
-            "/api/docs/roadmaps/{slug}",
+            "/docs/roadmaps/{slug}",
             get(routes_docs::handler_api_doc_roadmap),
         )
         .route(
-            "/api/docs/agent/{slug}",
+            "/docs/agent/{slug}",
             get(routes_docs::handler_api_doc_agent),
         )
-        .route("/api/docs/{slug}", get(routes_docs::handler_api_doc))
-        .route("/api/export", get(routes_status::handler_api_export))
+        .route("/docs/{slug}", get(routes_docs::handler_api_doc))
+        .route("/export", get(routes_status::handler_api_export))
+        .route("/ws-snapshot", get(routes_status::handler_api_ws_snapshot))
+        .route("/fleet", get(routes_fleet::handler_api_fleet))
         .route(
-            "/api/ws-snapshot",
-            get(routes_status::handler_api_ws_snapshot),
-        )
-        .route("/api/fleet", get(routes_fleet::handler_api_fleet))
-        .route(
-            "/api/searches",
+            "/searches",
             get(routes_searches::handler_api_searches_list)
                 .post(routes_searches::handler_api_searches_create),
         )
         .route(
-            "/api/searches/{id}",
+            "/searches/{id}",
             get(routes_searches::handler_api_searches_get)
                 .delete(routes_searches::handler_api_searches_stop),
         )
         .route(
-            "/api/searches/{id}/pause",
+            "/searches/{id}/pause",
             post(routes_searches::handler_api_searches_pause),
         )
         .route(
-            "/api/searches/{id}/resume",
+            "/searches/{id}/resume",
             post(routes_searches::handler_api_searches_resume),
         )
         .route(
-            "/api/fleet/workers/{worker_id}/stop",
+            "/fleet/workers/{worker_id}/stop",
             post(routes_fleet::handler_fleet_worker_stop),
         )
         .route(
-            "/api/search_jobs",
+            "/search_jobs",
             get(routes_jobs::handler_api_search_jobs_list)
                 .post(routes_jobs::handler_api_search_jobs_create),
         )
         .route(
-            "/api/search_jobs/{id}",
+            "/search_jobs/{id}",
             get(routes_jobs::handler_api_search_job_get),
         )
         .route(
-            "/api/search_jobs/{id}/cancel",
+            "/search_jobs/{id}/cancel",
             post(routes_jobs::handler_api_search_job_cancel),
         )
         .route(
-            "/api/notifications",
+            "/notifications",
             get(routes_notifications::handler_api_notifications),
         )
-        .route("/api/events", get(routes_notifications::handler_api_events))
+        .route("/events", get(routes_notifications::handler_api_events))
         .route(
-            "/api/observability/metrics",
+            "/observability/metrics",
             get(routes_observability::handler_metrics),
         )
         .route(
-            "/api/observability/logs",
+            "/observability/logs",
             get(routes_observability::handler_logs),
         )
         .route(
-            "/api/observability/report",
+            "/observability/report",
             get(routes_observability::handler_report),
         )
         .route(
-            "/api/observability/workers/top",
+            "/observability/workers/top",
             get(routes_observability::handler_top_workers),
         )
         .route(
-            "/api/observability/catalog",
+            "/observability/catalog",
             get(routes_observability::handler_catalog),
         )
         .route(
-            "/api/agents/tasks",
+            "/agents/tasks",
             get(routes_agents::handler_api_agent_tasks)
                 .post(routes_agents::handler_api_agent_task_create),
         )
         .route(
-            "/api/agents/tasks/{id}",
+            "/agents/tasks/{id}",
             get(routes_agents::handler_api_agent_task_get),
         )
         .route(
-            "/api/agents/tasks/{id}/cancel",
+            "/agents/tasks/{id}/cancel",
             post(routes_agents::handler_api_agent_task_cancel),
         )
         .route(
-            "/api/agents/events",
+            "/agents/events",
             get(routes_agents::handler_api_agent_events),
         )
         .route(
-            "/api/agents/templates",
+            "/agents/templates",
             get(routes_agents::handler_api_agent_templates),
         )
         .route(
-            "/api/agents/templates/{name}/expand",
+            "/agents/templates/{name}/expand",
             post(routes_agents::handler_api_agent_template_expand),
         )
         .route(
-            "/api/agents/tasks/{id}/children",
+            "/agents/tasks/{id}/children",
             get(routes_agents::handler_api_agent_task_children),
         )
         .route(
-            "/api/agents/budgets",
+            "/agents/budgets",
             get(routes_agents::handler_api_agent_budgets)
                 .put(routes_agents::handler_api_agent_budget_update),
         )
         .route(
-            "/api/primes/{id}/verify",
+            "/primes/{id}/verify",
             post(routes_verify::handler_api_prime_verify),
         )
         .route(
-            "/api/agents/memory",
+            "/agents/memory",
             get(routes_agents::handler_api_agent_memory_list)
                 .post(routes_agents::handler_api_agent_memory_upsert),
         )
         .route(
-            "/api/agents/memory/{key}",
+            "/agents/memory/{key}",
             axum::routing::delete(routes_agents::handler_api_agent_memory_delete),
         )
+        .route("/agents/roles", get(routes_agents::handler_api_agent_roles))
         .route(
-            "/api/agents/roles",
-            get(routes_agents::handler_api_agent_roles),
-        )
-        .route(
-            "/api/agents/roles/{name}",
+            "/agents/roles/{name}",
             get(routes_agents::handler_api_agent_role_get),
         )
         .route(
-            "/api/agents/roles/{name}/templates",
+            "/agents/roles/{name}/templates",
             get(routes_agents::handler_api_agent_role_templates),
         )
         .route(
-            "/api/projects",
+            "/projects",
             get(routes_projects::handler_api_projects_list)
                 .post(routes_projects::handler_api_projects_create),
         )
         .route(
-            "/api/projects/import",
+            "/projects/import",
             post(routes_projects::handler_api_projects_import),
         )
         .route(
-            "/api/projects/{slug}",
+            "/projects/{slug}",
             get(routes_projects::handler_api_project_get),
         )
         .route(
-            "/api/projects/{slug}/activate",
+            "/projects/{slug}/activate",
             post(routes_projects::handler_api_project_activate),
         )
         .route(
-            "/api/projects/{slug}/pause",
+            "/projects/{slug}/pause",
             post(routes_projects::handler_api_project_pause),
         )
         .route(
-            "/api/projects/{slug}/cancel",
+            "/projects/{slug}/cancel",
             post(routes_projects::handler_api_project_cancel),
         )
         .route(
-            "/api/projects/{slug}/events",
+            "/projects/{slug}/events",
             get(routes_projects::handler_api_project_events),
         )
         .route(
-            "/api/projects/{slug}/cost",
+            "/projects/{slug}/cost",
             get(routes_projects::handler_api_project_cost),
         )
         .route(
-            "/api/releases/worker",
+            "/releases/worker",
             get(routes_releases::handler_releases_list)
                 .post(routes_releases::handler_releases_upsert),
         )
         .route(
-            "/api/releases/events",
+            "/releases/events",
             get(routes_releases::handler_releases_events),
         )
         .route(
-            "/api/releases/health",
+            "/releases/health",
             get(routes_releases::handler_releases_health),
         )
         .route(
-            "/api/releases/rollout",
+            "/releases/rollout",
             post(routes_releases::handler_releases_rollout),
         )
         .route(
-            "/api/releases/rollback",
+            "/releases/rollback",
             post(routes_releases::handler_releases_rollback),
         )
+        // Audit log (admin-only)
+        .route("/audit", get(routes_audit::handler_audit_list))
         // Strategy engine
         .route(
-            "/api/strategy/status",
+            "/strategy/status",
             get(routes_strategy::handler_strategy_status),
         )
         .route(
-            "/api/strategy/decisions",
+            "/strategy/decisions",
             get(routes_strategy::handler_strategy_decisions),
         )
         .route(
-            "/api/strategy/scores",
+            "/strategy/scores",
             get(routes_strategy::handler_strategy_scores),
         )
         .route(
-            "/api/strategy/config",
+            "/strategy/config",
             get(routes_strategy::handler_strategy_config_get)
                 .put(routes_strategy::handler_strategy_config_put),
         )
         .route(
-            "/api/strategy/decisions/{id}/override",
+            "/strategy/decisions/{id}/override",
             post(routes_strategy::handler_strategy_override),
         )
         .route(
-            "/api/strategy/tick",
+            "/strategy/tick",
             post(routes_strategy::handler_strategy_tick),
         )
         .route(
-            "/api/strategy/ai-engine",
+            "/strategy/ai-engine",
             get(routes_strategy::handler_ai_engine_status),
         )
         .route(
-            "/api/strategy/ai-decisions",
+            "/strategy/ai-decisions",
             get(routes_strategy::handler_ai_engine_decisions),
         )
-        // Prime data API (Phase 6: replaces Supabase RPC/table queries)
-        .route("/api/stats", get(routes_primes::handler_api_stats))
+        // Prime data API
+        .route("/stats", get(routes_primes::handler_api_stats))
+        .route("/stats/timeline", get(routes_primes::handler_api_timeline))
         .route(
-            "/api/stats/timeline",
-            get(routes_primes::handler_api_timeline),
-        )
-        .route(
-            "/api/stats/distribution",
+            "/stats/distribution",
             get(routes_primes::handler_api_distribution),
         )
         .route(
-            "/api/stats/leaderboard",
+            "/stats/leaderboard",
             get(routes_primes::handler_api_leaderboard),
         )
         .route(
-            "/api/stats/tags",
+            "/stats/tags",
             get(routes_primes::handler_api_tag_distribution),
         )
-        .route("/api/primes", get(routes_primes::handler_api_primes_list))
+        .route("/primes", get(routes_primes::handler_api_primes_list))
+        .route("/primes/{id}", get(routes_primes::handler_api_prime_get))
         .route(
-            "/api/primes/{id}",
-            get(routes_primes::handler_api_prime_get),
-        )
-        .route(
-            "/api/primes/{id}/verifications",
+            "/primes/{id}/verifications",
             get(routes_prime_verification::handler_prime_verifications),
         )
         // Distributed prime verification queue
         .route(
-            "/api/prime-verification/stats",
+            "/prime-verification/stats",
             get(routes_prime_verification::handler_stats),
         )
         .route(
-            "/api/prime-verification/claim",
+            "/prime-verification/claim",
             post(routes_prime_verification::handler_claim),
         )
         .route(
-            "/api/prime-verification/{id}/submit",
+            "/prime-verification/{id}/submit",
             post(routes_prime_verification::handler_submit),
         )
         .route(
-            "/api/prime-verification/reclaim",
+            "/prime-verification/reclaim",
             post(routes_prime_verification::handler_reclaim),
         )
-        // Schedule CRUD API (Phase 6: replaces Supabase table access)
+        // Schedule CRUD API
         .route(
-            "/api/schedules",
+            "/schedules",
             get(routes_schedules::handler_api_schedules_list)
                 .post(routes_schedules::handler_api_schedules_create),
         )
         .route(
-            "/api/schedules/{id}",
+            "/schedules/{id}",
             axum::routing::put(routes_schedules::handler_api_schedules_update)
                 .delete(routes_schedules::handler_api_schedules_delete),
         )
         .route(
-            "/api/schedules/{id}/toggle",
+            "/schedules/{id}/toggle",
             axum::routing::put(routes_schedules::handler_api_schedules_toggle),
         )
-        .route("/api/records", get(routes_projects::handler_api_records))
+        .route("/records", get(routes_projects::handler_api_records))
         .route(
-            "/api/records/refresh",
+            "/records/refresh",
             post(routes_projects::handler_api_records_refresh),
         )
-        .route("/api/auth/profile", get(routes_auth::handler_api_profile))
-        .route("/api/auth/me", get(routes_auth::handler_api_me))
+        .route("/auth/profile", get(routes_auth::handler_api_profile))
+        .route("/auth/me", get(routes_auth::handler_api_me))
+}
+
+/// Build the CORS layer from environment or sensible defaults.
+///
+/// Set `CORS_ORIGINS` to a comma-separated list of allowed origins.
+/// Defaults to darkreach.ai production domains plus localhost dev servers.
+fn build_cors_layer() -> CorsLayer {
+    let origins_str = std::env::var("CORS_ORIGINS").unwrap_or_else(|_| {
+        "https://darkreach.ai,https://app.darkreach.ai,http://localhost:3000,http://localhost:3001"
+            .to_string()
+    });
+    let allowed: Vec<HeaderValue> = origins_str
+        .split(',')
+        .filter_map(|o| o.trim().parse().ok())
+        .collect();
+    if allowed.is_empty() {
+        CorsLayer::permissive()
+    } else {
+        CorsLayer::new()
+            .allow_origin(allowed)
+            .allow_methods(tower_http::cors::Any)
+            .allow_headers(tower_http::cors::Any)
+    }
+}
+
+pub fn build_router(state: Arc<AppState>, static_dir: Option<&Path>) -> Router {
+    // Public API routes are registered under both /api (unversioned, backward-compatible)
+    // and /api/v1 (versioned, for forward compatibility). Both prefixes serve the
+    // exact same handlers — no code duplication.
+    let mut app = Router::new()
+        .route("/ws", get(websocket::handler_ws))
+        // API version discovery endpoint (not nested — lives at /api/version only)
+        .route("/api/version", get(handler_api_version))
+        // Public API: unversioned routes at /api/*
+        .nest("/api", public_api_routes())
+        // Public API: versioned aliases at /api/v1/*
+        .nest("/api/v1", public_api_routes())
         .route("/healthz", get(routes_health::handler_healthz))
         .route("/readyz", get(routes_health::handler_readyz))
         .route("/metrics", get(routes_health::handler_metrics))
-        // Operator public API (v1) — new canonical routes
+        // Operator public API (v1) — domain-specific routes
         .route(
             "/api/v1/operators/register",
             post(routes_operator::handler_v1_register),
@@ -555,7 +844,10 @@ pub fn build_router(state: Arc<AppState>, static_dir: Option<&Path>) -> Router {
             "/api/v1/operators/rotate-key",
             post(routes_operator::handler_v1_rotate_key),
         )
-        // Legacy routes (kept for backward compatibility, 2 release cycles)
+        // Legacy operator routes (kept for backward compatibility, 2 release cycles).
+        // Note: /api/v1/stats was a legacy alias for operator stats but now serves
+        // public API stats via the versioned prefix. Use /api/v1/operators/stats
+        // for operator-specific statistics instead.
         .route(
             "/api/v1/register",
             post(routes_operator::handler_v1_register),
@@ -574,7 +866,6 @@ pub fn build_router(state: Arc<AppState>, static_dir: Option<&Path>) -> Router {
         )
         .route("/api/v1/work", get(routes_operator::handler_v1_work))
         .route("/api/v1/result", post(routes_operator::handler_v1_result))
-        .route("/api/v1/stats", get(routes_operator::handler_v1_stats))
         .route(
             "/api/v1/leaderboard",
             get(routes_operator::handler_v1_leaderboard),
@@ -582,6 +873,30 @@ pub fn build_router(state: Arc<AppState>, static_dir: Option<&Path>) -> Router {
         .route(
             "/api/volunteer/worker/latest",
             get(routes_operator::handler_worker_latest),
+        )
+        // Shared sieve cache endpoints (50 MB body limit for uploads)
+        .route(
+            "/api/v1/sieve/{hash}",
+            axum::routing::put(routes_sieve::handler_v1_sieve_upload)
+                .get(routes_sieve::handler_v1_sieve_download)
+                .layer(RequestBodyLimitLayer::new(50 * 1024 * 1024)),
+        )
+        .route(
+            "/api/v1/sieve/{hash}/relay",
+            post(routes_sieve::handler_v1_sieve_relay_announce),
+        )
+        .route(
+            "/api/v1/sieves",
+            get(routes_sieve::handler_v1_sieves_list),
+        )
+        // Resource endpoints
+        .route(
+            "/api/resources/summary",
+            get(routes_resources::handler_resources_summary),
+        )
+        .route(
+            "/api/resources/rates",
+            get(routes_resources::handler_resources_rates),
         );
 
     if let Some(dir) = static_dir {
@@ -590,13 +905,13 @@ pub fn build_router(state: Arc<AppState>, static_dir: Option<&Path>) -> Router {
         app = app.route("/", get(routes_status::handler_index));
     }
 
-    app.layer(
-        CorsLayer::new()
-            .allow_origin(Any)
-            .allow_methods(Any)
-            .allow_headers(Any),
-    )
+    app.layer(build_cors_layer())
     .layer(CatchPanicLayer::new())
+    .layer(axum::middleware::from_fn(api_version_middleware))
+    .layer(axum::middleware::from_fn_with_state(
+        state.clone(),
+        rate_limit_middleware,
+    ))
     .layer(axum::middleware::from_fn_with_state(
         state.clone(),
         metrics_middleware,
@@ -1686,5 +2001,140 @@ mod tests {
     fn normalize_path_handles_empty_and_root() {
         assert_eq!(normalize_path("/"), "/");
         assert_eq!(normalize_path(""), "");
+    }
+
+    #[test]
+    fn classify_public_read_endpoints() {
+        assert_eq!(
+            classify_rate_limit(&Method::GET, "/api/primes"),
+            RateLimitTier::PublicRead,
+        );
+        assert_eq!(
+            classify_rate_limit(&Method::GET, "/api/primes/42"),
+            RateLimitTier::PublicRead,
+        );
+        assert_eq!(
+            classify_rate_limit(&Method::GET, "/api/stats"),
+            RateLimitTier::PublicRead,
+        );
+        assert_eq!(
+            classify_rate_limit(&Method::GET, "/api/stats/timeline"),
+            RateLimitTier::PublicRead,
+        );
+        assert_eq!(
+            classify_rate_limit(&Method::GET, "/healthz"),
+            RateLimitTier::PublicRead,
+        );
+        assert_eq!(
+            classify_rate_limit(&Method::GET, "/readyz"),
+            RateLimitTier::PublicRead,
+        );
+        assert_eq!(
+            classify_rate_limit(&Method::GET, "/metrics"),
+            RateLimitTier::PublicRead,
+        );
+    }
+
+    #[test]
+    fn classify_public_write_endpoints() {
+        assert_eq!(
+            classify_rate_limit(&Method::POST, "/api/v1/operators/register"),
+            RateLimitTier::PublicWrite,
+        );
+        // Legacy alias
+        assert_eq!(
+            classify_rate_limit(&Method::POST, "/api/v1/register"),
+            RateLimitTier::PublicWrite,
+        );
+    }
+
+    #[test]
+    fn classify_auth_endpoints() {
+        assert_eq!(
+            classify_rate_limit(&Method::GET, "/api/auth/profile"),
+            RateLimitTier::Auth,
+        );
+        assert_eq!(
+            classify_rate_limit(&Method::GET, "/api/auth/me"),
+            RateLimitTier::Auth,
+        );
+        assert_eq!(
+            classify_rate_limit(&Method::POST, "/api/v1/operators/rotate-key"),
+            RateLimitTier::Auth,
+        );
+    }
+
+    #[test]
+    fn classify_operator_endpoints() {
+        assert_eq!(
+            classify_rate_limit(&Method::POST, "/api/v1/nodes/heartbeat"),
+            RateLimitTier::Operator,
+        );
+        assert_eq!(
+            classify_rate_limit(&Method::GET, "/api/v1/nodes/work"),
+            RateLimitTier::Operator,
+        );
+        assert_eq!(
+            classify_rate_limit(&Method::POST, "/api/v1/nodes/result"),
+            RateLimitTier::Operator,
+        );
+        // Legacy aliases
+        assert_eq!(
+            classify_rate_limit(&Method::POST, "/api/v1/worker/heartbeat"),
+            RateLimitTier::Operator,
+        );
+        assert_eq!(
+            classify_rate_limit(&Method::GET, "/api/v1/work"),
+            RateLimitTier::Operator,
+        );
+        assert_eq!(
+            classify_rate_limit(&Method::POST, "/api/v1/result"),
+            RateLimitTier::Operator,
+        );
+    }
+
+    #[test]
+    fn classify_admin_endpoints() {
+        assert_eq!(
+            classify_rate_limit(&Method::GET, "/api/fleet"),
+            RateLimitTier::Admin,
+        );
+        assert_eq!(
+            classify_rate_limit(&Method::POST, "/api/searches"),
+            RateLimitTier::Admin,
+        );
+        assert_eq!(
+            classify_rate_limit(&Method::GET, "/api/strategy/status"),
+            RateLimitTier::Admin,
+        );
+        assert_eq!(
+            classify_rate_limit(&Method::GET, "/api/projects"),
+            RateLimitTier::Admin,
+        );
+    }
+
+    #[test]
+    fn classify_default_tier() {
+        assert_eq!(
+            classify_rate_limit(&Method::GET, "/"),
+            RateLimitTier::Default,
+        );
+        assert_eq!(
+            classify_rate_limit(&Method::GET, "/ws"),
+            RateLimitTier::Default,
+        );
+        assert_eq!(
+            classify_rate_limit(&Method::GET, "/favicon.ico"),
+            RateLimitTier::Default,
+        );
+    }
+
+    #[test]
+    fn classify_post_to_primes_is_admin_not_public_read() {
+        // POST to /api/primes/* should be Admin, not PublicRead (only GET is public read)
+        assert_eq!(
+            classify_rate_limit(&Method::POST, "/api/primes/42/verify"),
+            RateLimitTier::Admin,
+        );
     }
 }

@@ -15,6 +15,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 use super::middleware_auth::RequireAuth;
+use super::response::ValidatedJson;
 use super::AppState;
 use crate::db::operators::{OperatorRow, WorkerCapabilities};
 
@@ -125,6 +126,11 @@ pub(super) async fn handler_worker_latest(
 
 /// Extract and validate the API key from the Authorization header.
 /// Returns the volunteer record if valid, or an error response.
+///
+/// Performs three checks after lookup:
+/// 1. Account is active (`is_active`)
+/// 2. API key is not expired (90-day rotation policy)
+/// 3. Client IP is in the allowed list (if configured)
 async fn authenticate(
     state: &Arc<AppState>,
     headers: &HeaderMap,
@@ -142,58 +148,93 @@ async fn authenticate(
         ));
     }
 
-    match state.db.get_operator_by_api_key(api_key).await {
-        Ok(Some(vol)) => {
-            // Update last_seen
-            let _ = state.db.touch_operator(vol.id).await;
-            Ok(vol)
+    let vol = match state.db.get_operator_by_api_key(api_key).await {
+        Ok(Some(vol)) => vol,
+        Ok(None) => {
+            return Err((
+                StatusCode::UNAUTHORIZED,
+                Json(serde_json::json!({"error": "Invalid or expired API key"})),
+            ));
         }
-        Ok(None) => Err((
+        Err(e) => {
+            tracing::warn!(error = %e, "operator auth DB lookup failed");
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Internal server error"})),
+            ));
+        }
+    };
+
+    // Check account is active
+    if !vol.is_active {
+        return Err((
             StatusCode::UNAUTHORIZED,
-            Json(serde_json::json!({"error": "Invalid API key"})),
-        )),
-        Err(e) => Err((
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({"error": format!("Database error: {}", e)})),
-        )),
+            Json(serde_json::json!({"error": "Invalid or expired API key"})),
+        ));
     }
+
+    // Check key expiration (90-day rotation policy)
+    if (chrono::Utc::now() - vol.key_rotated_at).num_days() > 90 {
+        return Err((
+            StatusCode::UNAUTHORIZED,
+            Json(serde_json::json!({"error": "API key expired, please rotate"})),
+        ));
+    }
+
+    // Check IP allowlist (if configured)
+    if let Some(ref allowed) = vol.allowed_ips {
+        if !allowed.is_empty() {
+            let client_ip = headers
+                .get("x-forwarded-for")
+                .and_then(|v| v.to_str().ok())
+                .and_then(|v| v.split(',').next())
+                .map(|s| s.trim().to_string())
+                .or_else(|| {
+                    headers
+                        .get("x-real-ip")
+                        .and_then(|v| v.to_str().ok())
+                        .map(|s| s.trim().to_string())
+                });
+            match client_ip {
+                Some(ip) if allowed.contains(&ip) => {}
+                _ => {
+                    return Err((
+                        StatusCode::FORBIDDEN,
+                        Json(serde_json::json!({"error": "IP address not in allowlist"})),
+                    ));
+                }
+            }
+        }
+    }
+
+    // Update last_seen only after all checks pass (avoids timing oracle)
+    let _ = state.db.touch_operator(vol.id).await;
+    Ok(vol)
 }
 
 // ── POST /api/v1/register ─────────────────────────────────────────
 
-#[derive(Deserialize)]
+#[derive(Deserialize, garde::Validate)]
 pub(super) struct RegisterPayload {
+    #[garde(length(min = 3, max = 32), pattern(r"^[a-zA-Z0-9_-]+$"))]
     username: String,
+    #[garde(length(min = 5, max = 254), pattern(r"^[^\s@]+@[^\s@]+\.[^\s@]+$"))]
     email: String,
 }
 
 pub(super) async fn handler_v1_register(
     State(state): State<Arc<AppState>>,
-    Json(payload): Json<RegisterPayload>,
+    ValidatedJson(payload): ValidatedJson<RegisterPayload>,
 ) -> impl IntoResponse {
-    // Basic validation
-    if payload.username.len() < 3 || payload.username.len() > 32 {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(serde_json::json!({"error": "Username must be 3-32 characters"})),
-        );
-    }
-    if !payload.email.contains('@') {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(serde_json::json!({"error": "Invalid email address"})),
-        );
-    }
-
     match state
         .db
         .register_operator(&payload.username, &payload.email)
         .await
     {
-        Ok(vol) => (
+        Ok((vol, plaintext_key)) => (
             StatusCode::CREATED,
             Json(serde_json::json!({
-                "api_key": vol.api_key,
+                "api_key": plaintext_key,
                 "username": vol.username,
             })),
         ),
@@ -205,9 +246,10 @@ pub(super) async fn handler_v1_register(
                     Json(serde_json::json!({"error": "Username or email already registered"})),
                 )
             } else {
+                tracing::warn!(error = %e, "operator registration failed");
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(serde_json::json!({"error": format!("Registration failed: {}", e)})),
+                    Json(serde_json::json!({"error": "Registration failed"})),
                 )
             }
         }
@@ -291,10 +333,13 @@ pub(super) async fn handler_v1_worker_register(
             }
             (StatusCode::OK, Json(serde_json::json!({"ok": true})))
         }
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({"error": format!("Worker registration failed: {}", e)})),
-        ),
+        Err(e) => {
+            tracing::warn!(error = %e, "operator node registration failed");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Node registration failed"})),
+            )
+        }
     }
 }
 
@@ -310,10 +355,20 @@ pub(super) async fn handler_v1_worker_heartbeat(
     headers: HeaderMap,
     Json(payload): Json<WorkerHeartbeatPayload>,
 ) -> impl IntoResponse {
-    let _vol = match authenticate(&state, &headers).await {
+    let vol = match authenticate(&state, &headers).await {
         Ok(v) => v,
         Err(e) => return e,
     };
+
+    // Verify the node belongs to this operator
+    if let Ok(Some(owner)) = state.db.get_node_owner(&payload.worker_id).await {
+        if owner != vol.id {
+            return (
+                StatusCode::FORBIDDEN,
+                Json(serde_json::json!({"error": "Node does not belong to this operator"})),
+            );
+        }
+    }
 
     let start = std::time::Instant::now();
 
@@ -336,10 +391,13 @@ pub(super) async fn handler_v1_worker_heartbeat(
 
     match result {
         Ok(()) => (StatusCode::OK, Json(serde_json::json!({"ok": true}))),
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({"error": format!("Heartbeat failed: {}", e)})),
-        ),
+        Err(e) => {
+            tracing::warn!(error = %e, "operator heartbeat failed");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Heartbeat failed"})),
+            )
+        }
     }
 }
 
@@ -409,43 +467,65 @@ pub(super) async fn handler_v1_work(
             )
         }
         Ok(None) => (StatusCode::NO_CONTENT, Json(serde_json::json!(null))),
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({"error": format!("Work claim failed: {}", e)})),
-        ),
+        Err(e) => {
+            tracing::warn!(error = %e, "operator work claim failed");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Work claim failed"})),
+            )
+        }
     }
 }
 
 // ── POST /api/v1/result ───────────────────────────────────────────
 
-#[derive(Deserialize)]
+#[derive(Deserialize, garde::Validate)]
 pub(super) struct ResultPayload {
+    #[garde(skip)]
     block_id: i64,
+    #[garde(range(min = 0))]
     tested: i64,
+    #[garde(range(min = 0))]
     found: i64,
     #[serde(default)]
+    #[garde(length(max = 1000), dive)]
     primes: Vec<PrimeReportPayload>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, garde::Validate)]
 pub(super) struct PrimeReportPayload {
+    #[garde(length(min = 1, max = 10_000))]
     expression: String,
+    #[garde(length(min = 1, max = 100))]
     form: String,
+    #[garde(range(min = 1))]
     digits: u64,
+    #[garde(length(min = 1, max = 100))]
     proof_method: String,
     #[serde(default)]
+    #[garde(length(max = 100_000))]
     certificate: Option<String>,
 }
 
 pub(super) async fn handler_v1_result(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-    Json(payload): Json<ResultPayload>,
+    ValidatedJson(payload): ValidatedJson<ResultPayload>,
 ) -> impl IntoResponse {
     let vol = match authenticate(&state, &headers).await {
         Ok(v) => v,
         Err(e) => return e,
     };
+
+    // Verify the block was claimed by this operator
+    if let Ok(Some(claimer)) = state.db.get_block_claimer_operator(payload.block_id).await {
+        if claimer != vol.id {
+            return (
+                StatusCode::FORBIDDEN,
+                Json(serde_json::json!({"error": "Block not claimed by this operator"})),
+            );
+        }
+    }
 
     // Complete the work block and record duration histogram
     let block_timing = match state
@@ -455,9 +535,10 @@ pub(super) async fn handler_v1_result(
     {
         Ok(timing) => timing,
         Err(e) => {
+            tracing::warn!(error = %e, "operator result submission failed");
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({"error": format!("Result submission failed: {}", e)})),
+                Json(serde_json::json!({"error": "Result submission failed"})),
             );
         }
     };
@@ -549,10 +630,13 @@ pub(super) async fn handler_v1_stats(
             StatusCode::NOT_FOUND,
             Json(serde_json::json!({"error": "Stats not found"})),
         ),
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({"error": format!("Stats query failed: {}", e)})),
-        ),
+        Err(e) => {
+            tracing::warn!(error = %e, "operator stats query failed");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Stats query failed"})),
+            )
+        }
     }
 }
 
@@ -579,10 +663,13 @@ pub(super) async fn handler_v1_leaderboard(
                 .collect();
             (StatusCode::OK, Json(serde_json::json!(result)))
         }
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({"error": format!("Leaderboard query failed: {}", e)})),
-        ),
+        Err(e) => {
+            tracing::warn!(error = %e, "operator leaderboard query failed");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Leaderboard query failed"})),
+            )
+        }
     }
 }
 
@@ -604,10 +691,13 @@ async fn get_operator_uuid(
             StatusCode::NOT_FOUND,
             Json(serde_json::json!({"error": "User profile not found"})),
         )),
-        Err(e) => Err((
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({"error": format!("Database error: {}", e)})),
-        )),
+        Err(e) => {
+            tracing::warn!(error = %e, "failed to look up operator UUID");
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Internal server error"})),
+            ))
+        }
     }
 }
 
@@ -623,10 +713,13 @@ pub(super) async fn handler_v1_operator_nodes(
 
     match state.db.get_operator_nodes(operator_id).await {
         Ok(nodes) => (StatusCode::OK, Json(serde_json::json!(nodes))),
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({"error": format!("Failed to fetch nodes: {}", e)})),
-        ),
+        Err(e) => {
+            tracing::warn!(error = %e, "failed to fetch operator nodes");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Failed to fetch nodes"})),
+            )
+        }
     }
 }
 
@@ -647,9 +740,12 @@ pub(super) async fn handler_v1_rotate_key(
             StatusCode::OK,
             Json(serde_json::json!({"api_key": new_key})),
         ),
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({"error": format!("Failed to rotate key: {}", e)})),
-        ),
+        Err(e) => {
+            tracing::warn!(error = %e, "failed to rotate operator key");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Failed to rotate key"})),
+            )
+        }
     }
 }

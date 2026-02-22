@@ -34,6 +34,11 @@ docs/
     ├── [Platform Roadmaps]
     ├── website.md                # Public website features (8 KB)
     ├── public-compute.md         # Volunteer compute platform (10 KB)
+    ├── path-c.md                 # Hybrid compute platform strategy (Path C)
+    ├── technology-vision.md      # Protocol architecture (WASM, libp2p, CRDTs, VCs)
+    │
+    ├── [Orchestration Roadmaps]
+    ├── openclaw.md               # OpenClaw integration: Discord, kanban, multi-model (12 KB)
     │
     └── competitive-analysis.md   # Market analysis and landscape (27 KB)
 ```

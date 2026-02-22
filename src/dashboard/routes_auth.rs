@@ -15,6 +15,10 @@ pub(super) struct ProfileQuery {
     user_id: String,
 }
 
+#[utoipa::path(get, path = "/api/auth/profile", tag = "auth", security(("bearer_jwt" = [])),
+    params(("user_id" = String, Query, description = "User UUID")),
+    responses((status = 200, description = "User profile"), (status = 401, description = "Authentication required"), (status = 500, description = "Internal server error"))
+)]
 /// GET /api/auth/profile?user_id=<uuid>
 /// Returns the user's profile including role and operator_id.
 /// Requires authentication. Users can query their own profile;
@@ -40,6 +44,9 @@ pub(super) async fn handler_api_profile(
     }
 }
 
+#[utoipa::path(get, path = "/api/auth/me", tag = "auth", security(("bearer_jwt" = [])),
+    responses((status = 200, description = "Authenticated user profile"), (status = 401, description = "Authentication required"), (status = 500, description = "Internal server error"))
+)]
 /// GET /api/auth/me — Returns the authenticated user's own profile.
 pub(super) async fn handler_api_me(
     State(state): State<Arc<AppState>>,

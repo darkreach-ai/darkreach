@@ -72,7 +72,8 @@ export function TopBar() {
           `${API_BASE}/api/observability/report?${params}`
         );
         if (!res.ok) return;
-        const data = (await res.json()) as {
+        const json = await res.json();
+        const data = (json.data ?? json) as {
           budget?: { status?: string };
           logs?: { by_level?: Array<[string, number]> };
         };

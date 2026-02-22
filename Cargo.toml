@@ -36,6 +36,7 @@ toml = "0.8"
 reqwest = { version = "0.12", features = ["json"] }
 scraper = "0.22"
 sha2 = "0.10.9"
+rand = "0.9"
 sysinfo = "0.34"
 base64 = "0.22.1"
 uuid = { version = "1", features = ["serde", "v4"] }
@@ -48,6 +49,9 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
 jsonwebtoken = "9"
 redis = { version = "0.27", features = ["aio", "connection-manager", "tokio-comp"] }
+garde = { version = "0.22", features = ["derive", "regex"] }
+utoipa = { version = "5", features = ["axum_extras"] }
+governor = "0.8"
 
 [profile.release]
 lto = "fat"

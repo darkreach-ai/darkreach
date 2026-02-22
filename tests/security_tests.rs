@@ -10,11 +10,16 @@
 //! | Test | OWASP / CWE | Description |
 //! |------|-------------|-------------|
 //! | SQL injection (sort_by, sort_dir, search) | A03:2021 Injection / CWE-89 | Parameterized queries prevent SQL injection |
+//! | SQL injection data integrity | A03:2021 Injection / CWE-89 | Verify DB state unchanged after injection |
 //! | Body size limit | A05:2021 Security Misconfiguration | 1MB payload limit prevents DoS |
-//! | CORS preflight / headers | A05:2021 Security Misconfiguration | Cross-origin policy enforcement |
+//! | CORS allowed origin | A05:2021 Security Misconfiguration | Allowed origins get CORS headers |
+//! | CORS evil origin rejected | A05:2021 Security Misconfiguration / CWE-942 | Unauthorized origins blocked |
 //! | Path traversal (doc slug, roadmap) | A01:2021 Broken Access Control / CWE-22 | Slug validation prevents file reads |
 //! | Negative block_size | A08:2021 Software Integrity / CWE-20 | Input validation rejects nonsensical values |
 //! | Malformed JSON | A08:2021 Software Integrity / CWE-20 | JSON parser rejects invalid payloads |
+//! | Missing API key | A07:2021 Auth Failures / CWE-287 | Operator endpoints require authentication |
+//! | Invalid API key | A07:2021 Auth Failures / CWE-287 | Fabricated keys rejected |
+//! | Error message leakage | A04:2021 Insecure Design / CWE-209 | No internal details in error responses |
 //!
 //! # Prerequisites
 //!
@@ -271,23 +276,64 @@ async fn body_size_limit_enforced() {
 // - CWE-942: https://cwe.mitre.org/data/definitions/942.html
 // ==============================================================================
 
-/// Tests that CORS preflight requests receive proper access control headers.
+/// Tests that CORS preflight from an allowed origin returns proper headers.
 ///
 /// **Attack vector**: OWASP A05:2021 Security Misconfiguration / CWE-942
 /// (Overly Permissive Cross-domain Whitelist).
 ///
-/// Sends an OPTIONS preflight request (as browsers do before cross-origin POST/PUT).
-/// The response must include:
-/// - `access-control-allow-origin` -- Which origins can access the API
-/// - `access-control-allow-methods` -- Which HTTP methods are permitted
-///
-/// Without these headers, no browser-based JavaScript can call the API cross-origin.
+/// Sends an OPTIONS preflight from `http://localhost:3000` (which is in the
+/// default allowlist). The response must include:
+/// - `access-control-allow-origin: http://localhost:3000`
+/// - `access-control-allow-methods`
 #[tokio::test]
-async fn cors_preflight_returns_correct_headers() {
+async fn cors_preflight_allowed_origin_returns_headers() {
     require_db!();
     let router = app().await;
 
-    // Send a CORS preflight request (OPTIONS)
+    let response = router
+        .oneshot(
+            Request::builder()
+                .uri("/api/stats")
+                .method(Method::OPTIONS)
+                .header("origin", "http://localhost:3000")
+                .header("access-control-request-method", "GET")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let allow_origin = response
+        .headers()
+        .get("access-control-allow-origin")
+        .expect("Missing access-control-allow-origin for allowed origin");
+    assert_eq!(
+        allow_origin.to_str().unwrap(),
+        "http://localhost:3000",
+        "Allow-origin should reflect the allowed origin exactly"
+    );
+    assert!(
+        response
+            .headers()
+            .get("access-control-allow-methods")
+            .is_some(),
+        "Missing access-control-allow-methods header"
+    );
+}
+
+/// Tests that CORS preflight from an unauthorized origin is NOT reflected.
+///
+/// **Attack vector**: OWASP A05:2021 Security Misconfiguration / CWE-942.
+///
+/// Sends an OPTIONS preflight from `https://evil.example.com` which is not
+/// in the CORS allowlist. The server must NOT include `access-control-allow-origin`
+/// in the response, which causes the browser to block the cross-origin request.
+/// This prevents malicious sites from making API calls on behalf of logged-in users.
+#[tokio::test]
+async fn cors_preflight_evil_origin_rejected() {
+    require_db!();
+    let router = app().await;
+
     let response = router
         .oneshot(
             Request::builder()
@@ -301,30 +347,21 @@ async fn cors_preflight_returns_correct_headers() {
         .await
         .unwrap();
 
-    // Should have CORS headers
+    // The evil origin must NOT be reflected in allow-origin
+    let allow_origin = response.headers().get("access-control-allow-origin");
     assert!(
-        response
-            .headers()
-            .get("access-control-allow-origin")
-            .is_some(),
-        "Missing access-control-allow-origin header"
-    );
-    assert!(
-        response
-            .headers()
-            .get("access-control-allow-methods")
-            .is_some(),
-        "Missing access-control-allow-methods header"
+        allow_origin.is_none()
+            || allow_origin.unwrap().to_str().unwrap() != "https://evil.example.com",
+        "Evil origin should not be reflected in access-control-allow-origin"
     );
 }
 
-/// Tests that GET responses to cross-origin requests include allow-origin header.
+/// Tests that GET responses to allowed cross-origin requests include the correct origin.
 ///
 /// **Attack vector**: OWASP A05:2021 Security Misconfiguration / CWE-942.
 ///
-/// Sends a regular GET request with an Origin header (as all cross-origin
-/// requests include). The response must include `access-control-allow-origin`
-/// for the browser to expose the response to JavaScript.
+/// Sends a regular GET request with an Origin header from an allowed origin.
+/// The response must include `access-control-allow-origin: http://localhost:3000`.
 #[tokio::test]
 async fn cors_get_includes_allow_origin() {
     require_db!();
@@ -341,10 +378,46 @@ async fn cors_get_includes_allow_origin() {
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
-    assert!(response
+    let allow_origin = response
         .headers()
         .get("access-control-allow-origin")
-        .is_some());
+        .expect("Missing access-control-allow-origin for allowed origin");
+    assert_eq!(
+        allow_origin.to_str().unwrap(),
+        "http://localhost:3000",
+        "Allow-origin should match the requesting origin"
+    );
+}
+
+/// Tests that GET from an evil origin does NOT get allow-origin header.
+///
+/// **Attack vector**: OWASP A05:2021 Security Misconfiguration / CWE-942.
+///
+/// Sends a GET with an unauthorized origin. The response should either omit
+/// `access-control-allow-origin` or not reflect the evil origin, preventing
+/// the browser from exposing response data to the attacker's JavaScript.
+#[tokio::test]
+async fn cors_get_evil_origin_not_reflected() {
+    require_db!();
+    let router = app().await;
+
+    let response = router
+        .oneshot(
+            Request::builder()
+                .uri("/api/status")
+                .header("origin", "https://evil.example.com")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let allow_origin = response.headers().get("access-control-allow-origin");
+    assert!(
+        allow_origin.is_none()
+            || allow_origin.unwrap().to_str().unwrap() != "https://evil.example.com",
+        "Evil origin should not be reflected in access-control-allow-origin"
+    );
 }
 
 // == Path Traversal ============================================================
@@ -490,4 +563,238 @@ async fn malformed_json_returns_error() {
         "Malformed JSON should return client error, got {}",
         response.status()
     );
+}
+
+// == SQL Injection Data Integrity =============================================
+// Beyond checking that injection payloads return 200 (not 500), we also verify
+// that the database state is unchanged after injection attempts. This catches
+// scenarios where injection silently executes side-effects even if the HTTP
+// response looks normal.
+//
+// References:
+// - CWE-89: SQL Injection — data manipulation via injected statements
+// ==============================================================================
+
+/// Verifies database state is unchanged after SQL injection attempts.
+///
+/// **Attack vector**: OWASP A03:2021 Injection / CWE-89.
+///
+/// Inserts a known prime, sends multiple injection payloads that attempt
+/// to modify or delete data, then verifies the prime still exists unmodified.
+/// This catches "blind" injection where the HTTP response looks normal but
+/// the injected SQL actually executes.
+#[tokio::test]
+async fn sql_injection_does_not_modify_data() {
+    require_db!();
+    let db = common::setup_test_db().await;
+
+    // Insert a sentinel prime so we can verify it survives injection attempts
+    sqlx::query(
+        "INSERT INTO primes (form, expression, digits, proof_method) \
+         VALUES ('factorial', '5!+1', 3, 'deterministic')",
+    )
+    .execute(db.pool())
+    .await
+    .unwrap();
+
+    // Verify sentinel exists
+    let count_before: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM primes")
+        .fetch_one(db.pool())
+        .await
+        .unwrap();
+    assert_eq!(count_before.0, 1, "Sentinel prime should exist before injection");
+
+    // Send injection payloads that attempt data modification
+    let router = common::build_test_app().await;
+    let payloads = [
+        "/api/primes?sort_by=id%3B+DELETE+FROM+primes%3B+--",
+        "/api/primes?sort_by=id%3B+UPDATE+primes+SET+form%3D%27hacked%27%3B+--",
+        "/api/primes?sort_dir=DESC%3B+DROP+TABLE+primes%3B+--",
+        "/api/primes?search=%27%3B+DELETE+FROM+primes+WHERE+%271%27%3D%271",
+    ];
+
+    for uri in &payloads {
+        let resp = router
+            .clone()
+            .oneshot(Request::builder().uri(*uri).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert!(
+            resp.status().is_success() || resp.status().is_client_error(),
+            "Unexpected server error for injection: {}",
+            uri
+        );
+    }
+
+    // Verify sentinel is still intact — no rows deleted or modified
+    let count_after: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM primes")
+        .fetch_one(db.pool())
+        .await
+        .unwrap();
+    assert_eq!(
+        count_after.0, 1,
+        "Injection should not delete primes (was {}, now {})",
+        count_before.0, count_after.0
+    );
+
+    let form: (String,) = sqlx::query_as("SELECT form FROM primes WHERE expression = '5!+1'")
+        .fetch_one(db.pool())
+        .await
+        .unwrap();
+    assert_eq!(
+        form.0, "factorial",
+        "Injection should not modify prime form (got '{}')",
+        form.0
+    );
+}
+
+// == Operator Authentication ==================================================
+// Tests that the operator API key authentication system correctly rejects
+// unauthenticated and malformed requests.
+//
+// References:
+// - OWASP: https://owasp.org/Top10/A07_2021-Identification_and_Authentication_Failures/
+// - CWE-287: Improper Authentication
+// ==============================================================================
+
+/// Tests that operator endpoints reject requests without an API key.
+///
+/// **Attack vector**: OWASP A07:2021 Identification and Authentication Failures
+/// / CWE-287 (Improper Authentication).
+///
+/// The heartbeat, work, and result endpoints require a valid `x-api-key` header.
+/// Requests without this header should receive 401 Unauthorized.
+#[tokio::test]
+async fn operator_endpoints_reject_missing_api_key() {
+    require_db!();
+    let router = app().await;
+
+    let protected_endpoints = [
+        ("/api/v1/nodes/heartbeat", Method::POST),
+        ("/api/v1/nodes/work", Method::GET),
+        ("/api/v1/nodes/result", Method::POST),
+    ];
+
+    for (uri, method) in &protected_endpoints {
+        let response = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(*uri)
+                    .method(method.clone())
+                    .header("content-type", "application/json")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            response.status(),
+            StatusCode::UNAUTHORIZED,
+            "Endpoint {} {} should reject missing API key (got {})",
+            method,
+            uri,
+            response.status()
+        );
+    }
+}
+
+/// Tests that operator endpoints reject requests with an invalid API key.
+///
+/// **Attack vector**: OWASP A07:2021 / CWE-287.
+///
+/// Sends requests with a fabricated API key that does not match any operator.
+/// The server should return 401 Unauthorized without revealing whether the
+/// key format is valid or whether any operators exist.
+#[tokio::test]
+async fn operator_endpoints_reject_invalid_api_key() {
+    require_db!();
+    let router = app().await;
+
+    let response = router
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/nodes/heartbeat")
+                .method(Method::POST)
+                .header("content-type", "application/json")
+                .header("x-api-key", "definitely-not-a-valid-key-12345")
+                .body(Body::from("{}"))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        response.status(),
+        StatusCode::UNAUTHORIZED,
+        "Invalid API key should return 401 (got {})",
+        response.status()
+    );
+
+    // Verify error response does not leak internal details
+    let body = response.into_body().collect().await.unwrap().to_bytes();
+    let body_str = String::from_utf8_lossy(&body);
+    assert!(
+        !body_str.contains("sqlx") && !body_str.contains("database") && !body_str.contains("query"),
+        "Error response should not leak database details: {}",
+        body_str
+    );
+}
+
+/// Tests that error responses from auth endpoints don't leak internal state.
+///
+/// **Attack vector**: OWASP A04:2021 Insecure Design / CWE-209
+/// (Generation of Error Message Containing Sensitive Information).
+///
+/// Sends various malformed requests and verifies error bodies do not contain
+/// stack traces, SQL error messages, or internal identifiers.
+#[tokio::test]
+async fn auth_error_responses_do_not_leak_internals() {
+    require_db!();
+    let router = app().await;
+
+    let error_probes = [
+        ("/api/v1/nodes/heartbeat", Method::POST, "{}"),
+        ("/api/v1/nodes/result", Method::POST, "{\"block_id\": 99999}"),
+        ("/api/v1/operators/rotate-key", Method::POST, "{}"),
+    ];
+
+    let sensitive_patterns = [
+        "stack trace",
+        "SQLSTATE",
+        "sqlx",
+        "pg_catalog",
+        "internal error",
+        "panicked at",
+        "thread '",
+        "postgresql://",
+        "postgres://",
+    ];
+
+    for (uri, method, body_str) in &error_probes {
+        let response = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(*uri)
+                    .method(method.clone())
+                    .header("content-type", "application/json")
+                    .header("x-api-key", "bogus-key")
+                    .body(Body::from(*body_str))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let text = String::from_utf8_lossy(&body).to_lowercase();
+        for pattern in &sensitive_patterns {
+            assert!(
+                !text.contains(pattern),
+                "Response for {} {} leaked sensitive info '{}': {}",
+                method,
+                uri,
+                pattern,
+                text
+            );
+        }
+    }
 }

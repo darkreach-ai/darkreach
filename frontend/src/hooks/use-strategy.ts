@@ -73,7 +73,8 @@ export function useStrategyStatus() {
     try {
       const res = await fetch(`${API_BASE}/api/strategy/status`);
       if (res.ok) {
-        setStatus(await res.json());
+        const json = await res.json();
+        setStatus((json.data ?? json) as StrategyStatus);
         setError(null);
       } else {
         setError("Failed to fetch strategy status");
@@ -103,7 +104,8 @@ export function useStrategyScores() {
     try {
       const res = await fetch(`${API_BASE}/api/strategy/scores`);
       if (res.ok) {
-        setScores(await res.json());
+        const json = await res.json();
+        setScores((json.data ?? json) as FormScore[]);
         setError(null);
       } else {
         setError("Failed to fetch scores");
@@ -133,7 +135,8 @@ export function useStrategyDecisions() {
     try {
       const res = await fetch(`${API_BASE}/api/strategy/decisions`);
       if (res.ok) {
-        setDecisions(await res.json());
+        const json = await res.json();
+        setDecisions((json.data ?? json) as StrategyDecision[]);
         setError(null);
       } else {
         setError("Failed to fetch decisions");
@@ -163,7 +166,8 @@ export function useStrategyConfig() {
     try {
       const res = await fetch(`${API_BASE}/api/strategy/config`);
       if (res.ok) {
-        setConfig(await res.json());
+        const json = await res.json();
+        setConfig((json.data ?? json) as StrategyConfig);
         setError(null);
       } else {
         setError("Failed to fetch config");
@@ -192,13 +196,13 @@ export async function updateStrategyConfig(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(updates),
   });
+  const json = await resp.json();
   if (!resp.ok) {
-    const body = await resp.json().catch(() => ({}));
     throw new Error(
-      (body as Record<string, string>).error || "Failed to update config"
+      (json as Record<string, string>).error || "Failed to update config"
     );
   }
-  return resp.json();
+  return (json.data ?? json) as StrategyConfig;
 }
 
 export async function overrideDecision(
@@ -229,11 +233,11 @@ export async function triggerStrategyTick(): Promise<{
   const resp = await fetch(`${API_BASE}/api/strategy/tick`, {
     method: "POST",
   });
+  const json = await resp.json();
   if (!resp.ok) {
-    const body = await resp.json().catch(() => ({}));
     throw new Error(
-      (body as Record<string, string>).error || "Failed to trigger tick"
+      (json as Record<string, string>).error || "Failed to trigger tick"
     );
   }
-  return resp.json();
+  return (json.data ?? json) as { decisions: StrategyDecision[]; scores: FormScore[] };
 }

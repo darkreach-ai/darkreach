@@ -48,7 +48,8 @@ export function useAgentSchedules() {
     try {
       const resp = await fetch(`${API_BASE}/api/schedules`);
       if (resp.ok) {
-        const body = await resp.json();
+        const json = await resp.json();
+        const body = json.data ?? json;
         setSchedules(body.schedules ?? []);
       }
     } catch {
@@ -106,8 +107,9 @@ export async function createSchedule(payload: {
       permission_level: payload.permission_level ?? 1,
     }),
   });
-  const body = await resp.json();
-  if (!resp.ok) throw new Error(body.error || "Failed to create schedule");
+  const json = await resp.json();
+  if (!resp.ok) throw new Error(json.error || "Failed to create schedule");
+  const body = json.data ?? json;
   return body as AgentSchedule;
 }
 
@@ -120,8 +122,9 @@ export async function updateSchedule(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(updates),
   });
-  const body = await resp.json();
-  if (!resp.ok) throw new Error(body.error || "Failed to update schedule");
+  const json = await resp.json();
+  if (!resp.ok) throw new Error(json.error || "Failed to update schedule");
+  const body = json.data ?? json;
   return body as AgentSchedule;
 }
 
@@ -141,7 +144,8 @@ export async function toggleSchedule(id: number, enabled: boolean) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ enabled }),
   });
-  const body = await resp.json();
-  if (!resp.ok) throw new Error(body.error || "Failed to toggle schedule");
+  const json = await resp.json();
+  if (!resp.ok) throw new Error(json.error || "Failed to toggle schedule");
+  const body = json.data ?? json;
   return body as AgentSchedule;
 }

@@ -45,7 +45,8 @@ export function useAgentMemory() {
     try {
       const res = await fetch(`${API_BASE}/api/agents/memory`);
       if (res.ok) {
-        const data = await res.json();
+        const json = await res.json();
+        const data = json.data ?? json;
         setMemories(data as AgentMemory[]);
       }
     } catch {
@@ -71,13 +72,14 @@ export async function upsertMemory(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ key, value, category }),
   });
+  const json = await resp.json();
   if (!resp.ok) {
-    const body = await resp.json().catch(() => ({}));
     throw new Error(
-      (body as Record<string, string>).error || "Failed to upsert memory"
+      (json as Record<string, string>).error || "Failed to upsert memory"
     );
   }
-  return (await resp.json()) as AgentMemory;
+  const body = json.data ?? json;
+  return body as AgentMemory;
 }
 
 export async function deleteMemory(key: string) {

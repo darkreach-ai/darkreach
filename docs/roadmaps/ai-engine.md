@@ -647,6 +647,83 @@ This is speculative but could lead to publishable mathematical results or inform
 
 ---
 
+## Phase 9: Commercial Scheduling Intelligence
+
+> **Priority: P2** — Required for Path C hybrid compute platform. See [Path C Roadmap](path-c.md).
+
+### 9.1 Revenue-Aware Scoring
+
+**Current:** 7-component scoring model optimizes for prime discovery ROI.
+
+**Target:** 11-component model adds commercial dimensions:
+
+| New Component | Weight | What it measures |
+|--------------|--------|-----------------|
+| `revenue_potential` | 0.15 | Expected revenue from this job (price * estimated hours) |
+| `deadline_pressure` | 0.10 | Time remaining vs estimated compute needed (SLA risk) |
+| `verification_depth` | 0.05 | Trust requirements for this job class |
+| `fairness_balance` | 0.05 | Ensure open science tier doesn't starve |
+
+Rebalanced weights ensure open science still gets meaningful allocation even when commercial demand is high.
+
+### 9.2 Multi-Tier Job Scheduling
+
+**Target:** Priority-based scheduling across three tiers:
+
+1. **Enterprise jobs** — First claim on matching Level 3+ nodes. SLA guarantees.
+2. **Priority jobs** — Fill remaining capacity with deadline-aware scheduling.
+3. **Open science** — Fill everything else. Minimum 20% capacity guarantee.
+4. **Prime hunting** — Background heartbeat. Always running on truly idle capacity.
+
+```
+fn schedule_next_block(node: &Node) -> Option<WorkBlock> {
+    // 1. Check enterprise reservations for this node
+    if let Some(block) = enterprise_queue.claim_for(node) { return Some(block); }
+    // 2. Check priority jobs with approaching deadlines
+    if let Some(block) = priority_queue.claim_urgent(node) { return Some(block); }
+    // 3. Check open science (if below fairness floor)
+    if open_science_pct() < MIN_OPEN_SCIENCE_PCT {
+        if let Some(block) = open_queue.claim_for(node) { return Some(block); }
+    }
+    // 4. Any available work (priority > open > primes)
+    any_queue.claim_best_fit(node)
+}
+```
+
+### 9.3 SLA Enforcement
+
+**Target:** Deadline-aware scheduling for paid tiers:
+
+- Priority jobs carry a `deadline` timestamp and `confidence_target` (e.g., 0.95)
+- Scheduler estimates: `P(completion before deadline) = f(remaining_blocks, available_nodes, historical_throughput)`
+- If P < confidence_target, escalate: reserve additional nodes, pre-empt lower-priority work
+- If deadline missed, alert and log for SLA reporting
+
+### 9.4 Enterprise Capacity Reservation
+
+**Target:** Enterprise customers can reserve dedicated capacity:
+
+- `capacity_reservations` table: customer_id, min_cores, max_cores, valid_from, valid_until
+- Reserved cores route enterprise work exclusively to Level 3+ operators
+- Utilization tracking: if reserved capacity is idle, backfill with open science (but pre-emptable)
+- Monthly billing based on reserved capacity, not just consumed hours
+
+### 9.5 Fairness Guarantees
+
+**Target:** Hard policy controls preventing commercial work from crowding out open science:
+
+```toml
+[fairness]
+min_open_science_pct = 20        # Floor: at least 20% of network capacity
+max_single_customer_pct = 40     # No single customer monopolizes
+prime_hunting_min_pct = 5        # Primes always run (heartbeat)
+max_commercial_pct = 75          # Ceiling on total commercial utilization
+```
+
+The AI scheduler enforces these in real-time. If commercial demand pushes open science below the floor, new commercial blocks queue instead of claiming nodes.
+
+---
+
 ## Implementation Priority
 
 | Phase | Items | Effort | Impact | Dependencies |
@@ -659,6 +736,7 @@ This is speculative but could lead to publishable mathematical results or inform
 | **6. Self-Improvement** | 6.1, 6.2, 6.3, 6.4 | Medium | Medium | Phases 2, 3 |
 | **7. Full Autonomy** | 7.1, 7.2, 7.3, 7.4 | Large | **Strategic** | Phases 1-6 |
 | **8. Advanced AI** | 8.1, 8.2, 8.3 | Very Large | Strategic | All prior phases |
+| **9. Commercial Scheduling** | 9.1, 9.2, 9.3, 9.4, 9.5 | Large | **Strategic** | Phases 1-3, Path C platform |
 
 **Recommended implementation order:**
 
@@ -676,6 +754,8 @@ Phase 6 (Self-Improvement)      ← Needs data from Phases 3-5
 Phase 7 (Full Autonomy)         ← Integration of all prior phases
   ↓
 Phase 8 (Advanced AI)           ← Research frontier
+  ↓
+Phase 9 (Commercial AI)         ← When Path C marketplace launches
 ```
 
 ---
@@ -711,3 +791,57 @@ Phase 8 (Advanced AI)           ← Research frontier
 | Primes found per core-dollar | Baseline | 2x baseline | 5x baseline |
 | Time from discovery to verification | Hours (manual) | <10 min (auto) | <2 min |
 | Strategy decisions per human decision | 0 (all manual) | 5:1 | 50:1 |
+
+---
+
+## Phase 10: Reinforcement Learning Scheduling
+
+> See [Technology Vision](technology-vision.md) for the full protocol architecture.
+
+**Goal:** Replace the heuristic scoring model with a reinforcement learning agent that discovers optimal scheduling policies through experience.
+
+### 10.1 RL Formulation
+
+```
+State  = {network_topology, pending_jobs, operator_capabilities,
+          trust_levels, SLA_deadlines, market_prices, historical_performance}
+Action = {job_assignments, capacity_reservations, price_adjustments}
+Reward = f(SLA_compliance, cost_efficiency, fairness, discovery_rate,
+           operator_satisfaction, customer_retention)
+```
+
+The RL agent discovers policies that no hand-tuned heuristic could find:
+- Pre-position capacity based on customer submission patterns
+- Adapt to operator hardware quirks (thermal throttling, availability windows)
+- Route domain-specific jobs to operators with relevant experience
+- Dynamic pricing based on real-time supply/demand
+
+### 10.2 Multi-Objective Optimization
+
+Multiple competing objectives require Pareto-optimal scheduling:
+- **SLA compliance**: enterprise jobs hit 99.9% deadline target
+- **Cost efficiency**: minimize $/result across the network
+- **Fairness**: maintain ≥20% open science allocation
+- **Discovery rate**: maximize prime discoveries per core-dollar
+- **Operator satisfaction**: balanced workload distribution, minimize idle time
+
+### 10.3 Federated Learning Across Operators
+
+Each operator's node learns local patterns and shares model updates (not raw data):
+- Hardware characteristics (peak performance, thermal limits, memory bandwidth)
+- Availability patterns (time of day, day of week, seasonal)
+- Job completion times by type and parameter range
+- Network latency to nearby operators
+
+The global model improves from thousands of local observations without centralizing sensitive operator data.
+
+### 10.4 Migration Path
+
+```
+Phase 1 (current):  7-component linear scoring with EWA weight learning
+Phase 2:            Neural network scoring model trained on historical decisions
+Phase 3:            RL agent with multi-objective reward function
+Phase 4:            Federated learning across operator nodes
+```
+
+Each phase is backward-compatible. The RL agent starts by mimicking the heuristic policy, then improves through exploration. If the RL agent performs worse than the heuristic on any metric, automatic fallback to the previous phase.

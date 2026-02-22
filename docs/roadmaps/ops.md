@@ -224,3 +224,45 @@ Full server cost analysis and provider comparison: [server-setup.md](../server-s
 | Primorial | **~140,000** | Yes | PrimeGrid (not viable solo) | Not recommended |
 
 Apple Silicon for development/testing. Hetzner Zen 4 dedicated servers for production search (better GMP assembly, no thermal throttling). **Avoid Zen 5** — see [server-setup.md](../server-setup.md#warning-avoid-amd-zen-5).
+
+---
+
+## WASM & TEE Deployment
+
+> See [Technology Vision](technology-vision.md) for the full protocol architecture.
+
+### WASM Module Build Pipeline
+
+**Target:** CI/CD pipeline that compiles the engine to `wasm32-wasi` alongside native targets.
+
+```
+CI pipeline:
+  cargo build --release --target x86_64-unknown-linux-gnu    (native)
+  cargo build --release --target aarch64-unknown-linux-gnu   (ARM native)
+  cargo build --release --target wasm32-wasip1               (WASM)
+```
+
+- WASM modules content-addressed by SHA-256 hash
+- Published to a WASM module registry (OCI-compatible or custom)
+- Operators pull modules by hash — integrity verified on download
+- Module signing with Ed25519 — operators verify darkreach signature before execution
+
+### TEE Deployment for Enterprise
+
+**Target:** Operators with Intel TDX or AMD SEV-SNP hardware can run enterprise workloads in hardware-attested enclaves.
+
+- Operator registration includes TEE capability reporting
+- TEE attestation verification on the coordinator side
+- Confidential WASM execution: input encrypted with TEE key, output encrypted with customer key
+- Attestation certificates stored in Merkle DAG audit trail
+- TEE operators earn premium rates on enterprise jobs
+
+### Browser SDK Distribution
+
+**Target:** `darkreach.ai/contribute` serves a browser-based operator experience.
+
+- WASM module loaded via `<script>` tag or Web Worker
+- WebGPU compute shaders for sieving (when available)
+- Service Worker for offline resilience and background computation
+- Bandwidth-aware: browser operators receive smaller work blocks
+- Contribution tracking via anonymous DID (no account required)

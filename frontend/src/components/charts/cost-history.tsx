@@ -60,7 +60,7 @@ export function CostHistoryChart({ slug, apiBase }: CostHistoryChartProps) {
       const res = await fetch(`${apiBase}/api/projects/${slug}/cost-history`);
       if (res.ok) {
         const json = await res.json();
-        setData(json);
+        setData((json.data ?? json) as CostHistoryData);
       }
     } catch {
       // Silently ignore fetch errors

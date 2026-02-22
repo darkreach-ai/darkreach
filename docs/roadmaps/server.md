@@ -196,3 +196,41 @@ For multi-socket servers:
 - Use `hwloc` to discover physical topology
 - Allocate memory from the NUMA node of the threads that will access it
 - Pin rayon threads to specific NUMA nodes
+
+---
+
+## Protocol Architecture: Wasmtime + libp2p
+
+> See [Technology Vision](technology-vision.md) for the full protocol architecture.
+
+### Wasmtime Execution Runtime
+
+**Target:** Embed Wasmtime as a second execution runtime alongside native Rust. General compute workloads run as WASM modules; prime search continues as native Rust for maximum performance.
+
+**Key components:**
+- `src/wasm_runtime.rs` — Wasmtime engine, WASI configuration, resource limits (CPU time, memory)
+- Capability-based I/O: WASM modules get access only to their content-addressed input and output files
+- Module caching: compiled WASM modules cached locally to avoid recompilation
+- Resource metering: fuel-based execution limits per work block
+
+### libp2p Coordination Layer
+
+**Target:** Add libp2p as a gossip layer alongside PostgreSQL. Heartbeats, capacity discovery, and open science job distribution propagate via gossip. Commercial jobs route through the coordinator for SLA enforcement.
+
+**Key components:**
+- `src/p2p/` — libp2p node with GossipSub, Kademlia DHT, mTLS
+- Operator discovery via Kademlia (no central registry for the gossip layer)
+- Job announcements published to GossipSub topics
+- Result propagation via gossip (verified before acceptance)
+- CRDT state for network metadata (operator registry, capacity, trust scores)
+- PostgreSQL remains authoritative for billing, customer accounts, enterprise SLAs
+
+### Content-Addressed Storage
+
+**Target:** Input and output data stored in a content-addressed store. Deduplication, integrity verification on retrieval, and distributed caching at operator nodes.
+
+**Key components:**
+- `src/cas/` — Content-addressed store (SHA-256 keyed)
+- Local operator cache with LRU eviction
+- P2P data transfer: operators fetch inputs from nearby peers instead of coordinator
+- Merkle DAG for computation audit trails

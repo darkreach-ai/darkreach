@@ -10,7 +10,7 @@ use tracing::info;
 
 use super::AppState;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub(super) struct CreateSearchJobPayload {
     search_type: String,
     params: serde_json::Value,
@@ -24,6 +24,17 @@ fn default_block_size() -> i64 {
     10_000
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/search_jobs",
+    tag = "searches",
+    security(("bearer_jwt" = [])),
+    responses(
+        (status = 200, description = "List of all search jobs"),
+        (status = 401, description = "Authentication required"),
+        (status = 500, description = "Internal server error"),
+    )
+)]
 pub(super) async fn handler_api_search_jobs_list(
     State(state): State<Arc<AppState>>,
 ) -> impl IntoResponse {
@@ -37,6 +48,19 @@ pub(super) async fn handler_api_search_jobs_list(
     }
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/search_jobs",
+    tag = "searches",
+    security(("bearer_jwt" = [])),
+    request_body = serde_json::Value,
+    responses(
+        (status = 201, description = "Search job created"),
+        (status = 400, description = "Invalid parameters"),
+        (status = 401, description = "Authentication required"),
+        (status = 500, description = "Internal server error"),
+    )
+)]
 pub(super) async fn handler_api_search_jobs_create(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<CreateSearchJobPayload>,
@@ -92,6 +116,19 @@ pub(super) async fn handler_api_search_jobs_create(
     }
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/search_jobs/{id}",
+    tag = "searches",
+    security(("bearer_jwt" = [])),
+    params(("id" = i64, Path, description = "Search job ID")),
+    responses(
+        (status = 200, description = "Search job details with block summary"),
+        (status = 401, description = "Authentication required"),
+        (status = 404, description = "Search job not found"),
+        (status = 500, description = "Internal server error"),
+    )
+)]
 pub(super) async fn handler_api_search_job_get(
     State(state): State<Arc<AppState>>,
     AxumPath(id): AxumPath<i64>,
@@ -126,6 +163,18 @@ pub(super) async fn handler_api_search_job_get(
     Json(serde_json::json!({"job": job, "blocks": summary})).into_response()
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/search_jobs/{id}/cancel",
+    tag = "searches",
+    security(("bearer_jwt" = [])),
+    params(("id" = i64, Path, description = "Search job ID to cancel")),
+    responses(
+        (status = 200, description = "Search job cancelled"),
+        (status = 401, description = "Authentication required"),
+        (status = 500, description = "Internal server error"),
+    )
+)]
 pub(super) async fn handler_api_search_job_cancel(
     State(state): State<Arc<AppState>>,
     AxumPath(id): AxumPath<i64>,

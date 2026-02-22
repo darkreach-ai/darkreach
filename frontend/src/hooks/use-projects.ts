@@ -85,7 +85,8 @@ export function useProjects() {
     try {
       const resp = await fetch(`${API_BASE}/api/projects`);
       if (resp.ok) {
-        const body = await resp.json();
+        const json = await resp.json();
+        const body = json.data ?? json;
         setProjects(body.projects ?? []);
         setError(null);
       } else {
@@ -137,7 +138,8 @@ export function useProject(slug: string) {
         return;
       }
 
-      const body = await resp.json();
+      const json = await resp.json();
+      const body = json.data ?? json;
       setProject(body as ProjectSummary);
       setPhases(body.phases ?? []);
       setError(null);
@@ -146,7 +148,8 @@ export function useProject(slug: string) {
       try {
         const eventsResp = await fetch(`${API_BASE}/api/projects/${encodeURIComponent(slug)}/events`);
         if (eventsResp.ok) {
-          const eventsBody = await eventsResp.json();
+          const eventsJson = await eventsResp.json();
+          const eventsBody = eventsJson.data ?? eventsJson;
           setEvents(eventsBody.events ?? []);
         }
       } catch {

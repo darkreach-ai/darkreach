@@ -71,7 +71,8 @@ export function useRecords() {
     try {
       const resp = await fetch(`${API_BASE}/api/records`);
       if (resp.ok) {
-        const data = await resp.json();
+        const json = await resp.json();
+        const data = json.data ?? json;
         setRecords(Array.isArray(data) ? data : (data.records ?? []));
         setError(null);
       } else {

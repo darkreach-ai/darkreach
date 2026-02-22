@@ -66,7 +66,8 @@ export default function LogsPage() {
       try {
         const res = await fetch(`${API_BASE}/api/observability/logs?${params}`);
         if (!res.ok) throw new Error("fetch failed");
-        const data = (await res.json()) as { logs: LogRow[] };
+        const json = await res.json();
+        const data = (json.data ?? json) as { logs: LogRow[] };
         if (active) setLogs(data.logs ?? []);
       } catch {
         if (active) setLogs([]);

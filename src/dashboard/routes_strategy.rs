@@ -13,6 +13,9 @@ use super::middleware_auth::RequireAdmin;
 use super::AppState;
 use crate::strategy;
 
+#[utoipa::path(get, path = "/api/strategy/status", tag = "strategy", security(("bearer_jwt" = [])),
+    responses((status = 200, description = "Strategy engine status"), (status = 401, description = "Authentication required"), (status = 500, description = "Internal server error"))
+)]
 /// GET /api/strategy/status — Engine status and last tick info.
 pub(super) async fn handler_strategy_status(
     _auth: RequireAdmin,
@@ -43,6 +46,9 @@ pub(super) async fn handler_strategy_status(
     .into_response()
 }
 
+#[utoipa::path(get, path = "/api/strategy/decisions", tag = "strategy", security(("bearer_jwt" = [])),
+    responses((status = 200, description = "Recent strategy decisions"), (status = 401, description = "Authentication required"), (status = 500, description = "Internal server error"))
+)]
 /// GET /api/strategy/decisions — Recent decisions with reasoning.
 pub(super) async fn handler_strategy_decisions(
     _auth: RequireAdmin,
@@ -58,6 +64,9 @@ pub(super) async fn handler_strategy_decisions(
     }
 }
 
+#[utoipa::path(get, path = "/api/strategy/scores", tag = "strategy", security(("bearer_jwt" = [])),
+    responses((status = 200, description = "Current form scores"), (status = 401, description = "Authentication required"), (status = 500, description = "Internal server error"))
+)]
 /// GET /api/strategy/scores — Current form scoring.
 pub(super) async fn handler_strategy_scores(
     _auth: RequireAdmin,
@@ -73,6 +82,9 @@ pub(super) async fn handler_strategy_scores(
     }
 }
 
+#[utoipa::path(get, path = "/api/strategy/config", tag = "strategy", security(("bearer_jwt" = [])),
+    responses((status = 200, description = "Strategy engine configuration"), (status = 401, description = "Authentication required"), (status = 500, description = "Internal server error"))
+)]
 /// GET /api/strategy/config — Read engine configuration.
 pub(super) async fn handler_strategy_config_get(
     _auth: RequireAdmin,
@@ -88,7 +100,7 @@ pub(super) async fn handler_strategy_config_get(
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub(super) struct UpdateConfigPayload {
     enabled: Option<bool>,
     max_concurrent_projects: Option<i32>,
@@ -101,6 +113,10 @@ pub(super) struct UpdateConfigPayload {
     tick_interval_secs: Option<i32>,
 }
 
+#[utoipa::path(put, path = "/api/strategy/config", tag = "strategy", security(("bearer_jwt" = [])),
+    request_body = serde_json::Value,
+    responses((status = 200, description = "Configuration updated"), (status = 401, description = "Authentication required"), (status = 500, description = "Internal server error"))
+)]
 /// PUT /api/strategy/config — Update engine configuration.
 pub(super) async fn handler_strategy_config_put(
     _auth: RequireAdmin,
@@ -131,12 +147,17 @@ pub(super) async fn handler_strategy_config_put(
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub(super) struct OverridePayload {
     action_taken: String,
     reason: String,
 }
 
+#[utoipa::path(post, path = "/api/strategy/decisions/{id}/override", tag = "strategy", security(("bearer_jwt" = [])),
+    params(("id" = i64, Path, description = "Decision ID to override")),
+    request_body = serde_json::Value,
+    responses((status = 200, description = "Decision overridden"), (status = 401, description = "Authentication required"), (status = 500, description = "Internal server error"))
+)]
 /// POST /api/strategy/decisions/{id}/override — Admin override of a decision.
 pub(super) async fn handler_strategy_override(
     _auth: RequireAdmin,
@@ -158,6 +179,9 @@ pub(super) async fn handler_strategy_override(
     }
 }
 
+#[utoipa::path(post, path = "/api/strategy/tick", tag = "strategy", security(("bearer_jwt" = [])),
+    responses((status = 200, description = "AI engine tick result"), (status = 401, description = "Authentication required"), (status = 500, description = "Internal server error"))
+)]
 /// POST /api/strategy/tick — Force an immediate AI engine tick.
 pub(super) async fn handler_strategy_tick(
     _auth: RequireAdmin,
@@ -181,6 +205,9 @@ pub(super) async fn handler_strategy_tick(
     }
 }
 
+#[utoipa::path(get, path = "/api/strategy/ai-engine", tag = "strategy", security(("bearer_jwt" = [])),
+    responses((status = 200, description = "AI engine state"), (status = 401, description = "Authentication required"))
+)]
 /// GET /api/strategy/ai-engine — AI engine state (weights, cost model, tick count).
 pub(super) async fn handler_ai_engine_status(
     _auth: RequireAdmin,
@@ -198,6 +225,9 @@ pub(super) async fn handler_ai_engine_status(
     .into_response()
 }
 
+#[utoipa::path(get, path = "/api/strategy/ai-decisions", tag = "strategy", security(("bearer_jwt" = [])),
+    responses((status = 200, description = "Recent AI engine decisions"), (status = 401, description = "Authentication required"), (status = 500, description = "Internal server error"))
+)]
 /// GET /api/strategy/ai-decisions — Recent AI engine decisions.
 pub(super) async fn handler_ai_engine_decisions(
     _auth: RequireAdmin,

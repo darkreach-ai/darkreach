@@ -26,6 +26,9 @@
 | **Cluster** | Multi-node cluster management | [docs/roadmaps/cluster.md](docs/roadmaps/cluster.md) |
 | **Competitive Analysis** | Market landscape and competitor research | [docs/roadmaps/competitive-analysis.md](docs/roadmaps/competitive-analysis.md) |
 | **Resources** | Heterogeneous resource pooling (GPU, storage, network relay) | [docs/roadmaps/resources.md](docs/roadmaps/resources.md) |
+| **Path C** | Hybrid compute platform strategy (open science + paid tiers) | [docs/roadmaps/path-c.md](docs/roadmaps/path-c.md) |
+| **Technology Vision** | Protocol architecture (WASM, libp2p, CRDTs, Verifiable Credentials) | [docs/roadmaps/technology-vision.md](docs/roadmaps/technology-vision.md) |
+| **OpenClaw** | AI orchestration: Discord, kanban, multi-model routing, web research | [docs/roadmaps/openclaw.md](docs/roadmaps/openclaw.md) |
 
 ---
 

@@ -110,7 +110,8 @@ export function useAgentTasks(statusFilter?: string) {
       if (statusFilter) params.set("status", statusFilter);
       const resp = await fetch(`${API_BASE}/api/agents/tasks?${params}`);
       if (resp.ok) {
-        const body = await resp.json();
+        const json = await resp.json();
+        const body = json.data ?? json;
         setTasks(body.tasks ?? []);
       }
     } catch {
@@ -142,7 +143,8 @@ export function useAgentEvents(taskId?: number) {
       if (taskId !== undefined) params.set("task_id", String(taskId));
       const resp = await fetch(`${API_BASE}/api/agents/events?${params}`);
       if (resp.ok) {
-        const body = await resp.json();
+        const json = await resp.json();
+        const body = json.data ?? json;
         setEvents(body.events ?? []);
       }
     } catch {
@@ -172,7 +174,8 @@ export function useAgentTemplates() {
     try {
       const resp = await fetch(`${API_BASE}/api/agents/templates`);
       if (resp.ok) {
-        const body = await resp.json();
+        const json = await resp.json();
+        const body = json.data ?? json;
         setTemplates(body.templates ?? []);
       }
     } catch {
@@ -203,7 +206,8 @@ export function useAgentRoles() {
     try {
       const resp = await fetch(`${API_BASE}/api/agents/roles`);
       if (resp.ok) {
-        const body = await resp.json();
+        const json = await resp.json();
+        const body = json.data ?? json;
         setRoles(body.roles ?? []);
       }
     } catch {
@@ -250,8 +254,9 @@ export async function createTask(
       role_name: roleName ?? null,
     }),
   });
-  const body = await resp.json();
-  if (!resp.ok) throw new Error(body.error || "Failed to create task");
+  const json = await resp.json();
+  if (!resp.ok) throw new Error(json.error || "Failed to create task");
+  const body = json.data ?? json;
   return body as AgentTask;
 }
 
@@ -277,8 +282,9 @@ export async function expandTemplate(
       role_name: roleName ?? null,
     }),
   });
-  const body = await resp.json();
-  if (!resp.ok) throw new Error(body.error || "Failed to expand template");
+  const json = await resp.json();
+  if (!resp.ok) throw new Error(json.error || "Failed to expand template");
+  const body = json.data ?? json;
   return body.parent_task_id as number;
 }
 
@@ -342,8 +348,9 @@ export function useAgentLogs(taskId: number | null, stream?: string) {
     if (stream) params.set("stream", stream);
     try {
       const resp = await fetch(`${API_BASE}/api/agents/tasks/${taskId}/logs?${params}`);
-      const body = await resp.json();
+      const json = await resp.json();
       if (resp.ok) {
+        const body = json.data ?? json;
         setLogs(body.logs ?? []);
         setTotal(body.total ?? 0);
       }
@@ -368,8 +375,9 @@ export function useAgentTimeline(taskId: number | null) {
     setLoading(true);
     try {
       const resp = await fetch(`${API_BASE}/api/agents/tasks/${taskId}/timeline`);
-      const body = await resp.json();
+      const json = await resp.json();
       if (resp.ok) {
+        const body = json.data ?? json;
         setEvents(body as AgentEvent[]);
       }
     } catch { /* ignore */ }

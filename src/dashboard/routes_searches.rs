@@ -15,6 +15,17 @@ use super::middleware_auth::RequireAdmin;
 use super::AppState;
 use crate::search_params::SearchParams;
 
+#[utoipa::path(
+    get,
+    path = "/api/searches",
+    tag = "searches",
+    security(("bearer_jwt" = [])),
+    responses(
+        (status = 200, description = "List of all searches"),
+        (status = 401, description = "Authentication required"),
+        (status = 500, description = "Internal server error"),
+    )
+)]
 pub(super) async fn handler_api_searches_list(
     State(state): State<Arc<AppState>>,
 ) -> impl IntoResponse {
@@ -28,6 +39,19 @@ pub(super) async fn handler_api_searches_list(
     }
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/searches",
+    tag = "searches",
+    security(("bearer_jwt" = [])),
+    request_body = serde_json::Value,
+    responses(
+        (status = 201, description = "Search created successfully"),
+        (status = 400, description = "Invalid search parameters"),
+        (status = 401, description = "Authentication required"),
+        (status = 500, description = "Internal server error"),
+    )
+)]
 pub(super) async fn handler_api_searches_create(
     _admin: RequireAdmin,
     State(state): State<Arc<AppState>>,
@@ -85,6 +109,19 @@ pub(super) async fn handler_api_searches_create(
     }
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/searches/{id}",
+    tag = "searches",
+    security(("bearer_jwt" = [])),
+    params(("id" = i64, Path, description = "Search ID")),
+    responses(
+        (status = 200, description = "Search details"),
+        (status = 401, description = "Authentication required"),
+        (status = 404, description = "Search not found"),
+        (status = 500, description = "Internal server error"),
+    )
+)]
 pub(super) async fn handler_api_searches_get(
     State(state): State<Arc<AppState>>,
     AxumPath(id): AxumPath<i64>,
@@ -104,6 +141,18 @@ pub(super) async fn handler_api_searches_get(
     }
 }
 
+#[utoipa::path(
+    delete,
+    path = "/api/searches/{id}",
+    tag = "searches",
+    security(("bearer_jwt" = [])),
+    params(("id" = i64, Path, description = "Search ID to cancel")),
+    responses(
+        (status = 200, description = "Search cancelled"),
+        (status = 401, description = "Authentication required"),
+        (status = 500, description = "Internal server error"),
+    )
+)]
 pub(super) async fn handler_api_searches_stop(
     _admin: RequireAdmin,
     State(state): State<Arc<AppState>>,
@@ -126,6 +175,18 @@ pub(super) async fn handler_api_searches_stop(
     }
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/searches/{id}/pause",
+    tag = "searches",
+    security(("bearer_jwt" = [])),
+    params(("id" = i64, Path, description = "Search ID to pause")),
+    responses(
+        (status = 200, description = "Search paused"),
+        (status = 401, description = "Authentication required"),
+        (status = 500, description = "Internal server error"),
+    )
+)]
 pub(super) async fn handler_api_searches_pause(
     _admin: RequireAdmin,
     State(state): State<Arc<AppState>>,
@@ -148,6 +209,18 @@ pub(super) async fn handler_api_searches_pause(
     }
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/searches/{id}/resume",
+    tag = "searches",
+    security(("bearer_jwt" = [])),
+    params(("id" = i64, Path, description = "Search ID to resume")),
+    responses(
+        (status = 200, description = "Search resumed"),
+        (status = 401, description = "Authentication required"),
+        (status = 500, description = "Internal server error"),
+    )
+)]
 pub(super) async fn handler_api_searches_resume(
     _admin: RequireAdmin,
     State(state): State<Arc<AppState>>,

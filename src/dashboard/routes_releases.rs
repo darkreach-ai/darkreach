@@ -10,6 +10,7 @@ use serde::Deserialize;
 use std::sync::Arc;
 
 use super::middleware_auth::RequireAdmin;
+use super::response::ValidatedJson;
 use super::AppState;
 
 #[derive(Deserialize)]
@@ -22,6 +23,10 @@ fn default_limit() -> i64 {
     50
 }
 
+#[utoipa::path(get, path = "/api/releases/worker", tag = "releases", security(("bearer_jwt" = [])),
+    params(("limit" = Option<i64>, Query, description = "Max releases to return (default 50, max 200)")),
+    responses((status = 200, description = "List of releases and channels"), (status = 401, description = "Authentication required"), (status = 500, description = "Internal server error"))
+)]
 pub(super) async fn handler_releases_list(
     State(state): State<Arc<AppState>>,
     Query(query): Query<ListQuery>,
@@ -62,6 +67,10 @@ pub(super) struct EventsQuery {
     limit: i64,
 }
 
+#[utoipa::path(get, path = "/api/releases/events", tag = "releases", security(("bearer_jwt" = [])),
+    params(("channel" = Option<String>, Query, description = "Filter by channel"), ("limit" = Option<i64>, Query, description = "Max events to return (default 50, max 500)")),
+    responses((status = 200, description = "List of release events"), (status = 401, description = "Authentication required"), (status = 500, description = "Internal server error"))
+)]
 pub(super) async fn handler_releases_events(
     State(state): State<Arc<AppState>>,
     Query(query): Query<EventsQuery>,
@@ -93,6 +102,10 @@ fn default_active_hours() -> i64 {
     24
 }
 
+#[utoipa::path(get, path = "/api/releases/health", tag = "releases", security(("bearer_jwt" = [])),
+    params(("active_hours" = Option<i64>, Query, description = "Window for active workers (default 24h)")),
+    responses((status = 200, description = "Release health and adoption stats"), (status = 401, description = "Authentication required"), (status = 500, description = "Internal server error"))
+)]
 pub(super) async fn handler_releases_health(
     State(state): State<Arc<AppState>>,
     Query(query): Query<HealthQuery>,
@@ -126,27 +139,29 @@ pub(super) async fn handler_releases_health(
     )
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, garde::Validate)]
 pub(super) struct UpsertReleasePayload {
+    #[garde(length(min = 1, max = 50))]
     version: String,
+    #[garde(skip)]
     artifacts: serde_json::Value,
+    #[garde(length(max = 5000))]
     #[serde(default)]
     notes: Option<String>,
     #[serde(default)]
+    #[garde(skip)]
     published_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
+#[utoipa::path(post, path = "/api/releases/worker", tag = "releases", security(("bearer_jwt" = [])),
+    request_body = serde_json::Value,
+    responses((status = 200, description = "Release upserted"), (status = 400, description = "Invalid artifacts"), (status = 401, description = "Authentication required"), (status = 500, description = "Internal server error"))
+)]
 pub(super) async fn handler_releases_upsert(
     _admin: RequireAdmin,
     State(state): State<Arc<AppState>>,
-    Json(payload): Json<UpsertReleasePayload>,
+    ValidatedJson(payload): ValidatedJson<UpsertReleasePayload>,
 ) -> impl IntoResponse {
-    if payload.version.trim().is_empty() {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(serde_json::json!({"error": "version is required"})),
-        );
-    }
     if !payload.artifacts.is_array() {
         return (
             StatusCode::BAD_REQUEST,
@@ -171,13 +186,17 @@ pub(super) async fn handler_releases_upsert(
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, garde::Validate)]
 pub(super) struct RolloutPayload {
+    #[garde(length(min = 1, max = 50))]
     channel: String,
+    #[garde(length(min = 1, max = 50))]
     version: String,
     #[serde(default = "default_rollout")]
+    #[garde(range(min = 0, max = 100))]
     rollout_percent: i32,
     #[serde(default)]
+    #[garde(length(max = 200))]
     changed_by: Option<String>,
 }
 
@@ -185,17 +204,15 @@ fn default_rollout() -> i32 {
     100
 }
 
+#[utoipa::path(post, path = "/api/releases/rollout", tag = "releases", security(("bearer_jwt" = [])),
+    request_body = serde_json::Value,
+    responses((status = 200, description = "Rollout configured"), (status = 400, description = "Invalid channel or version"), (status = 401, description = "Authentication required"))
+)]
 pub(super) async fn handler_releases_rollout(
     _admin: RequireAdmin,
     State(state): State<Arc<AppState>>,
-    Json(payload): Json<RolloutPayload>,
+    ValidatedJson(payload): ValidatedJson<RolloutPayload>,
 ) -> impl IntoResponse {
-    if payload.channel.trim().is_empty() || payload.version.trim().is_empty() {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(serde_json::json!({"error": "channel and version are required"})),
-        );
-    }
     match state
         .db
         .set_worker_release_channel(
@@ -214,24 +231,24 @@ pub(super) async fn handler_releases_rollout(
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, garde::Validate)]
 pub(super) struct RollbackPayload {
+    #[garde(length(min = 1, max = 50))]
     channel: String,
     #[serde(default)]
+    #[garde(length(max = 200))]
     changed_by: Option<String>,
 }
 
+#[utoipa::path(post, path = "/api/releases/rollback", tag = "releases", security(("bearer_jwt" = [])),
+    request_body = serde_json::Value,
+    responses((status = 200, description = "Rollback executed"), (status = 400, description = "Rollback failed"), (status = 401, description = "Authentication required"))
+)]
 pub(super) async fn handler_releases_rollback(
     _admin: RequireAdmin,
     State(state): State<Arc<AppState>>,
-    Json(payload): Json<RollbackPayload>,
+    ValidatedJson(payload): ValidatedJson<RollbackPayload>,
 ) -> impl IntoResponse {
-    if payload.channel.trim().is_empty() {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(serde_json::json!({"error": "channel is required"})),
-        );
-    }
     match state
         .db
         .rollback_worker_release_channel(&payload.channel, payload.changed_by.as_deref())
