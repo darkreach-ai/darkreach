@@ -18,7 +18,15 @@ pg_dump -U darkreach -d darkreach \
     --file="${BACKUP_FILE}" 2>&1
 
 FILESIZE=$(du -h "$BACKUP_FILE" | cut -f1)
-echo "[$(date)] Backup complete: ${BACKUP_FILE} (${FILESIZE})"
+echo "[$(date)] Database backup complete: ${BACKUP_FILE} (${FILESIZE})"
+
+# Back up checkpoint file if it exists
+CHECKPOINT_FILE="${CHECKPOINT_FILE:-/opt/darkreach/darkreach.checkpoint}"
+if [ -f "$CHECKPOINT_FILE" ]; then
+    CHECKPOINT_BACKUP="${BACKUP_DIR}/checkpoint_${TIMESTAMP}.json"
+    cp "$CHECKPOINT_FILE" "$CHECKPOINT_BACKUP"
+    echo "[$(date)] Checkpoint backed up: ${CHECKPOINT_BACKUP}"
+fi
 
 # Verify backup integrity
 pg_restore --list "$BACKUP_FILE" > /dev/null 2>&1

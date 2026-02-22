@@ -12,5 +12,16 @@ WorkingDirectory=/opt/darkreach
 Restart=on-failure
 RestartSec=10
 
+# Security hardening
+ProtectSystem=strict
+ReadWritePaths=/opt/darkreach
+ProtectHome=true
+NoNewPrivileges=true
+PrivateTmp=true
+
+# Resource limits
+MemoryMax=4G
+LimitNOFILE=65536
+
 [Install]
 WantedBy=multi-user.target

@@ -1,0 +1,13 @@
+[Unit]
+Description=Certbot certificate renewal for darkreach
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/certbot renew --quiet --deploy-hook "systemctl reload nginx"
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=darkreach-certbot

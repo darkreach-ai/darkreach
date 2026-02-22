@@ -1,0 +1,19 @@
+# Sudoers configuration for the darkreach deploy user.
+#
+# Install: sudo cp deploy/darkreach-sudoers /etc/sudoers.d/darkreach
+#          sudo chmod 0440 /etc/sudoers.d/darkreach
+#          sudo visudo -c
+#
+# Grants the deploy user NOPASSWD access to:
+#   - systemctl: manage darkreach services
+#   - cp binary to /usr/local/bin/darkreach
+#   - cp systemd units to /etc/systemd/system/darkreach-*
+
+deploy ALL=(root) NOPASSWD: /usr/bin/systemctl daemon-reload
+deploy ALL=(root) NOPASSWD: /usr/bin/systemctl start darkreach-*
+deploy ALL=(root) NOPASSWD: /usr/bin/systemctl stop darkreach-*
+deploy ALL=(root) NOPASSWD: /usr/bin/systemctl restart darkreach-*
+deploy ALL=(root) NOPASSWD: /usr/bin/systemctl enable darkreach-*
+deploy ALL=(root) NOPASSWD: /usr/bin/systemctl status darkreach-*
+deploy ALL=(root) NOPASSWD: /usr/bin/cp * /usr/local/bin/darkreach
+deploy ALL=(root) NOPASSWD: /usr/bin/cp * /etc/systemd/system/darkreach-*

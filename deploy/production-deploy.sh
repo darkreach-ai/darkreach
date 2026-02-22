@@ -39,6 +39,15 @@ echo "==> [1/7] System hardening + nginx + systemd + journald"
 # Copy config files to server first
 scp "$SCRIPT_DIR/nginx-darkreach.conf" "$SERVER:/tmp/nginx-darkreach.conf"
 scp "$SCRIPT_DIR/darkreach-coordinator.service" "$SERVER:/tmp/darkreach-coordinator.service"
+scp "$SCRIPT_DIR/darkreach-backup.service" "$SERVER:/tmp/darkreach-backup.service"
+scp "$SCRIPT_DIR/darkreach-backup.timer" "$SERVER:/tmp/darkreach-backup.timer"
+scp "$SCRIPT_DIR/darkreach-certbot-renew.service" "$SERVER:/tmp/darkreach-certbot-renew.service"
+scp "$SCRIPT_DIR/darkreach-certbot-renew.timer" "$SERVER:/tmp/darkreach-certbot-renew.timer"
+scp "$SCRIPT_DIR/darkreach-alert.service" "$SERVER:/tmp/darkreach-alert.service"
+scp "$SCRIPT_DIR/darkreach-alert.timer" "$SERVER:/tmp/darkreach-alert.timer"
+scp "$SCRIPT_DIR/darkreach-alert.sh" "$SERVER:/tmp/darkreach-alert.sh"
+scp "$SCRIPT_DIR/darkreach-logrotate.conf" "$SERVER:/tmp/darkreach-logrotate.conf"
+scp "$SCRIPT_DIR/darkreach-sudoers" "$SERVER:/tmp/darkreach-sudoers"
 
 ssh "$SERVER" bash -s <<'REMOTE_SETUP'
 set -euo pipefail
@@ -105,6 +114,41 @@ Compress=yes
 JOURNALD
 systemctl restart systemd-journald
 echo "  Journald configured (500MB cap, 1 week retention)"
+
+echo "--- Sudoers for deploy user ---"
+cp /tmp/darkreach-sudoers /etc/sudoers.d/darkreach
+chmod 0440 /etc/sudoers.d/darkreach
+visudo -c
+echo "  Sudoers configured"
+
+echo "--- Backup timer ---"
+cp /tmp/darkreach-backup.service /etc/systemd/system/
+cp /tmp/darkreach-backup.timer /etc/systemd/system/
+mkdir -p /var/backups/darkreach
+chown deploy:deploy /var/backups/darkreach
+systemctl daemon-reload
+systemctl enable --now darkreach-backup.timer
+echo "  Backup timer enabled (daily at 03:00 UTC)"
+
+echo "--- Certbot renewal timer ---"
+cp /tmp/darkreach-certbot-renew.service /etc/systemd/system/
+cp /tmp/darkreach-certbot-renew.timer /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable --now darkreach-certbot-renew.timer
+echo "  Certbot renewal timer enabled (twice daily)"
+
+echo "--- Alert timer ---"
+cp /tmp/darkreach-alert.sh /opt/darkreach/deploy/darkreach-alert.sh
+chmod +x /opt/darkreach/deploy/darkreach-alert.sh
+cp /tmp/darkreach-alert.service /etc/systemd/system/
+cp /tmp/darkreach-alert.timer /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable --now darkreach-alert.timer
+echo "  Alert timer enabled (every 5 minutes)"
+
+echo "--- Logrotate ---"
+cp /tmp/darkreach-logrotate.conf /etc/logrotate.d/darkreach
+echo "  Logrotate configured (nginx logs, daily, 14 days)"
 
 echo "--- Remote setup complete ---"
 REMOTE_SETUP
@@ -187,6 +231,9 @@ check "Coordinator running"   "systemctl is-active darkreach-coordinator"
 check "API responds"          "curl -sf http://127.0.0.1:7001/api/status"
 check "Dashboard via nginx"   "curl -sf http://127.0.0.1/api/status"
 check "Security headers"      "curl -sI http://127.0.0.1/ | grep -qi 'x-content-type-options'"
+check "Backup timer"          "systemctl is-active darkreach-backup.timer"
+check "Certbot timer"         "systemctl is-active darkreach-certbot-renew.timer"
+check "Alert timer"           "systemctl is-active darkreach-alert.timer"
 
 echo ""
 echo "  Results: $PASS passed, $FAIL failed"

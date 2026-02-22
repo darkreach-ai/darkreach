@@ -116,6 +116,14 @@ pub struct Metrics {
     pub ai_engine_decisions: Family<FormLabel, Counter>,
     /// AI engine cost model version.
     pub ai_engine_cost_model_version: Gauge,
+    /// HTTP error responses (status >= 400) by method and status code.
+    pub http_errors: Family<HttpLabel, Counter>,
+    /// Candidates eliminated by pipeline stage (trial_division, p1, ecm, etc.).
+    pub pipeline_eliminated: Family<FormLabel, Counter>,
+    /// Checkpoint recovery events (fallback to older generation).
+    pub checkpoint_recovery: Counter,
+    /// Checkpoint corruption events (integrity check failures).
+    pub checkpoint_corruption: Counter,
 }
 
 impl Metrics {
@@ -312,6 +320,34 @@ impl Metrics {
             ai_engine_cost_model_version.clone(),
         );
 
+        let http_errors = Family::<HttpLabel, Counter>::default();
+        registry.register(
+            "darkreach_http_errors",
+            "HTTP error responses (status >= 400) by method and path",
+            http_errors.clone(),
+        );
+
+        let pipeline_eliminated = Family::<FormLabel, Counter>::default();
+        registry.register(
+            "darkreach_pipeline_eliminated",
+            "Candidates eliminated by pipeline stage",
+            pipeline_eliminated.clone(),
+        );
+
+        let checkpoint_recovery = Counter::default();
+        registry.register(
+            "darkreach_checkpoint_recovery",
+            "Checkpoint recovery events (fallback to older generation)",
+            checkpoint_recovery.clone(),
+        );
+
+        let checkpoint_corruption = Counter::default();
+        registry.register(
+            "darkreach_checkpoint_corruption",
+            "Checkpoint corruption events (integrity check failures)",
+            checkpoint_corruption.clone(),
+        );
+
         Self {
             registry,
             primes_found,
@@ -337,6 +373,10 @@ impl Metrics {
             ai_engine_tick_count,
             ai_engine_decisions,
             ai_engine_cost_model_version,
+            http_errors,
+            pipeline_eliminated,
+            checkpoint_recovery,
+            checkpoint_corruption,
         }
     }
 
@@ -503,6 +543,34 @@ impl Metrics {
                 metric_type: "gauge",
                 unit: "version",
                 description: "Cost model version",
+                labels: &[],
+            },
+            MetricCatalogEntry {
+                name: "darkreach_http_errors_total",
+                metric_type: "counter",
+                unit: "errors",
+                description: "HTTP error responses (status >= 400)",
+                labels: &["method", "path"],
+            },
+            MetricCatalogEntry {
+                name: "darkreach_pipeline_eliminated_total",
+                metric_type: "counter",
+                unit: "candidates",
+                description: "Candidates eliminated by pipeline stage",
+                labels: &["form"],
+            },
+            MetricCatalogEntry {
+                name: "darkreach_checkpoint_recovery_total",
+                metric_type: "counter",
+                unit: "events",
+                description: "Checkpoint recovery events",
+                labels: &[],
+            },
+            MetricCatalogEntry {
+                name: "darkreach_checkpoint_corruption_total",
+                metric_type: "counter",
+                unit: "events",
+                description: "Checkpoint corruption events",
                 labels: &[],
             },
         ]
@@ -830,11 +898,11 @@ mod tests {
         assert!(output.contains("darkreach_ws_messages_sent"));
     }
 
-    /// Metric catalog returns all 23 registered metrics.
+    /// Metric catalog returns all 24 registered metrics.
     #[test]
     fn catalog_contains_all_metrics() {
         let catalog = Metrics::catalog();
-        assert_eq!(catalog.len(), 23);
+        assert_eq!(catalog.len(), 27);
         let names: Vec<&str> = catalog.iter().map(|e| e.name).collect();
         assert!(names.contains(&"darkreach_primes_found_total"));
         assert!(names.contains(&"darkreach_http_request_duration_seconds"));

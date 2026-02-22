@@ -1,0 +1,10 @@
+[Unit]
+Description=Certbot renewal check (twice daily per certbot recommendation)
+
+[Timer]
+OnCalendar=*-*-* 00/12:00:00
+Persistent=true
+RandomizedDelaySec=3600
+
+[Install]
+WantedBy=timers.target

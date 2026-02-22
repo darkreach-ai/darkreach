@@ -102,6 +102,35 @@ pub fn collect(sys: &System) -> HardwareMetrics {
     }
 }
 
+/// Returns free bytes on the filesystem containing `path`, or `None` if unavailable.
+///
+/// Used by the `/healthz/deep` endpoint to check disk space thresholds.
+pub fn disk_free_bytes(path: &str) -> Option<u64> {
+    let path = std::path::Path::new(path);
+    for disk in sysinfo::Disks::new_with_refreshed_list().iter() {
+        if path.starts_with(disk.mount_point()) {
+            return Some(disk.available_space());
+        }
+    }
+    // Fallback: return the first disk's available space
+    sysinfo::Disks::new_with_refreshed_list()
+        .iter()
+        .next()
+        .map(|d| d.available_space())
+}
+
+/// Returns current memory usage as a percentage (0–100).
+///
+/// Used by the `/healthz/deep` endpoint to check memory thresholds.
+pub fn memory_usage_percent() -> f64 {
+    let sys = System::new_all();
+    let total = sys.total_memory() as f64;
+    if total == 0.0 {
+        return 0.0;
+    }
+    sys.used_memory() as f64 / total * 100.0
+}
+
 #[cfg(test)]
 mod tests {
     //! Tests for hardware telemetry collection.

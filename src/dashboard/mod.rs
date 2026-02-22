@@ -94,7 +94,9 @@ enum RateLimitTier {
 fn classify_rate_limit(method: &Method, path: &str) -> RateLimitTier {
     match (method, path) {
         // Health / readiness / metrics probes
-        (&Method::GET, "/healthz" | "/readyz" | "/metrics") => RateLimitTier::PublicRead,
+        (&Method::GET, "/healthz" | "/healthz/deep" | "/readyz" | "/metrics") => {
+            RateLimitTier::PublicRead
+        }
         // Public read endpoints — primes, stats, and their sub-routes
         (&Method::GET, p)
             if p.starts_with("/api/primes") || p.starts_with("/api/stats") =>
@@ -306,14 +308,24 @@ async fn metrics_middleware(
     let response = next.run(req).instrument(span).await;
 
     let duration = start.elapsed().as_secs_f64();
+    let label = prom_metrics::HttpLabel {
+        method,
+        path: norm_path,
+    };
     state
         .prom_metrics
         .http_request_duration
-        .get_or_create(&prom_metrics::HttpLabel {
-            method,
-            path: norm_path,
-        })
+        .get_or_create(&label)
         .observe(duration);
+
+    // Track HTTP errors (status >= 400)
+    if response.status().as_u16() >= 400 {
+        state
+            .prom_metrics
+            .http_errors
+            .get_or_create(&label)
+            .inc();
+    }
 
     let mut response = response;
     response.headers_mut().insert(
@@ -521,6 +533,18 @@ fn public_api_routes() -> Router<Arc<AppState>> {
         .route(
             "/fleet/workers/{worker_id}/stop",
             post(routes_fleet::handler_fleet_worker_stop),
+        )
+        .route(
+            "/fleet/workers/{worker_id}/command",
+            post(routes_fleet::handler_fleet_worker_command),
+        )
+        .route(
+            "/fleet/workers/{worker_id}/commands",
+            get(routes_fleet::handler_fleet_worker_commands),
+        )
+        .route(
+            "/fleet/commands/{command_id}/cancel",
+            post(routes_fleet::handler_fleet_command_cancel),
         )
         .route(
             "/search_jobs",
@@ -804,6 +828,7 @@ pub fn build_router(state: Arc<AppState>, static_dir: Option<&Path>) -> Router {
         // Public API: versioned aliases at /api/v1/*
         .nest("/api/v1", public_api_routes())
         .route("/healthz", get(routes_health::handler_healthz))
+        .route("/healthz/deep", get(routes_health::handler_healthz_deep))
         .route("/readyz", get(routes_health::handler_readyz))
         .route("/metrics", get(routes_health::handler_metrics))
         // Operator public API (v1) — domain-specific routes
@@ -992,6 +1017,12 @@ pub async fn run(
             match prune_state.db.reclaim_stale_operator_blocks(86400).await {
                 Ok(n) if n > 0 => info!(count = n, "reclaimed stale operator blocks"),
                 Err(e) => warn!(error = %e, "failed to reclaim stale operator blocks"),
+                _ => {}
+            }
+            // Expire stale node commands past their timeout + max retries
+            match prune_state.db.expire_stale_commands().await {
+                Ok(n) if n > 0 => info!(count = n, "expired stale node commands"),
+                Err(e) => warn!(error = %e, "failed to expire stale commands"),
                 _ => {}
             }
 

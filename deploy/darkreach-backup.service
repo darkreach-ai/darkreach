@@ -1,0 +1,19 @@
+[Unit]
+Description=Darkreach Database & Checkpoint Backup
+After=postgresql.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/darkreach/deploy/pg-backup.sh
+User=deploy
+Group=deploy
+
+# Environment
+Environment=BACKUP_DIR=/var/backups/darkreach
+Environment=RETENTION_DAYS=30
+Environment=CHECKPOINT_FILE=/opt/darkreach/darkreach.checkpoint
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=darkreach-backup

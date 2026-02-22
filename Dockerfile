@@ -1,27 +1,28 @@
 # Multi-stage Docker build for darkreach
 #
 # Stage 1: Build the Rust release binary (with GMP)
-# Stage 2: Minimal runtime image with binary
+# Stage 2: Minimal runtime image with binary + migrations
 #
-# Frontend is deployed to Vercel separately — not bundled here.
+# The image is role-agnostic — CMD defaults to coordinator (dashboard),
+# but can run any darkreach subcommand (work, verify, etc.).
+# Health checks and port mappings are handled per-service in compose.
 #
 # Usage:
 #   docker build -t darkreach .
 #   docker run -e DATABASE_URL=postgres://... -p 7001:7001 darkreach
 #
 # Build args:
-#   RUST_TARGET_CPU  - CPU target for RUSTFLAGS (default: x86-64-v3 for AVX2)
+#   RUST_TARGET_CPU  - CPU target for RUSTFLAGS (default: native for multi-arch)
 #
-# Volunteer mode:
-#   docker run -e API_KEY=ph_xxx -e SERVER=https://darkreach.example.com \
-#     ghcr.io/darkreach-ai/darkreach volunteer
+# Worker mode:
+#   docker run -e DATABASE_URL=postgres://... darkreach work --search-job-id 1
 
 # ── Stage 1: Rust build ─────────────────────────────────────────
 FROM rust:1-bookworm AS rust-build
 WORKDIR /app
 
-# AVX2 (x86-64-v3) for modern servers; override for older or ARM targets
-ARG RUST_TARGET_CPU=x86-64-v3
+# Default to native so multi-arch (amd64/arm64) builds optimize per platform
+ARG RUST_TARGET_CPU=native
 ENV RUSTFLAGS="-C target-cpu=${RUST_TARGET_CPU}"
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -52,21 +53,20 @@ WORKDIR /app
 
 # OCI metadata labels
 LABEL org.opencontainers.image.title="darkreach" \
-      org.opencontainers.image.description="Volunteer computing platform for hunting special-form prime numbers" \
+      org.opencontainers.image.description="Distributed platform for hunting special-form prime numbers" \
       org.opencontainers.image.source="https://github.com/darkreach-ai/darkreach" \
       org.opencontainers.image.licenses="MIT"
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libgmp10 ca-certificates \
+    libgmp10 ca-certificates curl postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=rust-build /app/target/release/darkreach /usr/local/bin/darkreach
 
-EXPOSE 7001
-
-# Health check for container orchestration (K8s uses its own probes instead)
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD ["darkreach", "--help"]
+# Include migrations for self-contained DB init
+COPY supabase/migrations/ /app/migrations/
+COPY scripts/init-db-docker.sh /app/init-db-docker.sh
+RUN chmod +x /app/init-db-docker.sh
 
 ENTRYPOINT ["darkreach"]
 CMD ["dashboard", "--port", "7001"]

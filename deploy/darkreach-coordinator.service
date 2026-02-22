@@ -22,9 +22,10 @@ PrivateTmp=true
 
 # Resource limits
 LimitNOFILE=65536
-MemoryMax=512M
+MemoryMax=2G
 
 # Logging
+Environment=LOG_FORMAT=json
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=darkreach-coordinator

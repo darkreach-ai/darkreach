@@ -1,0 +1,22 @@
+[Unit]
+Description=Darkreach health alert check
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/darkreach/deploy/darkreach-alert.sh
+User=deploy
+Group=deploy
+
+# Environment (override via /etc/systemd/system/darkreach-alert.service.d/override.conf)
+Environment=COORDINATOR_URL=http://127.0.0.1:7001
+Environment=DOMAIN=darkreach.ai
+Environment=BACKUP_DIR=/var/backups/darkreach
+Environment=STATE_FILE=/var/lib/darkreach/alert-state
+# Set DARKREACH_ALERT_WEBHOOK in /opt/darkreach/.env or override.conf
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=darkreach-alert
