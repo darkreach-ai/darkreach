@@ -1386,7 +1386,7 @@ async fn agent_log_insert_and_query() {
             "Testing logs",
             "normal",
             None,
-            "test",
+            "manual",
             None,
             1,
             None,
@@ -1457,7 +1457,7 @@ async fn agent_event_extended_fields() {
             "Testing extended events",
             "normal",
             None,
-            "test",
+            "manual",
             None,
             1,
             None,
@@ -1517,7 +1517,7 @@ async fn agent_daily_cost_analytics() {
                 "",
                 "normal",
                 Some(model),
-                "test",
+                "manual",
                 None,
                 1,
                 None,
@@ -1567,7 +1567,7 @@ async fn agent_token_anomaly_detection() {
                 "",
                 "normal",
                 Some("sonnet"),
-                "test",
+                "manual",
                 None,
                 1,
                 None,
@@ -1701,10 +1701,10 @@ async fn operator_trust_progression() {
 /// Exercises: `db.record_invalid_result()`, trust demotion logic.
 ///
 /// Builds an operator up to trust level 2 (15 valid results), then records
-/// one invalid result. The operator should be demoted back to level 1 with
-/// `consecutive_valid` reset to 0, while `total_valid` is preserved (not penalized
-/// retroactively) and `total_invalid` incremented. This ensures bad actors
-/// cannot maintain elevated trust.
+/// one invalid result. The operator should be demoted to level 0 (untrusted)
+/// with `consecutive_valid` reset to 0, while `total_valid` is preserved (not
+/// penalized retroactively) and `total_invalid` incremented. This ensures bad
+/// actors cannot maintain elevated trust.
 #[tokio::test]
 async fn operator_trust_reset_on_invalid() {
     require_db!();
@@ -1722,10 +1722,10 @@ async fn operator_trust_reset_on_invalid() {
     let trust = db.get_operator_trust(op.id).await.unwrap().unwrap();
     assert_eq!(trust.trust_level, 2);
 
-    // One invalid result resets trust to level 1 and zeroes consecutive_valid
+    // One invalid result resets trust to level 0 (untrusted) and zeroes consecutive_valid
     db.record_invalid_result(op.id).await.unwrap();
     let trust = db.get_operator_trust(op.id).await.unwrap().unwrap();
-    assert_eq!(trust.trust_level, 1, "Invalid result resets to level 1");
+    assert_eq!(trust.trust_level, 0, "Invalid result resets to level 0 (untrusted)");
     assert_eq!(trust.consecutive_valid, 0);
     assert_eq!(trust.total_invalid, 1);
     assert_eq!(trust.total_valid, 15, "total_valid preserved");

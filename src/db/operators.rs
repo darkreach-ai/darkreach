@@ -209,6 +209,18 @@ impl Database {
         volunteer_id: uuid::Uuid,
         caps: &WorkerCapabilities,
     ) -> Result<Option<OperatorWorkBlock>> {
+        // Ensure a workers row exists for this operator (claimed_by FK → workers.worker_id)
+        let worker_id_str = volunteer_id.to_string();
+        sqlx::query(
+            "INSERT INTO workers (worker_id, hostname, cores, search_type, search_params, last_heartbeat)
+             VALUES ($1, 'operator', $2, 'operator', '', NOW())
+             ON CONFLICT (worker_id) DO UPDATE SET last_heartbeat = NOW()",
+        )
+        .bind(&worker_id_str)
+        .bind(caps.cores)
+        .execute(&self.pool)
+        .await?;
+
         let row = sqlx::query_as::<_, OperatorWorkBlock>(
             "UPDATE work_blocks SET
                status = 'claimed',
@@ -419,7 +431,7 @@ impl Database {
                v.username,
                v.credit,
                v.primes_found,
-               COALESCE(vt.trust_level, 1) AS trust_level,
+               COALESCE(vt.trust_level, 1::SMALLINT)::SMALLINT AS trust_level,
                (SELECT COUNT(*) + 1 FROM operators v2 WHERE v2.credit > v.credit) AS rank
              FROM operators v
              LEFT JOIN operator_trust vt ON vt.volunteer_id = v.id
@@ -434,7 +446,11 @@ impl Database {
     /// Get the volunteer leaderboard (top N by credit).
     pub async fn get_operator_leaderboard(&self, limit: i64) -> Result<Vec<LeaderboardRow>> {
         let rows =
-            sqlx::query_as::<_, LeaderboardRow>("SELECT * FROM volunteer_leaderboard LIMIT $1")
+            sqlx::query_as::<_, LeaderboardRow>(
+                "SELECT id, username, team, credit, primes_found, joined_at, last_seen,
+                        trust_level::SMALLINT AS trust_level, worker_count
+                 FROM volunteer_leaderboard LIMIT $1",
+            )
                 .bind(limit)
                 .fetch_all(&self.read_pool)
                 .await?;
