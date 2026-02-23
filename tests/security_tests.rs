@@ -600,29 +600,34 @@ async fn malformed_json_returns_error() {
 #[tokio::test]
 async fn sql_injection_does_not_modify_data() {
     require_db!();
+    // Build app first — this truncates tables as part of setup
     let db = common::setup_test_db().await;
+    let pool = db.pool().clone();
+    let state = darkreach::dashboard::AppState::with_db(
+        db,
+        &common::test_db_url(),
+        std::path::PathBuf::from("/tmp/darkreach-test-checkpoint"),
+    );
+    let router = darkreach::dashboard::build_router(state, None);
 
-    // Insert a sentinel prime so we can verify it survives injection attempts
+    // Insert sentinel AFTER app setup to avoid truncation
     sqlx::query(
         "INSERT INTO primes (form, expression, digits, proof_method, search_params) \
          VALUES ('factorial', '5!+1', 3, 'deterministic', '{}')",
     )
-    .execute(db.pool())
+    .execute(&pool)
     .await
     .unwrap();
 
     // Verify sentinel exists
     let count_before: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM primes")
-        .fetch_one(db.pool())
+        .fetch_one(&pool)
         .await
         .unwrap();
     assert_eq!(
         count_before.0, 1,
         "Sentinel prime should exist before injection"
     );
-
-    // Send injection payloads that attempt data modification
-    let router = common::build_test_app().await;
     let payloads = [
         "/api/primes?sort_by=id%3B+DELETE+FROM+primes%3B+--",
         "/api/primes?sort_by=id%3B+UPDATE+primes+SET+form%3D%27hacked%27%3B+--",
@@ -645,7 +650,7 @@ async fn sql_injection_does_not_modify_data() {
 
     // Verify sentinel is still intact — no rows deleted or modified
     let count_after: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM primes")
-        .fetch_one(db.pool())
+        .fetch_one(&pool)
         .await
         .unwrap();
     assert_eq!(
@@ -655,7 +660,7 @@ async fn sql_injection_does_not_modify_data() {
     );
 
     let form: (String,) = sqlx::query_as("SELECT form FROM primes WHERE expression = '5!+1'")
-        .fetch_one(db.pool())
+        .fetch_one(&pool)
         .await
         .unwrap();
     assert_eq!(
