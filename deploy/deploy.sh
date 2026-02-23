@@ -35,10 +35,10 @@ if ! command -v cargo &>/dev/null; then
 fi
 
 if [ -f /etc/debian_version ]; then
-    apt-get update -qq
-    apt-get install -y -qq build-essential libgmp-dev m4 git pkg-config
+    sudo apt-get update -qq
+    sudo apt-get install -y -qq build-essential libgmp-dev m4 git pkg-config
 elif [ -f /etc/redhat-release ]; then
-    yum install -y gcc gcc-c++ gmp-devel m4 git pkgconfig
+    sudo yum install -y gcc gcc-c++ gmp-devel m4 git pkgconfig
 fi
 
 echo "--- Fetching code ---"
