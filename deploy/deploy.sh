@@ -62,7 +62,7 @@ echo "--- Installing binary ---"
 # Stop the service first to avoid "Text file busy" errors when overwriting
 sudo systemctl stop darkreach-coordinator 2>/dev/null || true
 sudo cp target/release/darkreach "${BIN_DIR}/darkreach"
-chmod +x "${BIN_DIR}/darkreach"
+sudo chmod +x "${BIN_DIR}/darkreach"
 
 echo "--- Installing .env ---"
 if [ -f .env ]; then
