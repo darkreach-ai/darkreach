@@ -4,7 +4,7 @@
  *
  * Validates the server deployment dialog used on the Network page. The dialog
  * collects SSH connection details (hostname, user, key) and search configuration
- * (type + form-specific parameters), then POSTs to `/api/network/deploy`.
+ * (type + form-specific parameters), then POSTs to `/api/fleet/deploy`.
  *
  * Three search types are supported, each with different parameter fields:
  * - kbn: k, base, min_n, max_n
@@ -149,7 +149,7 @@ describe("AddServerDialog", () => {
   /** Verifies validation error appears when hostname is empty on submit. */
   it("shows error when hostname is empty on submit", async () => {
     render(<AddServerDialog {...defaultProps} />);
-    fireEvent.click(screen.getByText("Deploy Node"));
+    fireEvent.click(screen.getByText("Deploy Worker"));
     await waitFor(() => {
       expect(screen.getByText("Hostname is required")).toBeInTheDocument();
     });
@@ -161,11 +161,11 @@ describe("AddServerDialog", () => {
     fireEvent.change(screen.getByPlaceholderText("192.168.1.100"), {
       target: { value: "10.0.0.5" },
     });
-    fireEvent.click(screen.getByText("Deploy Node"));
+    fireEvent.click(screen.getByText("Deploy Worker"));
 
     await waitFor(() => {
       expect(fetch).toHaveBeenCalledWith(
-        "/api/network/deploy",
+        "/api/fleet/deploy",
         expect.objectContaining({
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -188,7 +188,7 @@ describe("AddServerDialog", () => {
     fireEvent.change(screen.getByPlaceholderText("192.168.1.100"), {
       target: { value: "10.0.0.5" },
     });
-    fireEvent.click(screen.getByText("Deploy Node"));
+    fireEvent.click(screen.getByText("Deploy Worker"));
 
     await waitFor(() => {
       expect(defaultProps.onDeployed).toHaveBeenCalled();
@@ -201,7 +201,7 @@ describe("AddServerDialog", () => {
     fireEvent.change(screen.getByPlaceholderText("192.168.1.100"), {
       target: { value: "10.0.0.5" },
     });
-    fireEvent.click(screen.getByText("Deploy Node"));
+    fireEvent.click(screen.getByText("Deploy Worker"));
 
     await waitFor(() => {
       expect(defaultProps.onOpenChange).toHaveBeenCalledWith(false);
@@ -222,7 +222,7 @@ describe("AddServerDialog", () => {
     fireEvent.change(screen.getByPlaceholderText("192.168.1.100"), {
       target: { value: "10.0.0.5" },
     });
-    fireEvent.click(screen.getByText("Deploy Node"));
+    fireEvent.click(screen.getByText("Deploy Worker"));
 
     await waitFor(() => {
       expect(screen.getByText("Server unreachable")).toBeInTheDocument();
@@ -241,7 +241,7 @@ describe("AddServerDialog", () => {
     fireEvent.change(screen.getByPlaceholderText("192.168.1.100"), {
       target: { value: "10.0.0.5" },
     });
-    fireEvent.click(screen.getByText("Deploy Node"));
+    fireEvent.click(screen.getByText("Deploy Worker"));
 
     await waitFor(() => {
       expect(screen.getByText("Deploying...")).toBeInTheDocument();

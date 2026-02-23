@@ -342,7 +342,7 @@ describe("StrategyPage", () => {
       screen.getByText("Per-Project Budget (USD)")
     ).toBeInTheDocument();
     expect(
-      screen.getByText("Min Idle Nodes to Create")
+      screen.getByText("Min Idle Workers to Create")
     ).toBeInTheDocument();
     expect(
       screen.getByText("Record Proximity Threshold")

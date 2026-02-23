@@ -86,11 +86,11 @@ describe("TagChip", () => {
     expect(className).toContain("amber");
   });
 
-  /** Verifies property tags (twin-prime) receive the indigo color style. */
+  /** Verifies property tags (twin-prime) receive the purple color style. */
   it("applies property style to twin-prime tag", () => {
     render(<TagChip tag="twin-prime" />);
     const className = screen.getByTestId("badge").className;
-    expect(className).toContain("indigo");
+    expect(className).toContain("purple");
   });
 
   /** Verifies the onClick handler fires when a clickable TagChip is clicked. */
@@ -127,9 +127,9 @@ describe("tagCategoryColor", () => {
     expect(tagCategoryColor("deterministic")).toBe("#eab308");
   });
 
-  /** Verifies property tags return the indigo hex color. */
-  it("returns indigo hex for property tags", () => {
-    expect(tagCategoryColor("twin-prime")).toBe("#6366f1");
+  /** Verifies property tags return the purple hex color. */
+  it("returns purple hex for property tags", () => {
+    expect(tagCategoryColor("twin-prime")).toBe("#a855f7");
   });
 
   /** Verifies verification tags return the emerald hex color. */
