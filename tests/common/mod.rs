@@ -497,7 +497,8 @@ async fn run_migrations(pool: &sqlx::PgPool) {
         "supabase/migrations/046_operator_preferences.sql",
         "supabase/migrations/047_operator_badges.sql",
         "supabase/migrations/048_ai_engine_phases.sql",
-        "supabase/migrations/049_naming_migration.sql",
+        // 049 skipped: renames volunteer_id → operator_id in DB columns, but Rust SQL
+        // queries still reference old names. Apply when Rust code is updated.
         "supabase/migrations/050_ai_engine_phases_4_6.sql",
         "supabase/migrations/051_agent_hardening.sql",
         "supabase/migrations/052_log_improvements.sql",
