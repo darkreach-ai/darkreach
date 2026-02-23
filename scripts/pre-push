@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# Pre-push hook for darkreach — heavier checks before pushing.
+#
+# Runs cargo test, clippy, and frontend tests based on changed files.
+# These are too slow for pre-commit but should gate pushes.
+#
+# Install: ln -sf ../../scripts/pre-push .git/hooks/pre-push
+
+set -euo pipefail
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+NC='\033[0m'
+
+pass() { echo -e "${GREEN}PASS${NC} $1"; }
+fail() { echo -e "${RED}FAIL${NC} $1"; exit 1; }
+
+# Determine which files changed on this branch vs main
+MERGE_BASE=$(git merge-base HEAD main 2>/dev/null || git merge-base HEAD master 2>/dev/null || echo "HEAD~1")
+CHANGED_FILES=$(git diff --name-only "$MERGE_BASE"..HEAD 2>/dev/null || git diff --name-only HEAD~1 2>/dev/null || echo "")
+
+if [ -z "$CHANGED_FILES" ]; then
+    echo "No changed files detected, skipping pre-push checks."
+    exit 0
+fi
+
+RUST_CHANGED=$(echo "$CHANGED_FILES" | grep '\.rs$' || true)
+FRONTEND_CHANGED=$(echo "$CHANGED_FILES" | grep '^frontend/' || true)
+
+# ── 1. Rust tests (only if .rs files changed) ────────────────
+if [ -n "$RUST_CHANGED" ]; then
+    echo "Running Rust unit tests..."
+    if cargo test --lib --quiet 2>/dev/null; then
+        pass "cargo test --lib"
+    else
+        fail "cargo test --lib"
+    fi
+
+    echo "Running clippy..."
+    if cargo clippy -- -W clippy::all 2>/dev/null; then
+        pass "cargo clippy"
+    else
+        fail "cargo clippy"
+    fi
+else
+    echo "No Rust files changed, skipping cargo test/clippy"
+fi
+
+# ── 2. Frontend tests (only if frontend/ files changed) ──────
+if [ -n "$FRONTEND_CHANGED" ]; then
+    echo "Running frontend tests..."
+    if (cd frontend && npm test -- --run 2>/dev/null); then
+        pass "frontend tests"
+    else
+        fail "frontend tests"
+    fi
+else
+    echo "No frontend files changed, skipping frontend tests"
+fi
+
+echo ""
+echo -e "${GREEN}All pre-push checks passed${NC}"

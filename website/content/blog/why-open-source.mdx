@@ -1,0 +1,58 @@
+When we decided to build darkreach, the question of open vs. closed source never came up. For a project that claims to produce mathematical proofs, transparency isn't a feature — it's a prerequisite.
+
+## The Problem with Closed Scientific Computing
+
+If someone announces they've found a new prime number, you should be able to verify it. Not just the final result — the entire pipeline. How were candidates generated? What sieve eliminated composites? Which primality test was used, and with what parameters? How was the proof constructed?
+
+In closed-source scientific computing, you can't answer these questions. You're asked to trust the software, the operator, and the process — all sight unseen. This is the antithesis of how science works. Reproducibility requires access. Verification requires transparency.
+
+The history of computational mathematics has examples of retracted claims, disputed results, and software bugs that persisted for years because nobody could inspect the code. We didn't want to add to that list.
+
+## MIT License: What It Means
+
+darkreach is released under the MIT license — one of the most permissive open-source licenses available. In practical terms:
+
+- **Anyone can use it.** Run searches, modify the code, build commercial products on top of it. No restrictions.
+- **Anyone can audit it.** Every algorithm, every optimization, every shortcut is visible. If our sieve has a bug, you can find it.
+- **Anyone can contribute.** Fix a bug, add a search form, optimize a sieve. The contribution guidelines are in the repo.
+- **Anyone can fork it.** If you disagree with our direction, take the code and build something better. The license encourages this.
+
+We chose MIT specifically because it places the fewest barriers between the code and the people who might use it. Research institutions shouldn't need to negotiate license terms to run primality tests.
+
+## Verifiable Proofs
+
+Open-sourcing the code is necessary but not sufficient. We also need the results themselves to be independently verifiable.
+
+This is why we generate primality certificates for every proven prime. A certificate is a compact mathematical proof that anyone — using any software, on any machine — can verify in a fraction of the time it took to discover the prime.
+
+Our three certificate types each provide different proof strategies:
+
+**Pocklington certificates** work by partially factoring N-1. If you can find enough prime factors of N-1, you can construct a proof that N itself is prime. The verification is fast: a few modular exponentiations.
+
+**Morrison certificates** use the same principle applied to N+1. Some prime forms make N+1 easier to factor than N-1, so having both methods available expands the range of primes we can prove.
+
+**BLS certificates** combine N-1 and N+1 factorizations, requiring less of each. This is the most flexible method and handles cases where neither N-1 nor N+1 is easy to factor alone.
+
+The certificates are stored alongside every proven prime in our database. Anyone can download them, run the verification, and confirm the result. No trust in darkreach required — just trust in arithmetic.
+
+## How to Contribute
+
+The project lives at [github.com/darkreach-ai/darkreach](https://github.com/darkreach-ai/darkreach). There are many entry points for contributors:
+
+- **Algorithm work** — optimize sieves, add new prime forms, improve proof generation. The engine is written in Rust with GMP bindings.
+- **Infrastructure** — improve the distributed coordination layer, work distribution, checkpoint system. Requires Rust and PostgreSQL knowledge.
+- **Frontend** — the web dashboard is Next.js with React. Visualization, monitoring, and operator tools all need work.
+- **Documentation** — every algorithm should be documented with its mathematical basis, complexity analysis, and references. We're always behind on this.
+- **Testing** — property-based tests, integration tests, benchmark suites. Mathematical software needs exceptional test coverage.
+
+You don't need to be a number theory expert to contribute. Many of the most valuable contributions are engineering work: better error handling, faster serialization, cleaner APIs. The math is documented in the code, and we're happy to explain the number theory behind any module.
+
+## The Long Game
+
+Companies come and go. Research institutions restructure. Funding dries up. But the mathematical discoveries produced by open-source scientific computing are permanent.
+
+When GIMPS found M82589933 — the largest known prime at the time — the result was verified by independent software running on independent hardware. That verification was possible because the tools and methods were public. The discovery belongs to mathematics, not to any organization.
+
+We want darkreach's contributions to work the same way. Every prime we find, every proof we generate, every algorithm we develop is public property. If darkreach disappears tomorrow, the code, the results, and the mathematical insights remain.
+
+This is why we're open source. Not because it's trendy, not because it's good marketing, but because scientific discoveries should outlast the tools that made them.

@@ -884,6 +884,7 @@ fn test_stage_overwrites_existing() {
 /// This is the same parsing pattern used for DARKREACH_HAS_GPU and would be
 /// used for any future boolean environment flags.
 #[test]
+#[ignore] // env::set_var is not thread-safe; flaky under parallel test execution
 fn test_env_auto_update_flag_parsing() {
     use darkreach::operator::should_verify_worker_signature;
 

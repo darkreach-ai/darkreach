@@ -1,0 +1,56 @@
+Right now, somewhere in the world, millions of computers are doing nothing.
+
+Laptops sit on desks after the workday ends. Gaming rigs idle between sessions. University lab machines wait through the night. Cloud instances run at 10% utilization. Collectively, the world's computing power dwarfs every supercomputer ever built — but most of it is wasted.
+
+What if we could change that?
+
+## The Problem
+
+Scientific computing has a paradox: we have more questions than compute, and more compute than we use. Climate models need decades of simulation time. Protein folding searches demand massive parallelism. Cryptographic research pushes against the limits of what's tractable. And the machines that could help are sitting idle.
+
+Projects like BOINC and SETI@home proved the model works — volunteers donated spare CPU cycles to search for extraterrestrial signals and fold proteins. But those platforms were built in a different era. They rely on centralized control, support narrow research domains, and can't adapt to new opportunities in real time.
+
+We think distributed computing deserves a modern foundation.
+
+## The Vision
+
+**darkreach** is an open-source platform for turning idle compute into scientific discovery. We're building a global network of operator-owned nodes, orchestrated by an AI engine that continuously evaluates research opportunities and allocates resources where they'll have the greatest impact.
+
+The core idea is simple: you run a node, the network assigns you work, and your machine contributes to solving real problems. But under the surface, we're rethinking how distributed scientific computing should work:
+
+- **Operator-owned infrastructure.** You control your hardware. You choose what to run, how much to contribute, and when to stop.
+- **AI-driven orchestration.** An OODA-loop engine observes the network state, evaluates research opportunities, and directs work where it matters most — no manual coordination needed.
+- **General-purpose architecture.** The platform isn't locked to one problem domain. Today it's prime numbers. Tomorrow it could be anything.
+- **Verifiable results.** Every computation produces a proof that anyone can check independently. No trust required.
+
+## What We've Built
+
+We've started with what we know best: hunting for special-form prime numbers. It's a domain where computation directly produces mathematical truths, results are independently verifiable, and there's a clear leaderboard of world records to chase.
+
+The engine currently supports **12 specialized search forms** — from factorial primes (n! +/- 1) and palindromic primes to twin primes and Sophie Germain pairs. Each form uses a three-stage pipeline:
+
+1. **Sieve** — eliminate candidates with small factors using wheel factorization, Montgomery multiplication, and baby-step giant-step algorithms
+2. **Test** — apply probabilistic primality tests (Miller-Rabin, BPSW, Frobenius) with Gerbicz error checking
+3. **Prove** — generate deterministic primality certificates (Pocklington, Morrison, BLS) that anyone can verify
+
+The distributed coordination layer uses PostgreSQL with row-level locking for work distribution, JSON checkpointing for fault tolerance, and WebSocket connections for real-time status updates. Nodes claim work blocks, process them in parallel using all available cores, and report results back to the coordinator.
+
+The AI engine ties it all together. It maintains a world snapshot of the network, scores research opportunities across 10 dimensions (record gap, yield rate, cost efficiency, network fit, and more), and makes allocation decisions with full audit trails. When it detects a stall or discovers a high-yield opportunity, it rebalances the network automatically.
+
+## The Roadmap
+
+Prime hunting is our proving ground, but the platform is built for more.
+
+We're working toward university research partnerships that would bring new problem domains onto the network — computational biology, climate modeling, and cryptographic research. The architecture is domain-agnostic: any problem that can be decomposed into independent work blocks, distributed across nodes, and verified deterministically is a candidate.
+
+We're also investing in the operator experience: better onboarding, resource management, contribution tracking, and a marketplace where operators can see exactly what their machines have accomplished.
+
+## Join Us
+
+darkreach is MIT-licensed and open source. We believe scientific computing infrastructure should be transparent, auditable, and community-owned.
+
+- **Run a node** — join the network and start contributing compute to active research initiatives
+- **Read the code** — everything is on [GitHub](https://github.com/darkreach-ai/darkreach), from the sieve algorithms to the AI engine
+- **Join the conversation** — we're building this in the open and want your input
+
+The world's biggest supercomputer already exists. It's just not connected yet.

@@ -131,6 +131,44 @@ pub(super) async fn handler_fleet_worker_stop(
     Json(serde_json::json!({"ok": true, "worker_id": worker_id}))
 }
 
+/// Send a command to a specific worker node.
+pub(super) async fn handler_fleet_worker_command(
+    _admin: RequireAdmin,
+    State(state): State<Arc<AppState>>,
+    AxumPath(worker_id): AxumPath<String>,
+    Json(body): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    let command = body["command"].as_str().unwrap_or("unknown");
+    info!(worker_id, command, "sending command to worker");
+    if let Err(e) = state.db.set_worker_command(&worker_id, command).await {
+        warn!(worker_id, error = %e, "failed to set worker command");
+    }
+    Json(serde_json::json!({"ok": true, "worker_id": worker_id, "command": command}))
+}
+
+/// List pending commands for a worker.
+pub(super) async fn handler_fleet_worker_commands(
+    State(state): State<Arc<AppState>>,
+    AxumPath(worker_id): AxumPath<String>,
+) -> impl IntoResponse {
+    match state.db.get_node_commands(&worker_id, 50).await {
+        Ok(cmds) => Json(serde_json::json!({"commands": cmds})),
+        Err(e) => Json(serde_json::json!({"error": format!("{}", e)})),
+    }
+}
+
+/// Cancel a pending command.
+pub(super) async fn handler_fleet_command_cancel(
+    _admin: RequireAdmin,
+    State(state): State<Arc<AppState>>,
+    AxumPath(command_id): AxumPath<i64>,
+) -> impl IntoResponse {
+    match state.db.cancel_node_command(command_id).await {
+        Ok(_) => Json(serde_json::json!({"ok": true, "command_id": command_id})),
+        Err(e) => Json(serde_json::json!({"error": format!("{}", e)})),
+    }
+}
+
 fn lock_or_recover<T>(mutex: &std::sync::Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     mutex
         .lock()

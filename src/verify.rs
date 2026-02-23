@@ -799,6 +799,87 @@ pub fn required_quorum_high_value(trust_level: i16, form: &str, digits: u64) -> 
     }
 }
 
+// ── Verification Method Selection ─────────────────────────────────
+//
+// Adaptive verification selects the cheapest method sufficient for the
+// trust level: hash comparison (0%) < Pietrzak VDF proof (4%) <
+// spot check (5%) < full re-computation (100%).
+
+/// Verification method for a work block or prime result.
+///
+/// Ordered by computational cost, from cheapest to most expensive.
+/// The `select_verification_method` function picks the cheapest method
+/// that provides sufficient confidence for the given trust level.
+#[derive(Debug, Clone, PartialEq)]
+pub enum VerificationMethod {
+    /// Compare result hashes only (0% cost). Requires trust ≥ 2.
+    HashCompare,
+    /// Verify Pietrzak VDF proof (~4% cost). Requires trust ≥ 1 + proof available.
+    PietrzakVerify,
+    /// Spot-check a random subset of iterations (~5% cost). Requires trust ≥ 1.
+    SpotCheck { pct: u8, seed: u64 },
+    /// Full independent re-computation (100% cost). Default for untrusted.
+    FullRecomputation,
+}
+
+impl VerificationMethod {
+    /// String identifier for storage and logging.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::HashCompare => "hash_compare",
+            Self::PietrzakVerify => "pietrzak_verify",
+            Self::SpotCheck { .. } => "spot_check",
+            Self::FullRecomputation => "full_recomputation",
+        }
+    }
+
+    /// Estimated cost as a percentage of full re-computation.
+    pub fn cost_pct(&self) -> u8 {
+        match self {
+            Self::HashCompare => 0,
+            Self::PietrzakVerify => 4,
+            Self::SpotCheck { pct, .. } => *pct,
+            Self::FullRecomputation => 100,
+        }
+    }
+}
+
+/// Select the cheapest verification method sufficient for the given trust level.
+///
+/// Priority (cheapest first):
+/// 1. `HashCompare` — trust ≥ 2 with result hash available
+/// 2. `PietrzakVerify` — trust ≥ 1 with Pietrzak proof available
+/// 3. `SpotCheck` — trust ≥ 1 for non-provable forms
+/// 4. `FullRecomputation` — default fallback
+///
+/// High-value results (≥ 100K digits) always get full re-computation.
+pub fn select_verification_method(
+    trust_level: i16,
+    form: &str,
+    digits: u64,
+    has_result_hash: bool,
+    has_pietrzak_proof: bool,
+) -> VerificationMethod {
+    // High-value results always get full recomputation
+    if digits >= 100_000 {
+        return VerificationMethod::FullRecomputation;
+    }
+    // Trusted nodes with hash available: cheapest check
+    if trust_level >= 2 && has_result_hash {
+        return VerificationMethod::HashCompare;
+    }
+    // Pietrzak proof available: ~4% cost verification
+    if trust_level >= 1 && has_pietrzak_proof {
+        return VerificationMethod::PietrzakVerify;
+    }
+    // Spot check for non-provable forms with some trust
+    if trust_level >= 1 && !is_provable_form(form) {
+        let seed: u64 = rand::Rng::random(&mut rand::rng());
+        return VerificationMethod::SpotCheck { pct: 5, seed };
+    }
+    VerificationMethod::FullRecomputation
+}
+
 /// Check if a form has deterministic proof methods available.
 pub fn is_provable_form(form: &str) -> bool {
     PROVABLE_FORMS.contains(&form)
@@ -2007,6 +2088,64 @@ mod tests {
         // Trust level below 0 should default to double-check (matched by _ arm)
         assert_eq!(required_quorum(-1, "kbn"), 2);
         assert_eq!(required_quorum(-5, "factorial"), 2);
+    }
+
+    // ── VerificationMethod Tests ───────────────────────────────────────
+
+    /// Pietrzak verify is selected when trust ≥ 1 and proof is available.
+    #[test]
+    fn select_method_pietrzak_when_proof_available() {
+        let method = select_verification_method(1, "kbn", 50_000, false, true);
+        assert_eq!(method, VerificationMethod::PietrzakVerify);
+    }
+
+    /// Hash compare is preferred over Pietrzak when both are available.
+    #[test]
+    fn select_method_prefers_hash_over_pietrzak() {
+        let method = select_verification_method(2, "kbn", 50_000, true, true);
+        assert_eq!(method, VerificationMethod::HashCompare);
+    }
+
+    /// Full recomputation is used for high-value results regardless of proof.
+    #[test]
+    fn select_method_full_for_high_value() {
+        let method = select_verification_method(3, "kbn", 100_000, true, true);
+        assert_eq!(method, VerificationMethod::FullRecomputation);
+    }
+
+    /// Full recomputation is the default when no proof or hash is available.
+    #[test]
+    fn select_method_full_for_untrusted() {
+        let method = select_verification_method(0, "kbn", 50_000, false, false);
+        assert_eq!(method, VerificationMethod::FullRecomputation);
+    }
+
+    /// PietrzakVerify cost should be 4%.
+    #[test]
+    fn pietrzak_verify_cost_pct() {
+        assert_eq!(VerificationMethod::PietrzakVerify.cost_pct(), 4);
+        assert_eq!(
+            VerificationMethod::PietrzakVerify.as_str(),
+            "pietrzak_verify"
+        );
+    }
+
+    /// VerificationMethod as_str covers all variants.
+    #[test]
+    fn verification_method_as_str_all() {
+        assert_eq!(VerificationMethod::HashCompare.as_str(), "hash_compare");
+        assert_eq!(
+            VerificationMethod::PietrzakVerify.as_str(),
+            "pietrzak_verify"
+        );
+        assert_eq!(
+            VerificationMethod::SpotCheck { pct: 5, seed: 0 }.as_str(),
+            "spot_check"
+        );
+        assert_eq!(
+            VerificationMethod::FullRecomputation.as_str(),
+            "full_recomputation"
+        );
     }
 
     // ── PFGW Repunit Conversion Edge Cases ───────────────────────────

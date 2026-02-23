@@ -1,0 +1,279 @@
+#!/usr/bin/env bash
+# Agent launcher — spawn isolated Claude Code sessions in git worktrees.
+#
+# Usage:
+#   scripts/agent engine "optimize sieve depth"   → create worktree, launch claude
+#   scripts/agent frontend                        → interactive session in frontend worktree
+#   scripts/agent --list                          → show active agent worktrees
+#   scripts/agent --clean                         → remove finished agent worktrees
+#   scripts/agent --pr engine                     → create PR from agent worktree
+#   scripts/agent --status                        → show all agent worktrees with details
+#
+# Install: chmod +x scripts/agent
+
+set -euo pipefail
+
+DOMAINS="engine frontend server docs ops database research"
+BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+WORKTREE_DIR="$BASE_DIR/.claude/worktrees"
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+usage() {
+    cat <<EOF
+${BOLD}Usage:${NC}
+  scripts/agent <domain> [prompt]     Create worktree and launch Claude Code
+  scripts/agent --list                List active agent worktrees
+  scripts/agent --clean               Remove worktrees with no uncommitted changes
+  scripts/agent --pr <domain-ts>      Push branch and create PR from worktree
+  scripts/agent --status              Show detailed status of all agent worktrees
+
+${BOLD}Domains:${NC} $DOMAINS
+
+${BOLD}Examples:${NC}
+  scripts/agent engine "optimize sieve depth for factorial form"
+  scripts/agent frontend "add dark mode toggle to sidebar"
+  scripts/agent --pr engine-20260222-1430
+EOF
+}
+
+# ── List active agent worktrees ────────────────────────────────
+cmd_list() {
+    echo -e "${BOLD}Active agent worktrees:${NC}"
+    if [ -d "$WORKTREE_DIR" ] && [ "$(ls -A "$WORKTREE_DIR" 2>/dev/null)" ]; then
+        git -C "$BASE_DIR" worktree list | grep ".claude/worktrees/" || echo "  (none)"
+    else
+        echo "  (none)"
+    fi
+}
+
+# ── Show detailed status ──────────────────────────────────────
+cmd_status() {
+    echo -e "${BOLD}Agent worktree status:${NC}"
+    echo ""
+
+    if [ ! -d "$WORKTREE_DIR" ] || [ -z "$(ls -A "$WORKTREE_DIR" 2>/dev/null)" ]; then
+        echo "  No active agent worktrees."
+        return
+    fi
+
+    for wt in "$WORKTREE_DIR"/*/; do
+        [ -d "$wt" ] || continue
+        local name
+        name=$(basename "$wt")
+        local branch
+        branch=$(git -C "$wt" branch --show-current 2>/dev/null || echo "unknown")
+        local changed
+        changed=$(git -C "$wt" status --porcelain 2>/dev/null | wc -l | tr -d ' ')
+        local last_commit
+        last_commit=$(git -C "$wt" log -1 --format="%h %s (%cr)" 2>/dev/null || echo "no commits")
+
+        echo -e "  ${BLUE}$name${NC}"
+        echo "    Branch:  $branch"
+        echo "    Changed: $changed file(s)"
+        echo "    Latest:  $last_commit"
+        echo ""
+    done
+}
+
+# ── Clean finished worktrees ──────────────────────────────────
+cmd_clean() {
+    echo -e "${BOLD}Cleaning agent worktrees...${NC}"
+
+    if [ ! -d "$WORKTREE_DIR" ] || [ -z "$(ls -A "$WORKTREE_DIR" 2>/dev/null)" ]; then
+        echo "  No worktrees to clean."
+        return
+    fi
+
+    local cleaned=0
+    for wt in "$WORKTREE_DIR"/*/; do
+        [ -d "$wt" ] || continue
+        local name
+        name=$(basename "$wt")
+        local changed
+        changed=$(git -C "$wt" status --porcelain 2>/dev/null | wc -l | tr -d ' ')
+
+        if [ "$changed" -eq 0 ]; then
+            local branch
+            branch=$(git -C "$wt" branch --show-current 2>/dev/null || echo "")
+            git -C "$BASE_DIR" worktree remove "$wt" --force 2>/dev/null || true
+            if [ -n "$branch" ] && [ "$branch" != "main" ]; then
+                git -C "$BASE_DIR" branch -d "$branch" 2>/dev/null || true
+            fi
+            echo -e "  ${GREEN}Removed${NC} $name"
+            cleaned=$((cleaned + 1))
+        else
+            echo -e "  ${YELLOW}Kept${NC} $name ($changed uncommitted file(s))"
+        fi
+    done
+
+    echo ""
+    echo "  Cleaned $cleaned worktree(s)."
+}
+
+# ── Create PR from worktree ───────────────────────────────────
+cmd_pr() {
+    local wt_name="$1"
+    local wt_path="$WORKTREE_DIR/$wt_name"
+
+    if [ ! -d "$wt_path" ]; then
+        # Try matching by prefix
+        local matches
+        matches=$(ls -d "$WORKTREE_DIR/${wt_name}"* 2>/dev/null | head -1)
+        if [ -n "$matches" ]; then
+            wt_path="$matches"
+            wt_name=$(basename "$wt_path")
+        else
+            echo -e "${RED}Error:${NC} Worktree '$wt_name' not found."
+            echo "Available worktrees:"
+            ls "$WORKTREE_DIR" 2>/dev/null || echo "  (none)"
+            exit 1
+        fi
+    fi
+
+    local branch
+    branch=$(git -C "$wt_path" branch --show-current)
+    local domain
+    domain=$(echo "$wt_name" | sed 's/-[0-9].*$//')
+
+    echo -e "${BOLD}Creating PR from ${BLUE}$wt_name${NC}${BOLD}...${NC}"
+
+    # Push the branch
+    git -C "$wt_path" push -u origin "$branch"
+
+    # Determine labels
+    local labels="$domain"
+    labels="$labels,auto-merge"
+
+    # Create PR
+    local title
+    title=$(git -C "$wt_path" log -1 --format="%s")
+    local body
+    body=$(cat <<EOF
+<!-- agent-generated: true -->
+<!-- agent-domain: $domain -->
+<!-- agent-session: $branch -->
+
+## What
+
+$title
+
+## Changes
+
+$(git -C "$wt_path" log main.."$branch" --oneline 2>/dev/null || git -C "$wt_path" log --oneline -5)
+
+## Domain
+
+- [x] ${domain^}
+
+## Testing
+
+- [ ] CI passes
+
+---
+Generated by \`scripts/agent --pr\`
+EOF
+)
+
+    gh pr create \
+        --repo darkreach-ai/darkreach \
+        --head "$branch" \
+        --title "$title" \
+        --body "$body" \
+        --label "$labels"
+
+    echo ""
+    echo -e "${GREEN}PR created.${NC} Auto-merge enabled via label."
+}
+
+# ── Launch agent in worktree ──────────────────────────────────
+cmd_launch() {
+    local domain="$1"
+    shift
+    local prompt="${*:-}"
+
+    # Validate domain
+    if ! echo "$DOMAINS" | grep -qw "$domain"; then
+        echo -e "${RED}Error:${NC} Unknown domain '$domain'."
+        echo "Valid domains: $DOMAINS"
+        exit 1
+    fi
+
+    local timestamp
+    timestamp=$(date +%Y%m%d-%H%M)
+    local branch="feat/${domain}-${timestamp}"
+    local wt_path="$WORKTREE_DIR/${domain}-${timestamp}"
+
+    echo -e "${BOLD}Setting up agent worktree...${NC}"
+    echo "  Domain:   $domain"
+    echo "  Branch:   $branch"
+    echo "  Path:     $wt_path"
+    echo ""
+
+    # Create worktree directory
+    mkdir -p "$WORKTREE_DIR"
+
+    # Create branch and worktree from main
+    git -C "$BASE_DIR" worktree add -b "$branch" "$wt_path" main 2>/dev/null || \
+        git -C "$BASE_DIR" worktree add -b "$branch" "$wt_path" HEAD
+
+    # Install frontend deps if needed
+    if [ "$domain" = "frontend" ] && [ -f "$wt_path/frontend/package.json" ]; then
+        echo "  Installing frontend dependencies..."
+        (cd "$wt_path/frontend" && npm install --silent 2>/dev/null) || true
+    fi
+
+    echo ""
+    echo -e "${GREEN}Worktree ready.${NC}"
+    echo ""
+
+    # Launch Claude Code or print instructions
+    if command -v claude &>/dev/null; then
+        if [ -n "$prompt" ]; then
+            echo -e "Launching Claude Code with prompt..."
+            cd "$wt_path" && exec claude "$prompt"
+        else
+            echo -e "Launching Claude Code..."
+            cd "$wt_path" && exec claude
+        fi
+    else
+        echo "Claude Code CLI not found. To use the worktree manually:"
+        echo "  cd $wt_path"
+        echo ""
+        echo "When done, create a PR:"
+        echo "  scripts/agent --pr ${domain}-${timestamp}"
+    fi
+}
+
+# ── Main dispatch ─────────────────────────────────────────────
+case "${1:-}" in
+    -h|--help|"")
+        usage
+        ;;
+    --list)
+        cmd_list
+        ;;
+    --status)
+        cmd_status
+        ;;
+    --clean)
+        cmd_clean
+        ;;
+    --pr)
+        [ -z "${2:-}" ] && { echo -e "${RED}Error:${NC} --pr requires a worktree name"; exit 1; }
+        cmd_pr "$2"
+        ;;
+    -*)
+        echo -e "${RED}Error:${NC} Unknown flag '$1'"
+        usage
+        exit 1
+        ;;
+    *)
+        cmd_launch "$@"
+        ;;
+esac

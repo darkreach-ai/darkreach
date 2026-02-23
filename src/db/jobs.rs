@@ -344,7 +344,7 @@ impl Database {
             FROM target
             WHERE wb.id = target.id
             RETURNING wb.id, wb.search_job_id, wb.block_start, wb.block_end,
-                      wb.pipeline_stage, wb.stage_data"
+                      wb.pipeline_stage, wb.stage_data",
         )
         .bind(worker_id)
         .bind(stage)
@@ -379,7 +379,7 @@ impl Database {
             "UPDATE work_blocks
              SET pipeline_stage = $2, stage_data = $3,
                  status = 'available', claimed_by = NULL, claimed_at = NULL
-             WHERE id = $1"
+             WHERE id = $1",
         )
         .bind(block_id)
         .bind(next_stage)

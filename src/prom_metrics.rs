@@ -124,6 +124,25 @@ pub struct Metrics {
     pub checkpoint_recovery: Counter,
     /// Checkpoint corruption events (integrity check failures).
     pub checkpoint_corruption: Counter,
+    // ── ML Engine Metrics ──────────────────────────────────────
+    /// ML bandit: latest Thompson sample per form.
+    pub ml_bandit_sample: Family<FormLabel, Gauge<f64, AtomicU64>>,
+    /// ML bandit: total observations per arm.
+    pub ml_bandit_observations: Family<FormLabel, Gauge>,
+    /// ML GP: mean prediction uncertainty per form.
+    pub ml_gp_uncertainty: Family<FormLabel, Gauge<f64, AtomicU64>>,
+    /// ML GP: training set size per form.
+    pub ml_gp_training_points: Family<FormLabel, Gauge>,
+    /// ML BayesOpt: best observed throughput per form.
+    pub ml_bayesopt_best_throughput: Family<FormLabel, Gauge<f64, AtomicU64>>,
+    /// ML BayesOpt: total evaluations per form.
+    pub ml_bayesopt_evaluations: Family<FormLabel, Gauge>,
+    /// ML Node Intel: per-node anomaly score (gauged on scrape).
+    pub ml_node_anomaly_score: Family<FormLabel, Gauge<f64, AtomicU64>>,
+    /// ML: active model version per subsystem.
+    pub ml_model_version: Family<FormLabel, Gauge>,
+    /// ML: prediction source counter (ml|heuristic|default) per subsystem.
+    pub ml_prediction_source: Family<FormLabel, Counter>,
 }
 
 impl Metrics {
@@ -348,6 +367,70 @@ impl Metrics {
             checkpoint_corruption.clone(),
         );
 
+        // ── ML Engine Metrics ──────────────────────────────────
+        let ml_bandit_sample = Family::<FormLabel, Gauge<f64, AtomicU64>>::default();
+        registry.register(
+            "darkreach_ml_bandit_sample",
+            "Latest Thompson sample per form",
+            ml_bandit_sample.clone(),
+        );
+
+        let ml_bandit_observations = Family::<FormLabel, Gauge>::default();
+        registry.register(
+            "darkreach_ml_bandit_observations",
+            "Total observations per bandit arm",
+            ml_bandit_observations.clone(),
+        );
+
+        let ml_gp_uncertainty = Family::<FormLabel, Gauge<f64, AtomicU64>>::default();
+        registry.register(
+            "darkreach_ml_gp_uncertainty",
+            "Mean GP prediction uncertainty per form",
+            ml_gp_uncertainty.clone(),
+        );
+
+        let ml_gp_training_points = Family::<FormLabel, Gauge>::default();
+        registry.register(
+            "darkreach_ml_gp_training_points",
+            "GP training set size per form",
+            ml_gp_training_points.clone(),
+        );
+
+        let ml_bayesopt_best_throughput = Family::<FormLabel, Gauge<f64, AtomicU64>>::default();
+        registry.register(
+            "darkreach_ml_bayesopt_best_throughput",
+            "Best observed BayesOpt throughput per form",
+            ml_bayesopt_best_throughput.clone(),
+        );
+
+        let ml_bayesopt_evaluations = Family::<FormLabel, Gauge>::default();
+        registry.register(
+            "darkreach_ml_bayesopt_evaluations",
+            "Total BayesOpt evaluations per form",
+            ml_bayesopt_evaluations.clone(),
+        );
+
+        let ml_node_anomaly_score = Family::<FormLabel, Gauge<f64, AtomicU64>>::default();
+        registry.register(
+            "darkreach_ml_node_anomaly_score",
+            "Per-node anomaly score",
+            ml_node_anomaly_score.clone(),
+        );
+
+        let ml_model_version = Family::<FormLabel, Gauge>::default();
+        registry.register(
+            "darkreach_ml_model_version",
+            "Active model version per subsystem",
+            ml_model_version.clone(),
+        );
+
+        let ml_prediction_source = Family::<FormLabel, Counter>::default();
+        registry.register(
+            "darkreach_ml_prediction_source",
+            "Prediction source counter (ml/heuristic/default) per subsystem",
+            ml_prediction_source.clone(),
+        );
+
         Self {
             registry,
             primes_found,
@@ -377,6 +460,15 @@ impl Metrics {
             pipeline_eliminated,
             checkpoint_recovery,
             checkpoint_corruption,
+            ml_bandit_sample,
+            ml_bandit_observations,
+            ml_gp_uncertainty,
+            ml_gp_training_points,
+            ml_bayesopt_best_throughput,
+            ml_bayesopt_evaluations,
+            ml_node_anomaly_score,
+            ml_model_version,
+            ml_prediction_source,
         }
     }
 

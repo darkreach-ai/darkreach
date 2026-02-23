@@ -1,0 +1,80 @@
+engine:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'src/factorial.rs'
+      - 'src/sieve.rs'
+      - 'src/kbn.rs'
+      - 'src/palindromic.rs'
+      - 'src/twin.rs'
+      - 'src/sophie_germain.rs'
+      - 'src/cullen_woodall.rs'
+      - 'src/wagstaff.rs'
+      - 'src/carol_kynea.rs'
+      - 'src/repunit.rs'
+      - 'src/gen_fermat.rs'
+      - 'src/near_repdigit.rs'
+      - 'src/primorial.rs'
+      - 'src/proof.rs'
+      - 'src/verify.rs'
+      - 'src/certificate.rs'
+      - 'src/p1.rs'
+      - 'src/pfgw.rs'
+      - 'src/gwnum.rs'
+      - 'src/prst.rs'
+      - 'src/flint.rs'
+      - 'src/lib.rs'
+      - 'src/aurifeuillean.rs'
+      - 'src/batch_gcd.rs'
+      - 'src/bignum.rs'
+      - 'src/ecm.rs'
+
+frontend:
+  - changed-files:
+    - any-glob-to-any-file: 'frontend/**'
+
+server:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'src/dashboard/**'
+      - 'src/db/**'
+      - 'src/main.rs'
+      - 'src/cli.rs'
+      - 'src/checkpoint.rs'
+      - 'src/search_manager.rs'
+      - 'src/fleet.rs'
+      - 'src/network.rs'
+      - 'src/pg_worker.rs'
+      - 'src/worker_client.rs'
+      - 'src/events.rs'
+      - 'src/prom_metrics.rs'
+
+ops:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'deploy/**'
+      - '.github/**'
+      - 'Dockerfile'
+      - 'docker-compose*.yml'
+      - 'scripts/**'
+
+database:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'supabase/**'
+      - 'src/db/**'
+
+docs:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'docs/**'
+      - '*.md'
+
+ai-engine:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'src/ai_engine.rs'
+      - 'src/strategy.rs'
+      - 'src/agent.rs'
+      - 'src/project/**'
+      - 'src/cost_model.rs'
+      - 'src/calibration.rs'

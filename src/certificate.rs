@@ -34,6 +34,7 @@
 //! - Brillhart, Lehmer, Selfridge, "New Primality Criteria and Factorizations
 //!   of 2^m ± 1", 1975.
 
+use crate::pietrzak::PietrzakProof;
 use serde::{Deserialize, Serialize};
 
 /// Exportable primality certificate containing witness data sufficient
@@ -81,6 +82,16 @@ pub enum PrimalityCertificate {
 
     /// PRST external verification.
     Prst { method: String },
+
+    /// Pietrzak VDF proof for iterated squaring computations.
+    /// Enables O(log n) verification instead of O(n) re-computation.
+    /// Generated during Proth tests with n >= 10,000 iterations.
+    Pietrzak {
+        /// The Pietrzak halving proof data.
+        proof: PietrzakProof,
+        /// The Proth witness base used.
+        base: u32,
+    },
 }
 
 /// Witness for one prime factor in a Pocklington N−1 proof.
@@ -277,6 +288,19 @@ mod tests {
             },
             PrimalityCertificate::Prst {
                 method: "k=1*2^31-1".to_string(),
+            },
+            PrimalityCertificate::Pietrzak {
+                proof: crate::pietrzak::PietrzakProof {
+                    initial: vec![7],
+                    final_state: vec![42],
+                    modulus: vec![251],
+                    iterations: 64,
+                    steps: vec![crate::pietrzak::PietrzakStep {
+                        midpoint: vec![100],
+                        challenge_hash: [0u8; 32],
+                    }],
+                },
+                base: 2,
             },
         ];
 

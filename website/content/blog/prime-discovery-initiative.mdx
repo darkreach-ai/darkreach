@@ -1,0 +1,89 @@
+Prime numbers are the atoms of arithmetic. Every integer greater than 1 is either prime or can be expressed as a unique product of primes. This isn't just a mathematical curiosity — it's a structural fact about numbers that underpins cryptography, coding theory, and some of the deepest unsolved problems in mathematics.
+
+Our first research initiative on darkreach is dedicated to hunting for special-form primes: numbers with specific mathematical structures that make them rare, interesting, and often record-breakingly large.
+
+## Why Primes Matter
+
+Prime numbers sit at the intersection of pure mathematics and practical engineering.
+
+**Cryptography depends on them.** RSA encryption relies on the difficulty of factoring large semiprimes. Diffie-Hellman key exchange uses primes for its modular arithmetic. Every secure connection on the internet traces back to prime number theory.
+
+**Unsolved conjectures drive research.** The twin prime conjecture — are there infinitely many primes p where p+2 is also prime? — remains open after centuries. Goldbach's conjecture, the Riemann hypothesis, and dozens of other fundamental questions all revolve around the distribution and structure of primes.
+
+**Mathematical beauty motivates discovery.** A factorial prime like 150209! + 1, or a palindromic prime with thousands of digits, is a concrete artifact of mathematical truth. Unlike empirical science, these discoveries are permanent — once proven prime, always prime.
+
+## 12 Special Forms
+
+darkreach hunts for primes across 12 specialized forms, each with unique mathematical properties:
+
+- **Factorial primes** (n! +/- 1) — built from the product of all integers up to n, these are rare and grow astronomically fast
+- **Palindromic primes** — primes that read the same forwards and backwards in a given base
+- **k*b^n +/- 1 primes** — the workhorse form, covering Proth primes, Riesel primes, and many others
+- **Primorial primes** (p# +/- 1) — the product of all primes up to p, plus or minus one
+- **Cullen and Woodall primes** (n*2^n +/- 1) — sparse and hard to find, with special primality tests
+- **Wagstaff primes** ((2^p+1)/3) — connected to Mersenne primes, with no known deterministic proof method
+- **Carol and Kynea primes** ((2^n +/- 1)^2 - 2) — near-square forms with distinctive sieve properties
+- **Twin primes** — pairs (p, p+2) where both are prime
+- **Sophie Germain primes** — p where 2p+1 is also prime, critical for safe primes in cryptography
+- **Repunit primes** ((b^n-1)/(b-1)) — numbers consisting entirely of repeated digits
+- **Generalized Fermat primes** (b^(2^n)+1) — generalizations of Fermat's original conjecture
+
+Each form requires different mathematical machinery. You can't test a Wagstaff candidate the same way you test a factorial prime. The sieve strategies differ, the primality tests differ, and the proof methods differ. This is why we built 12 specialized engines rather than one generic tool.
+
+## The Pipeline: Sieve, Test, Prove
+
+Every search follows a three-stage pipeline, regardless of form:
+
+### Stage 1: Sieve
+
+Before testing any candidate for primality, we eliminate as many composites as possible using fast modular arithmetic. A wheel-factorized sieve with small primes (up to millions) can eliminate 95%+ of candidates before any expensive computation happens.
+
+For k*b^n forms, we use baby-step giant-step (BSGS) algorithms to sieve entire ranges at once. For palindromic primes, we batch-generate candidates and apply deep small-factor elimination. Each form has a tuned sieve that exploits its mathematical structure.
+
+The sieve stage uses Montgomery multiplication for modular arithmetic and packed bit arrays for memory efficiency — 8x less memory than naive boolean arrays.
+
+### Stage 2: Test
+
+Surviving candidates face probabilistic primality tests. We run 25 rounds of Miller-Rabin testing via GMP, which gives a false positive probability of less than 1 in 4^25 (roughly 10^-15). For candidates larger than 10,000 bits, we add the Grantham Frobenius test for extra confidence.
+
+Where the form allows it, we use specialized tests. Proth's theorem gives a deterministic test for k*2^n+1 when k < 2^n. The Lucas-Lehmer-Riesel (LLR) test is definitive for k*2^n-1 forms. These aren't just faster — they provide certainty, not probability.
+
+Gerbicz error checking protects against hardware errors during the thousands of iterated squarings these tests require. A single bit flip in RAM can produce a false result; Gerbicz checksums catch this.
+
+### Stage 3: Prove
+
+A probabilistic "probably prime" result isn't a mathematical discovery. To claim a genuine prime, we need a deterministic primality certificate — a proof that anyone can verify independently.
+
+We generate three types of certificates:
+
+- **Pocklington certificates** (N-1 method) — if we can partially factor N-1, we can prove N is prime
+- **Morrison certificates** (N+1 method) — same idea, using the factorization of N+1
+- **BLS certificates** — a combined approach using both N-1 and N+1 factorizations
+
+For forms where no efficient deterministic proof exists (like Wagstaff numbers), we flag results as "probable primes" with high-confidence probabilistic evidence. Honesty about proof status is non-negotiable.
+
+## Real Results
+
+The network has already produced verified prime discoveries across multiple forms. Every result includes its primality certificate, full provenance (which node computed it, when, and with what parameters), and independent verification status.
+
+Our three-tier verification pipeline ensures nothing slips through:
+
+1. **Deterministic proof** — Pocklington, Morrison, or BLS certificate verification
+2. **BPSW + Miller-Rabin** — independent probabilistic re-testing with different bases
+3. **PFGW cross-check** — external tool verification for large candidates
+
+When a node reports a prime, the coordinator doesn't just trust it. The result enters the verification queue, where independent nodes re-check the work.
+
+## What's Next
+
+We're targeting world records. The current records for several special forms are within computational reach of a well-coordinated distributed network. We're focusing our AI engine on identifying the highest-value search ranges — the sweet spots where the expected time to discovery is shortest relative to the significance of the result.
+
+We're also exploring new forms. The mathematical landscape of special primes is vast, and there are families we haven't touched yet: Wolstenholme primes, Wilson primes, wall-sun-sun primes. Each new form is a new search engine, a new set of optimizations, and a new opportunity for discovery.
+
+## Become an Operator
+
+If you have a machine with spare cycles, you can contribute to mathematical research. Every node on the network — whether it's a laptop, a workstation, or a cloud instance — adds to our collective ability to push the boundaries of known primes.
+
+Visit the [operators page](/operators) to learn how to get started, or dive into the [source code](https://github.com/darkreach-ai/darkreach) to see exactly how the math works. Every sieve, every test, every proof is open source and documented.
+
+The next world-record prime might be found by your machine.

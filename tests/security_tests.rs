@@ -602,7 +602,10 @@ async fn sql_injection_does_not_modify_data() {
         .fetch_one(db.pool())
         .await
         .unwrap();
-    assert_eq!(count_before.0, 1, "Sentinel prime should exist before injection");
+    assert_eq!(
+        count_before.0, 1,
+        "Sentinel prime should exist before injection"
+    );
 
     // Send injection payloads that attempt data modification
     let router = common::build_test_app().await;
@@ -754,7 +757,11 @@ async fn auth_error_responses_do_not_leak_internals() {
 
     let error_probes = [
         ("/api/v1/nodes/heartbeat", Method::POST, "{}"),
-        ("/api/v1/nodes/result", Method::POST, "{\"block_id\": 99999}"),
+        (
+            "/api/v1/nodes/result",
+            Method::POST,
+            "{\"block_id\": 99999}",
+        ),
         ("/api/v1/operators/rotate-key", Method::POST, "{}"),
     ];
 

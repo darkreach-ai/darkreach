@@ -35,12 +35,11 @@ pub struct SharedSieveRow {
 impl Database {
     /// Look up a cached sieve by identity hash. Returns the raw blob if found.
     pub async fn get_shared_sieve(&self, hash: &str) -> Result<Option<Vec<u8>>> {
-        let row: Option<(Vec<u8>,)> = sqlx::query_as(
-            "SELECT blob FROM shared_sieves WHERE hash = $1",
-        )
-        .bind(hash)
-        .fetch_optional(self.read_pool())
-        .await?;
+        let row: Option<(Vec<u8>,)> =
+            sqlx::query_as("SELECT blob FROM shared_sieves WHERE hash = $1")
+                .bind(hash)
+                .fetch_optional(self.read_pool())
+                .await?;
         Ok(row.map(|(blob,)| blob))
     }
 
@@ -240,10 +239,9 @@ impl Database {
         .fetch_one(self.read_pool())
         .await?;
 
-        let cached_sieves: (i64,) =
-            sqlx::query_as("SELECT COUNT(*) FROM relay_sieve_cache")
-                .fetch_one(self.read_pool())
-                .await?;
+        let cached_sieves: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM relay_sieve_cache")
+            .fetch_one(self.read_pool())
+            .await?;
 
         let recent_events: (i64,) = sqlx::query_as(
             "SELECT COUNT(*) FROM relay_events

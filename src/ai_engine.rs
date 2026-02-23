@@ -433,6 +433,8 @@ pub struct AiEngine {
     pub last_snapshot: Option<WorldSnapshot>,
     pub tick_count: u64,
     pub last_learn: Option<std::time::Instant>,
+    /// ML engine: Thompson Sampling, GP cost, BayesOpt, node intelligence.
+    pub ml: crate::ml::MlEngine,
 }
 
 impl AiEngine {
@@ -445,6 +447,7 @@ impl AiEngine {
             last_snapshot: None,
             tick_count: 0,
             last_learn: None,
+            ml: crate::ml::MlEngine::default(),
         }
     }
 
@@ -456,6 +459,7 @@ impl AiEngine {
             scoring_weights: ScoringWeights::default(),
             last_snapshot: None,
             tick_count: 0,
+            ml: crate::ml::MlEngine::default(),
             last_learn: None,
         }
     }
@@ -490,6 +494,9 @@ impl AiEngine {
         // OBSERVE: gather all state in parallel
         let snapshot = self.observe(db).await?;
 
+        // ML: refresh feature store from snapshot
+        self.ml.refresh_features(&snapshot);
+
         // Run project orchestration (phase advancement, cost aggregation)
         if let Err(e) = project::orchestrate_tick(db).await {
             warn!(error = %e, "ai_engine: project orchestration failed");
@@ -512,6 +519,10 @@ impl AiEngine {
         if self.should_learn() {
             if let Err(e) = self.learn(db).await {
                 warn!(error = %e, "ai_engine: learn phase failed");
+            }
+            // ML subsystem learning (bandits, GP, BayesOpt, node intelligence)
+            if let Err(e) = self.ml.learn(db, &snapshot).await {
+                warn!(error = %e, "ai_engine: ML learn phase failed");
             }
             self.last_learn = Some(std::time::Instant::now());
         }

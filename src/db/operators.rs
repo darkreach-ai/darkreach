@@ -97,12 +97,11 @@ impl Database {
     /// only stores the hash, never the plaintext key.
     pub async fn get_operator_by_api_key(&self, api_key: &str) -> Result<Option<OperatorRow>> {
         let hash = format!("{:x}", Sha256::digest(api_key.as_bytes()));
-        let row = sqlx::query_as::<_, OperatorRow>(
-            "SELECT * FROM operators WHERE api_key_hash = $1",
-        )
-        .bind(hash)
-        .fetch_optional(&self.read_pool)
-        .await?;
+        let row =
+            sqlx::query_as::<_, OperatorRow>("SELECT * FROM operators WHERE api_key_hash = $1")
+                .bind(hash)
+                .fetch_optional(&self.read_pool)
+                .await?;
         Ok(row)
     }
 
@@ -203,23 +202,21 @@ impl Database {
 
     /// Look up which operator owns a given node (by worker_id).
     pub async fn get_node_owner(&self, worker_id: &str) -> Result<Option<uuid::Uuid>> {
-        let row: Option<(uuid::Uuid,)> = sqlx::query_as(
-            "SELECT volunteer_id FROM operator_nodes WHERE worker_id = $1",
-        )
-        .bind(worker_id)
-        .fetch_optional(&self.read_pool)
-        .await?;
+        let row: Option<(uuid::Uuid,)> =
+            sqlx::query_as("SELECT volunteer_id FROM operator_nodes WHERE worker_id = $1")
+                .bind(worker_id)
+                .fetch_optional(&self.read_pool)
+                .await?;
         Ok(row.map(|(id,)| id))
     }
 
     /// Look up which operator claimed a given work block.
     pub async fn get_block_claimer_operator(&self, block_id: i64) -> Result<Option<uuid::Uuid>> {
-        let row: Option<(Option<uuid::Uuid>,)> = sqlx::query_as(
-            "SELECT volunteer_id FROM work_blocks WHERE id = $1",
-        )
-        .bind(block_id)
-        .fetch_optional(&self.read_pool)
-        .await?;
+        let row: Option<(Option<uuid::Uuid>,)> =
+            sqlx::query_as("SELECT volunteer_id FROM work_blocks WHERE id = $1")
+                .bind(block_id)
+                .fetch_optional(&self.read_pool)
+                .await?;
         Ok(row.and_then(|(id,)| id))
     }
 

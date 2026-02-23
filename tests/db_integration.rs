@@ -1775,22 +1775,14 @@ async fn operator_credit_grant_and_accumulate() {
         .unwrap();
 
     // Verify accumulation on operator record
-    let found = db
-        .get_operator_by_api_key(&api_key)
-        .await
-        .unwrap()
-        .unwrap();
+    let found = db.get_operator_by_api_key(&api_key).await.unwrap().unwrap();
     assert_eq!(found.credit, 100);
 
     // Grant 50 more
     db.grant_credit(op.id, block.block_id as i32, 50, "bonus")
         .await
         .unwrap();
-    let found = db
-        .get_operator_by_api_key(&api_key)
-        .await
-        .unwrap()
-        .unwrap();
+    let found = db.get_operator_by_api_key(&api_key).await.unwrap().unwrap();
     assert_eq!(found.credit, 150, "Credit should accumulate");
 }
 

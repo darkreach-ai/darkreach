@@ -6,6 +6,7 @@
 
 pub(crate) mod middleware_auth;
 mod openapi;
+pub(crate) mod response;
 mod routes_agents;
 mod routes_audit;
 mod routes_auth;
@@ -21,7 +22,6 @@ mod routes_primes;
 mod routes_projects;
 mod routes_releases;
 mod routes_resources;
-pub(crate) mod response;
 mod routes_schedules;
 mod routes_searches;
 mod routes_sieve;
@@ -98,9 +98,7 @@ fn classify_rate_limit(method: &Method, path: &str) -> RateLimitTier {
             RateLimitTier::PublicRead
         }
         // Public read endpoints — primes, stats, and their sub-routes
-        (&Method::GET, p)
-            if p.starts_with("/api/primes") || p.starts_with("/api/stats") =>
-        {
+        (&Method::GET, p) if p.starts_with("/api/primes") || p.starts_with("/api/stats") => {
             RateLimitTier::PublicRead
         }
         // Operator registration (unauthenticated, expensive) — tightest limit
@@ -142,27 +140,27 @@ impl RateLimiters {
     /// Build all tier limiters with their configured quotas.
     fn new() -> Self {
         Self {
-            public_read: Arc::new(RateLimiter::keyed(
-                Quota::per_minute(NonZeroU32::new(300).unwrap()),
-            )),
-            public_write: Arc::new(RateLimiter::keyed(
-                Quota::per_minute(NonZeroU32::new(30).unwrap()),
-            )),
-            auth: Arc::new(RateLimiter::keyed(
-                Quota::per_minute(NonZeroU32::new(60).unwrap()),
-            )),
-            operator: Arc::new(RateLimiter::keyed(
-                Quota::per_minute(NonZeroU32::new(600).unwrap()),
-            )),
-            admin: Arc::new(RateLimiter::keyed(
-                Quota::per_minute(NonZeroU32::new(180).unwrap()),
-            )),
-            default: Arc::new(RateLimiter::keyed(
-                Quota::per_minute(NonZeroU32::new(120).unwrap()),
-            )),
-            global: Arc::new(RateLimiter::keyed(
-                Quota::per_minute(NonZeroU32::new(1000).unwrap()),
-            )),
+            public_read: Arc::new(RateLimiter::keyed(Quota::per_minute(
+                NonZeroU32::new(300).unwrap(),
+            ))),
+            public_write: Arc::new(RateLimiter::keyed(Quota::per_minute(
+                NonZeroU32::new(30).unwrap(),
+            ))),
+            auth: Arc::new(RateLimiter::keyed(Quota::per_minute(
+                NonZeroU32::new(60).unwrap(),
+            ))),
+            operator: Arc::new(RateLimiter::keyed(Quota::per_minute(
+                NonZeroU32::new(600).unwrap(),
+            ))),
+            admin: Arc::new(RateLimiter::keyed(Quota::per_minute(
+                NonZeroU32::new(180).unwrap(),
+            ))),
+            default: Arc::new(RateLimiter::keyed(Quota::per_minute(
+                NonZeroU32::new(120).unwrap(),
+            ))),
+            global: Arc::new(RateLimiter::keyed(Quota::per_minute(
+                NonZeroU32::new(1000).unwrap(),
+            ))),
         }
     }
 
@@ -320,11 +318,7 @@ async fn metrics_middleware(
 
     // Track HTTP errors (status >= 400)
     if response.status().as_u16() >= 400 {
-        state
-            .prom_metrics
-            .http_errors
-            .get_or_create(&label)
-            .inc();
+        state.prom_metrics.http_errors.get_or_create(&label).inc();
     }
 
     let mut response = response;
@@ -375,11 +369,7 @@ fn extract_client_ip(req: &Request) -> String {
             }
         }
     }
-    if let Some(real_ip) = req
-        .headers()
-        .get("x-real-ip")
-        .and_then(|v| v.to_str().ok())
-    {
+    if let Some(real_ip) = req.headers().get("x-real-ip").and_then(|v| v.to_str().ok()) {
         return real_ip.trim().to_string();
     }
     // Fallback: peer address from the socket (only available with ConnectInfo).
@@ -910,10 +900,7 @@ pub fn build_router(state: Arc<AppState>, static_dir: Option<&Path>) -> Router {
             "/api/v1/sieve/{hash}/relay",
             post(routes_sieve::handler_v1_sieve_relay_announce),
         )
-        .route(
-            "/api/v1/sieves",
-            get(routes_sieve::handler_v1_sieves_list),
-        )
+        .route("/api/v1/sieves", get(routes_sieve::handler_v1_sieves_list))
         // Resource endpoints
         .route(
             "/api/resources/summary",
@@ -931,23 +918,23 @@ pub fn build_router(state: Arc<AppState>, static_dir: Option<&Path>) -> Router {
     }
 
     app.layer(build_cors_layer())
-    .layer(CatchPanicLayer::new())
-    .layer(axum::middleware::from_fn(api_version_middleware))
-    .layer(axum::middleware::from_fn_with_state(
-        state.clone(),
-        rate_limit_middleware,
-    ))
-    .layer(axum::middleware::from_fn_with_state(
-        state.clone(),
-        metrics_middleware,
-    ))
-    .layer(TraceLayer::new_for_http())
-    .layer(RequestBodyLimitLayer::new(1024 * 1024))
-    .layer(TimeoutLayer::with_status_code(
-        StatusCode::REQUEST_TIMEOUT,
-        Duration::from_secs(30),
-    ))
-    .with_state(state)
+        .layer(CatchPanicLayer::new())
+        .layer(axum::middleware::from_fn(api_version_middleware))
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            rate_limit_middleware,
+        ))
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            metrics_middleware,
+        ))
+        .layer(TraceLayer::new_for_http())
+        .layer(RequestBodyLimitLayer::new(1024 * 1024))
+        .layer(TimeoutLayer::with_status_code(
+            StatusCode::REQUEST_TIMEOUT,
+            Duration::from_secs(30),
+        ))
+        .with_state(state)
 }
 
 pub async fn run(

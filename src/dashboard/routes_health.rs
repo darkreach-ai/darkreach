@@ -138,11 +138,8 @@ pub async fn handler_healthz_deep(State(state): State<Arc<AppState>>) -> impl In
 
     // 1. Database check — SELECT 1 with 2s timeout
     let db_start = std::time::Instant::now();
-    let db_check = tokio::time::timeout(
-        std::time::Duration::from_secs(2),
-        state.db.health_check(),
-    )
-    .await;
+    let db_check =
+        tokio::time::timeout(std::time::Duration::from_secs(2), state.db.health_check()).await;
     let database = match db_check {
         Ok(Ok(())) => CheckResult {
             status: "ok",

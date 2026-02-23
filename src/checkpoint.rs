@@ -236,6 +236,16 @@ fn load_single(path: &Path) -> Option<Checkpoint> {
 }
 
 /// Clear all checkpoint files (current + all generations).
+/// Count of checkpoint recoveries (stub — returns 0).
+pub fn recovery_count() -> u64 {
+    0
+}
+
+/// Count of checkpoint corruptions detected (stub — returns 0).
+pub fn corruption_count() -> u64 {
+    0
+}
+
 pub fn clear(path: &Path) {
     for gen in 0..GENERATIONS {
         let _ = fs::remove_file(generation_path(path, gen));

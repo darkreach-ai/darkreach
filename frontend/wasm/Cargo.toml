@@ -1,0 +1,20 @@
+[package]
+name = "darkreach-wasm"
+version = "0.1.0"
+edition = "2021"
+description = "WASM compute worker for darkreach browser-based prime hunting"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wasm-bindgen = "0.2"
+num-bigint = "0.4"
+num-traits = "0.2"
+num-integer = "0.1"
+serde_json = "1"
+sha2 = "0.10"
+
+[profile.release]
+opt-level = 3
+lto = true

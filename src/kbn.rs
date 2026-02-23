@@ -148,6 +148,91 @@ fn pocklington_test(p: &Integer, base: u32) -> Option<(bool, Option<u32>)> {
     None
 }
 
+/// Proth test with Gerbicz error checking and Pietrzak VDF proof generation.
+///
+/// For k·2^n + 1 with n ≥ 10,000 iterations, uses an explicit squaring loop
+/// (instead of GMP's opaque `pow_mod`) to enable:
+/// - **Gerbicz checking**: detect and correct hardware errors during squaring
+/// - **Pietrzak proofs**: record checkpoints for O(log n) verification
+///
+/// The computation splits into two phases:
+/// 1. `s = a^k mod p` (standard GMP modpow, ~log(k) multiplications)
+/// 2. n−1 iterated squarings: `s = s² mod p` (with Gerbicz + Pietrzak)
+///
+/// Returns `Some((true, Some(base), Some(proof)))` for proven prime with proof,
+/// `Some((false, None, None))` for composite, `None` if no base works.
+///
+/// ## References
+///
+/// - Pietrzak, "Simple Verifiable Delay Functions", ITCS 2019.
+/// - Gerbicz, "Error-Detecting LLR Algorithm", mersenneforum.org, 2017.
+pub(crate) fn proth_test_gerbicz(
+    p: &Integer,
+    k: u64,
+    n: u64,
+) -> Option<(bool, Option<u32>, Option<crate::pietrzak::PietrzakProof>)> {
+    use crate::gerbicz::{CheckResult, GerbiczChecker};
+    use crate::pietrzak::PietrzakCollector;
+
+    let p_minus_1 = Integer::from(p - 1u32);
+    let iters = n - 1; // n-1 squarings: a^{k·2^{n-1}} = a^{(p-1)/2}
+
+    for &a in &[2u32, 3, 5, 7, 11, 13] {
+        // Skip bases that divide p (Jacobi symbol undefined)
+        if p.is_divisible_u(a) {
+            continue;
+        }
+
+        let a_int = Integer::from(a);
+        let k_int = Integer::from(k);
+
+        // Phase 1: s = a^k mod p (fast GMP modpow)
+        let mut s = match a_int.pow_mod(&k_int, p) {
+            Ok(r) => r,
+            Err(_) => return Some((false, None, None)),
+        };
+
+        // Phase 2: n-1 iterated squarings with Gerbicz + Pietrzak
+        let mut gerbicz = GerbiczChecker::new(&s, iters);
+        let mut collector = PietrzakCollector::new(&s, p, iters);
+
+        for i in 0..iters {
+            s.square_mut();
+            s %= p;
+            collector.record(i, &s);
+
+            if gerbicz.should_check(i) {
+                let (result, new_s) =
+                    gerbicz.verify_block(&s, i, p, |state: &mut Integer, modulus: &Integer| {
+                        state.square_mut();
+                        *state %= modulus;
+                    });
+                s = new_s;
+                if result == CheckResult::PersistentError {
+                    warn!("Proth test: persistent hardware error, aborting");
+                    return None;
+                }
+            }
+        }
+
+        // Check: s ≡ -1 (mod p) → p is prime (Proth's theorem)
+        if s == p_minus_1 {
+            let proof = collector.generate_proof(&s);
+            return Some((true, Some(a), Some(proof)));
+        }
+
+        // s ≡ 1 (mod p): Fermat holds but Proth criterion not met — try next base
+        if s == 1u32 {
+            continue;
+        }
+
+        // Fermat test failed — p is composite
+        return Some((false, None, None));
+    }
+
+    None // No suitable base found
+}
+
 /// Return distinct prime factors of a small number.
 fn small_prime_factors(mut n: u32) -> Vec<u32> {
     let mut factors = Vec::new();
@@ -394,21 +479,43 @@ pub(crate) fn test_prime(
     };
 
     if can_use_n1_test {
-        let result = if base == 2 {
-            proth_test(candidate)
-        } else {
-            pocklington_test(candidate, base)
-        };
-
-        match result {
-            Some((true, witness_base)) => {
-                let cert = PrimalityCertificate::Proth {
-                    base: witness_base.unwrap_or(0),
-                };
-                return (IsPrime::Yes, "deterministic", Some(cert));
+        // For base-2 with n >= 10,000: use Gerbicz + Pietrzak for error checking
+        // and VDF proof generation (enables O(log n) verification).
+        if base == 2 && n >= 10_000 {
+            match proth_test_gerbicz(candidate, k, n) {
+                Some((true, witness_base, pietrzak_proof)) => {
+                    let cert = if let Some(proof) = pietrzak_proof {
+                        PrimalityCertificate::Pietrzak {
+                            proof,
+                            base: witness_base.unwrap_or(0),
+                        }
+                    } else {
+                        PrimalityCertificate::Proth {
+                            base: witness_base.unwrap_or(0),
+                        }
+                    };
+                    return (IsPrime::Yes, "deterministic", Some(cert));
+                }
+                Some((false, _, _)) => return (IsPrime::No, "", None),
+                None => {} // fall through
             }
-            Some((false, _)) => return (IsPrime::No, "", None),
-            None => {} // fall through to Miller-Rabin
+        } else {
+            let result = if base == 2 {
+                proth_test(candidate)
+            } else {
+                pocklington_test(candidate, base)
+            };
+
+            match result {
+                Some((true, witness_base)) => {
+                    let cert = PrimalityCertificate::Proth {
+                        base: witness_base.unwrap_or(0),
+                    };
+                    return (IsPrime::Yes, "deterministic", Some(cert));
+                }
+                Some((false, _)) => return (IsPrime::No, "", None),
+                None => {} // fall through to Miller-Rabin
+            }
         }
     }
 
@@ -1336,5 +1443,82 @@ mod tests {
             }
             other => panic!("Expected LLR certificate, got {:?}", other),
         }
+    }
+
+    // ── Proth Test Gerbicz + Pietrzak Tests ──────────────────────────
+
+    /// Verifies that `proth_test_gerbicz` returns the correct result for a
+    /// known Proth prime and produces a Pietrzak proof. Uses a small modulus
+    /// to keep the test fast.
+    #[test]
+    fn proth_gerbicz_matches_proth_test() {
+        // 3*2^2 + 1 = 13 (Proth prime, but n=2 is very small)
+        let candidate = Integer::from(13u32);
+        let gerbicz = proth_test_gerbicz(&candidate, 3, 2);
+        let standard = proth_test(&candidate);
+        match (gerbicz, standard) {
+            (Some((g_prime, g_base, _proof)), Some((s_prime, s_base))) => {
+                assert_eq!(
+                    g_prime, s_prime,
+                    "Gerbicz and standard should agree on primality"
+                );
+                assert_eq!(
+                    g_base, s_base,
+                    "Gerbicz and standard should find same witness"
+                );
+            }
+            (None, None) => {} // both inconclusive is fine
+            other => panic!("Mismatch: {:?}", other),
+        }
+    }
+
+    /// Verifies that `proth_test_gerbicz` correctly identifies a composite number.
+    #[test]
+    fn proth_gerbicz_composite() {
+        // 3*2^3 + 1 = 25 (composite: 5^2)
+        let candidate = Integer::from(25u32);
+        let result = proth_test_gerbicz(&candidate, 3, 3);
+        match result {
+            Some((false, None, None)) => {} // expected: composite
+            other => panic!("Expected composite, got {:?}", other),
+        }
+    }
+
+    /// Verifies that `proth_test_gerbicz` generates a valid Pietrzak proof
+    /// that passes verification.
+    #[test]
+    fn proth_gerbicz_produces_valid_pietrzak_proof() {
+        // 3*2^2 + 1 = 13 (Proth prime)
+        let candidate = Integer::from(13u32);
+        match proth_test_gerbicz(&candidate, 3, 2) {
+            Some((true, Some(_base), Some(proof))) => {
+                let valid = crate::pietrzak::verify_pietrzak_proof(&proof).unwrap();
+                assert!(
+                    valid,
+                    "Pietrzak proof from proth_test_gerbicz should verify"
+                );
+            }
+            Some((true, _, None)) => {
+                // n=2 is very small, proof may be trivial — acceptable
+            }
+            other => panic!("Expected prime with proof, got {:?}", other),
+        }
+    }
+
+    /// Verifies that `test_prime` returns a Pietrzak certificate for large n
+    /// (n >= 10,000) via the Gerbicz path. Uses n=2 which is below the threshold,
+    /// so it should still produce a Proth certificate.
+    #[test]
+    fn test_prime_uses_standard_proth_for_small_n() {
+        // 3*2^2 + 1 = 13 (n=2 < 10,000 → standard Proth path)
+        let candidate = Integer::from(13u32);
+        let (result, cert, certificate) = test_prime(&candidate, 3, 2, 2, true, 25);
+        assert_eq!(result, IsPrime::Yes);
+        assert_eq!(cert, "deterministic");
+        assert!(
+            matches!(certificate, Some(PrimalityCertificate::Proth { .. })),
+            "Small n should produce Proth certificate, got {:?}",
+            certificate
+        );
     }
 }

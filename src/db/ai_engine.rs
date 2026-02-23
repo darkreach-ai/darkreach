@@ -448,3 +448,399 @@ struct RecentPrimeRow {
     digits: i64,
     found_at: chrono::DateTime<chrono::Utc>,
 }
+
+// ── ML Engine Database Operations ──────────────────────────────
+
+impl Database {
+    /// Save all bandit arm states to `ml_bandit_arms`.
+    pub async fn save_bandit_arms(
+        &self,
+        arms: &std::collections::HashMap<String, crate::ml::bandits::FormArm>,
+    ) -> anyhow::Result<()> {
+        for arm in arms.values() {
+            let context_weights = serde_json::to_value(&[0.2f64; 5])?;
+            sqlx::query(
+                "INSERT INTO ml_bandit_arms (form, alpha, beta, mean_reward, reward_var,
+                    n_obs, window_alpha, window_beta, window_n, context_weights, updated_at)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
+                 ON CONFLICT (form) DO UPDATE SET
+                    alpha = EXCLUDED.alpha, beta = EXCLUDED.beta,
+                    mean_reward = EXCLUDED.mean_reward, reward_var = EXCLUDED.reward_var,
+                    n_obs = EXCLUDED.n_obs, window_alpha = EXCLUDED.window_alpha,
+                    window_beta = EXCLUDED.window_beta, window_n = EXCLUDED.window_n,
+                    context_weights = EXCLUDED.context_weights, updated_at = NOW()",
+            )
+            .bind(&arm.form)
+            .bind(arm.alpha)
+            .bind(arm.beta)
+            .bind(arm.mean_reward)
+            .bind(arm.reward_var)
+            .bind(arm.n_obs as i64)
+            .bind(arm.window_alpha)
+            .bind(arm.window_beta)
+            .bind(arm.window_n as i64)
+            .bind(&context_weights)
+            .execute(&self.pool)
+            .await?;
+        }
+        Ok(())
+    }
+
+    /// Load bandit arm states from `ml_bandit_arms`.
+    pub async fn load_bandit_arms(
+        &self,
+    ) -> anyhow::Result<std::collections::HashMap<String, crate::ml::bandits::FormArm>> {
+        let rows = sqlx::query_as::<_, MlBanditArmRow>(
+            "SELECT form, alpha, beta, mean_reward, reward_var,
+                    n_obs, window_alpha, window_beta, window_n
+             FROM ml_bandit_arms",
+        )
+        .fetch_all(&self.read_pool)
+        .await?;
+
+        let mut arms = std::collections::HashMap::new();
+        for row in rows {
+            arms.insert(
+                row.form.clone(),
+                crate::ml::bandits::FormArm {
+                    form: row.form,
+                    alpha: row.alpha,
+                    beta: row.beta,
+                    mean_reward: row.mean_reward,
+                    reward_var: row.reward_var,
+                    n_obs: row.n_obs as u64,
+                    window_alpha: row.window_alpha,
+                    window_beta: row.window_beta,
+                    window_n: row.window_n as u64,
+                },
+            );
+        }
+        Ok(arms)
+    }
+
+    /// Save GP model state to `ml_gp_state`.
+    pub async fn save_gp_state(&self, gp: &crate::ml::gp_cost::CostGpModel) -> anyhow::Result<()> {
+        for (form, model) in &gp.models {
+            let hyperparams = serde_json::json!({
+                "lengthscales": model.lengthscales,
+                "noise_var": model.noise_var,
+            });
+            sqlx::query(
+                "INSERT INTO ml_gp_state (form, n_points, last_mape, hyperparams, updated_at)
+                 VALUES ($1, $2, $3, $4, NOW())
+                 ON CONFLICT (form) DO UPDATE SET
+                    n_points = EXCLUDED.n_points, last_mape = EXCLUDED.last_mape,
+                    hyperparams = EXCLUDED.hyperparams, updated_at = NOW()",
+            )
+            .bind(form)
+            .bind(model.n_points as i32)
+            .bind(model.last_mape)
+            .bind(&hyperparams)
+            .execute(&self.pool)
+            .await?;
+        }
+        Ok(())
+    }
+
+    /// Load GP model state from `ml_gp_state`.
+    pub async fn load_gp_state(
+        &self,
+    ) -> anyhow::Result<std::collections::HashMap<String, crate::ml::gp_cost::FormCostGp>> {
+        let rows = sqlx::query_as::<_, MlGpStateRow>(
+            "SELECT form, n_points, last_mape, hyperparams FROM ml_gp_state",
+        )
+        .fetch_all(&self.read_pool)
+        .await?;
+
+        let mut models = std::collections::HashMap::new();
+        for row in rows {
+            let lengthscales = row
+                .hyperparams
+                .as_ref()
+                .and_then(|h| h.get("lengthscales"))
+                .and_then(|v| serde_json::from_value::<[f64; 3]>(v.clone()).ok())
+                .unwrap_or([1.0, 1.0, 1.0]);
+            let noise_var = row
+                .hyperparams
+                .as_ref()
+                .and_then(|h| h.get("noise_var"))
+                .and_then(|v| v.as_f64())
+                .unwrap_or(0.1);
+
+            models.insert(
+                row.form,
+                crate::ml::gp_cost::FormCostGp {
+                    training_x: Vec::new(),
+                    training_y: Vec::new(),
+                    n_points: row.n_points as usize,
+                    max_points: 500,
+                    last_mape: row.last_mape.unwrap_or(1.0),
+                    last_fit: chrono::Utc::now(),
+                    lengthscales,
+                    noise_var,
+                },
+            );
+        }
+        Ok(models)
+    }
+
+    /// Save BayesOpt optimizer state to `ml_bayesopt_state`.
+    pub async fn save_bayesopt_state(
+        &self,
+        opt: &crate::ml::bayesopt::SieveOptimizer,
+    ) -> anyhow::Result<()> {
+        for (form, state) in &opt.optimizers {
+            sqlx::query(
+                "INSERT INTO ml_bayesopt_state
+                    (form, best_sieve_depth, best_block_size, best_throughput, n_evals, updated_at)
+                 VALUES ($1, $2, $3, $4, $5, NOW())
+                 ON CONFLICT (form) DO UPDATE SET
+                    best_sieve_depth = EXCLUDED.best_sieve_depth,
+                    best_block_size = EXCLUDED.best_block_size,
+                    best_throughput = EXCLUDED.best_throughput,
+                    n_evals = EXCLUDED.n_evals, updated_at = NOW()",
+            )
+            .bind(form)
+            .bind(state.best_sieve_depth as i64)
+            .bind(state.best_block_size)
+            .bind(state.best_throughput)
+            .bind(state.n_evals as i64)
+            .execute(&self.pool)
+            .await?;
+        }
+        Ok(())
+    }
+
+    /// Load BayesOpt state from `ml_bayesopt_state`.
+    pub async fn load_bayesopt_state(
+        &self,
+    ) -> anyhow::Result<std::collections::HashMap<String, crate::ml::bayesopt::FormOptState>> {
+        let rows = sqlx::query_as::<_, MlBayesOptStateRow>(
+            "SELECT form, best_sieve_depth, best_block_size, best_throughput, n_evals
+             FROM ml_bayesopt_state",
+        )
+        .fetch_all(&self.read_pool)
+        .await?;
+
+        let mut optimizers = std::collections::HashMap::new();
+        for row in rows {
+            optimizers.insert(
+                row.form,
+                crate::ml::bayesopt::FormOptState {
+                    observations: Vec::new(),
+                    best_sieve_depth: row.best_sieve_depth as u64,
+                    best_block_size: row.best_block_size,
+                    best_throughput: row.best_throughput,
+                    n_evals: row.n_evals as u64,
+                },
+            );
+        }
+        Ok(optimizers)
+    }
+
+    /// Save node intelligence profiles to `ml_node_profiles` and `ml_node_form_affinity`.
+    pub async fn save_node_profiles(
+        &self,
+        intel: &crate::ml::node_intel::NodeIntelligence,
+    ) -> anyhow::Result<()> {
+        for (node_id, profile) in &intel.profiles {
+            let avg_throughput = serde_json::to_value(&profile.avg_throughput)?;
+            let failure_rate = serde_json::to_value(&profile.failure_rate)?;
+            let anomaly_score = intel.anomaly_score(node_id);
+
+            sqlx::query(
+                "INSERT INTO ml_node_profiles
+                    (node_id, node_class, avg_throughput, failure_rate,
+                     blocks_completed, anomaly_score, updated_at)
+                 VALUES ($1, $2, $3, $4, $5, $6, NOW())
+                 ON CONFLICT (node_id) DO UPDATE SET
+                    node_class = EXCLUDED.node_class,
+                    avg_throughput = EXCLUDED.avg_throughput,
+                    failure_rate = EXCLUDED.failure_rate,
+                    blocks_completed = EXCLUDED.blocks_completed,
+                    anomaly_score = EXCLUDED.anomaly_score, updated_at = NOW()",
+            )
+            .bind(node_id)
+            .bind(profile.node_class.to_string())
+            .bind(&avg_throughput)
+            .bind(&failure_rate)
+            .bind(profile.blocks_completed as i64)
+            .bind(anomaly_score)
+            .execute(&self.pool)
+            .await?;
+        }
+
+        for ((node_id, form), aff) in &intel.affinity {
+            sqlx::query(
+                "INSERT INTO ml_node_form_affinity
+                    (node_id, form, alpha, beta, mean_throughput, n_obs, updated_at)
+                 VALUES ($1, $2, $3, $4, $5, $6, NOW())
+                 ON CONFLICT (node_id, form) DO UPDATE SET
+                    alpha = EXCLUDED.alpha, beta = EXCLUDED.beta,
+                    mean_throughput = EXCLUDED.mean_throughput,
+                    n_obs = EXCLUDED.n_obs, updated_at = NOW()",
+            )
+            .bind(node_id)
+            .bind(form)
+            .bind(aff.alpha)
+            .bind(aff.beta)
+            .bind(aff.mean_throughput)
+            .bind(aff.n_obs as i64)
+            .execute(&self.pool)
+            .await?;
+        }
+        Ok(())
+    }
+
+    /// Load node intelligence profiles from `ml_node_profiles`.
+    pub async fn load_node_profiles(
+        &self,
+    ) -> anyhow::Result<std::collections::HashMap<String, crate::ml::node_intel::NodeProfile>> {
+        let rows = sqlx::query_as::<_, MlNodeProfileRow>(
+            "SELECT node_id, node_class, avg_throughput, failure_rate, blocks_completed
+             FROM ml_node_profiles",
+        )
+        .fetch_all(&self.read_pool)
+        .await?;
+
+        let mut profiles = std::collections::HashMap::new();
+        for row in rows {
+            let avg_throughput: std::collections::HashMap<String, f64> = row
+                .avg_throughput
+                .as_ref()
+                .and_then(|v| serde_json::from_value(v.clone()).ok())
+                .unwrap_or_default();
+            let failure_rate: std::collections::HashMap<String, f64> = row
+                .failure_rate
+                .as_ref()
+                .and_then(|v| serde_json::from_value(v.clone()).ok())
+                .unwrap_or_default();
+
+            let node_class = match row.node_class.as_deref() {
+                Some("cpu_small") => crate::ml::features::NodeClass::CpuSmall,
+                Some("cpu_large") => crate::ml::features::NodeClass::CpuLarge,
+                Some("gpu_cuda") => crate::ml::features::NodeClass::GpuCuda,
+                Some("gpu_metal") => crate::ml::features::NodeClass::GpuMetal,
+                _ => crate::ml::features::NodeClass::CpuMedium,
+            };
+
+            profiles.insert(
+                row.node_id.clone(),
+                crate::ml::node_intel::NodeProfile {
+                    node_id: row.node_id,
+                    node_class,
+                    avg_throughput,
+                    throughput_var: std::collections::HashMap::new(),
+                    failure_rate,
+                    blocks_completed: row.blocks_completed as u64,
+                },
+            );
+        }
+        Ok(profiles)
+    }
+
+    /// Get recently completed work blocks enriched with form and node metadata.
+    pub async fn get_ml_recent_blocks(
+        &self,
+        since: chrono::DateTime<chrono::Utc>,
+    ) -> anyhow::Result<Vec<crate::ml::MlBlockRow>> {
+        let rows = sqlx::query_as::<_, crate::ml::MlBlockRow>(
+            "SELECT sj.search_type AS form,
+                    CASE
+                        WHEN sj.search_type IN ('palindromic', 'near_repdigit', 'repunit') THEN
+                            ((wb.block_start + wb.block_end) / 2.0)
+                        WHEN sj.search_type = 'factorial' THEN
+                            ((wb.block_start + wb.block_end) / 2.0)
+                            * LN((wb.block_start + wb.block_end) / 2.0 / EXP(1.0)) / LN(10.0)
+                        ELSE
+                            ((wb.block_start + wb.block_end) / 2.0) * 0.301
+                    END::float8 AS digits,
+                    EXTRACT(EPOCH FROM (wb.completed_at - wb.claimed_at))::float8 AS secs,
+                    CASE WHEN wb.tested > 0 AND EXTRACT(EPOCH FROM (wb.completed_at - wb.claimed_at)) > 0
+                         THEN wb.found::float8 / (EXTRACT(EPOCH FROM (wb.completed_at - wb.claimed_at)) / 3600.0)
+                         ELSE 0.0
+                    END AS throughput,
+                    COALESCE(wb.sieved_out, 0)::bigint AS sieve_depth,
+                    COALESCE(wb.block_end - wb.block_start, 1000)::bigint AS block_size,
+                    (wb.status = 'completed') AS success,
+                    wb.claimed_by AS worker_id,
+                    w.cores AS worker_cores,
+                    NULL::text AS gpu_runtime
+             FROM work_blocks wb
+             JOIN search_jobs sj ON sj.id = wb.search_job_id
+             LEFT JOIN workers w ON w.worker_id = wb.claimed_by
+             WHERE wb.status IN ('completed', 'failed')
+               AND wb.completed_at IS NOT NULL
+               AND wb.completed_at > $1
+               AND wb.claimed_at IS NOT NULL
+               AND wb.completed_at > wb.claimed_at
+               AND wb.tested > 0
+             ORDER BY wb.completed_at DESC
+             LIMIT 500",
+        )
+        .bind(since)
+        .fetch_all(&self.read_pool)
+        .await?;
+        Ok(rows)
+    }
+
+    /// Get recently completed projects for bandit reward updates.
+    pub async fn get_ml_recently_completed_projects(
+        &self,
+        since: chrono::DateTime<chrono::Utc>,
+    ) -> anyhow::Result<Vec<crate::ml::MlProjectRow>> {
+        let rows = sqlx::query_as::<_, crate::ml::MlProjectRow>(
+            "SELECT form, total_found, total_core_hours
+             FROM projects
+             WHERE status = 'completed'
+               AND completed_at > $1
+             ORDER BY completed_at DESC
+             LIMIT 50",
+        )
+        .bind(since)
+        .fetch_all(&self.read_pool)
+        .await?;
+        Ok(rows)
+    }
+}
+
+// ── ML Row Types ───────────────────────────────────────────────
+
+#[derive(sqlx::FromRow)]
+struct MlBanditArmRow {
+    form: String,
+    alpha: f64,
+    beta: f64,
+    mean_reward: f64,
+    reward_var: f64,
+    n_obs: i64,
+    window_alpha: f64,
+    window_beta: f64,
+    window_n: i64,
+}
+
+#[derive(sqlx::FromRow)]
+struct MlGpStateRow {
+    form: String,
+    n_points: i32,
+    last_mape: Option<f64>,
+    hyperparams: Option<serde_json::Value>,
+}
+
+#[derive(sqlx::FromRow)]
+struct MlBayesOptStateRow {
+    form: String,
+    best_sieve_depth: i64,
+    best_block_size: i64,
+    best_throughput: f64,
+    n_evals: i64,
+}
+
+#[derive(sqlx::FromRow)]
+struct MlNodeProfileRow {
+    node_id: String,
+    node_class: Option<String>,
+    avg_throughput: Option<serde_json::Value>,
+    failure_rate: Option<serde_json::Value>,
+    blocks_completed: i64,
+}

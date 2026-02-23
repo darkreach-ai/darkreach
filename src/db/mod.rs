@@ -47,8 +47,8 @@ mod primes;
 mod projects;
 mod records;
 mod releases;
-mod roles;
 mod resources;
+mod roles;
 mod schedules;
 mod sieves;
 pub mod strategy;
@@ -63,6 +63,7 @@ pub use ai_engine::{
     AiEngineDecisionRow, AiEngineStateRow, DecisionOutcomeCandidate, DecisionWithOutcome,
     WorkerSpeedRow,
 };
+pub use commands::{CommandType, NodeCommandRow, PendingCommand};
 pub use observability::{
     MetricPoint, MetricSample, MetricSeries, SystemLogEntry, SystemLogRow, WorkerRateRow,
 };
@@ -74,7 +75,6 @@ pub use releases::{
 };
 pub use strategy::{FormYieldRateRow, StrategyConfigRow, StrategyDecisionRow};
 pub use trust::{NodeReliability, VerificationBlock, VerificationOutcome, WorkBlockWithCheckpoint};
-pub use commands::{CommandType, NodeCommandRow, PendingCommand};
 pub use user_profiles::UserProfile;
 
 use anyhow::Result;

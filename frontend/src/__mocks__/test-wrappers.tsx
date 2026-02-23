@@ -17,7 +17,9 @@
  * @see {@link ../contexts/auth-context} Auth context
  */
 import React from "react";
-import type { WsData } from "@/hooks/use-websocket";
+import type { WsData, WorkerStatus } from "@/hooks/use-websocket";
+import type { MonthlyEarning, CreditRow } from "@/hooks/use-earnings";
+import type { ActiveFormStat, CreditRate } from "@/hooks/use-marketplace";
 
 /**
  * Default mock WsData object with all fields at empty/connected defaults.
@@ -110,5 +112,82 @@ export function createWsWrapper(overrides: Partial<WsData> = {}) {
   // We provide the context via a mock of the useWs hook
   return function WsWrapper({ children }: { children: React.ReactNode }) {
     return <>{children}</>;
+  };
+}
+
+/**
+ * Factory for a WorkerStatus (aliased as NodeStatus) with sensible defaults.
+ * Overrides are merged on top of defaults so tests only need to specify
+ * the fields under test.
+ */
+export function makeNodeStatus(overrides: Partial<WorkerStatus> = {}): WorkerStatus {
+  return {
+    worker_id: "node-abc123",
+    hostname: "compute-alpha",
+    cores: 8,
+    search_type: "kbn",
+    search_params: JSON.stringify({ k: 3, base: 2, min_n: 1, max_n: 100000 }),
+    current: "",
+    tested: 10000,
+    found: 2,
+    uptime_secs: 3600,
+    last_heartbeat_secs_ago: 5,
+    ...overrides,
+  };
+}
+
+/**
+ * Factory for a MonthlyEarning row with sensible defaults.
+ * Used by EarningsChart tests.
+ */
+export function makeMonthlyEarning(overrides: Partial<MonthlyEarning> = {}): MonthlyEarning {
+  return {
+    month: "2026-01-01",
+    total_credits: 1000,
+    block_count: 50,
+    ...overrides,
+  };
+}
+
+/**
+ * Factory for a CreditRow (credit transaction) with sensible defaults.
+ * Used by EarningsHistoryTable tests.
+ */
+export function makeCreditRow(overrides: Partial<CreditRow> = {}): CreditRow {
+  return {
+    id: 1,
+    block_id: 42,
+    credit: 100,
+    reason: "block_completed",
+    granted_at: "2026-02-20T12:00:00Z",
+    ...overrides,
+  };
+}
+
+/**
+ * Factory for an ActiveFormStat with sensible defaults.
+ * Used by FormShowcaseCard tests.
+ */
+export function makeActiveFormStat(overrides: Partial<ActiveFormStat> = {}): ActiveFormStat {
+  return {
+    form: "kbn",
+    job_count: 3,
+    total_blocks: 100,
+    completed_blocks: 45,
+    ...overrides,
+  };
+}
+
+/**
+ * Factory for a CreditRate with sensible defaults.
+ * Used by RateTable tests.
+ */
+export function makeCreditRate(overrides: Partial<CreditRate> = {}): CreditRate {
+  return {
+    resource_type: "cpu_core_hours",
+    credits_per_unit: 10,
+    unit_label: "core-hour",
+    updated_at: "2026-02-20T12:00:00Z",
+    ...overrides,
   };
 }

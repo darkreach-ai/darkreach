@@ -96,9 +96,7 @@ pub(super) async fn handler_audit_list(
         state
             .db
             .get_audit_log(limit, offset, user_id_ref, action_ref, since),
-        state
-            .db
-            .count_audit_log(user_id_ref, action_ref, since),
+        state.db.count_audit_log(user_id_ref, action_ref, since),
     );
 
     let entries = match entries_result {
