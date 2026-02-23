@@ -12,7 +12,7 @@ export function Section({ id, className, children, secondary = false }: SectionP
     <section
       id={id}
       className={cn(
-        "py-24 px-6 sm:px-8 lg:px-12",
+        "py-32 px-6 sm:px-8 lg:px-12",
         secondary && "bg-card",
         className
       )}

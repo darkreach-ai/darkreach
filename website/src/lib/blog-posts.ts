@@ -11,47 +11,32 @@ export interface BlogPost {
 export const blogPosts: BlogPost[] = [
   {
     slug: "announcing-darkreach",
-    title: "Announcing darkreach: AI-Driven Distributed Computing",
+    title: "Announcing darkreach: Building the World's Biggest Supercomputer",
     excerpt:
-      "We are launching darkreach — an open-source platform that combines autonomous AI agents with high-performance number theory algorithms to push the boundaries of mathematical discovery.",
+      "Most of the world's computing power sits idle. We're building an open-source platform that turns spare cycles into scientific breakthroughs — starting with prime number discovery.",
     date: "2026-02-20",
     author: "darkreach team",
     tags: ["announcement", "launch"],
+    readingTime: "5 min read",
   },
   {
-    slug: "ai-agents-prime-hunting",
-    title: "How AI Agents Optimize Prime Hunting Strategies",
+    slug: "prime-discovery-initiative",
+    title: "Our First Research Initiative: Prime Number Discovery",
     excerpt:
-      "A deep dive into how darkreach's autonomous agents research strategies, tune sieve parameters, and select optimal algorithms for each prime form — without human intervention.",
+      "From factorial primes to Sophie Germain pairs, we've built 12 specialized search algorithms with a sieve-test-prove pipeline that produces independently verifiable results.",
+    date: "2026-02-18",
+    author: "darkreach team",
+    tags: ["mathematics", "research"],
+    readingTime: "7 min read",
+  },
+  {
+    slug: "why-open-source",
+    title: "Why We're Open Source",
+    excerpt:
+      "Open source wasn't a marketing decision — it was the only option. Scientific computing demands transparency, reproducibility, and trust. Here's why we chose the MIT license.",
     date: "2026-02-15",
     author: "darkreach team",
-    tags: ["ai", "agents", "engineering"],
-  },
-  {
-    slug: "12-prime-forms",
-    title: "A Tour of 12 Special Prime Forms",
-    excerpt:
-      "From n!±1 to generalized Fermats, each prime form has unique mathematical properties that require specialized sieves and tests. Here is how we approach each one.",
-    date: "2026-02-08",
-    author: "darkreach team",
-    tags: ["mathematics", "primes"],
-  },
-  {
-    slug: "fleet-architecture",
-    title: "Building a Distributed Prime Search Fleet",
-    excerpt:
-      "How we built a PostgreSQL-based work distribution system with row-level locking, fault-tolerant checkpointing, and real-time coordination for dozens of workers.",
-    date: "2026-01-28",
-    author: "darkreach team",
-    tags: ["infrastructure", "distributed-systems"],
-  },
-  {
-    slug: "primality-certificates",
-    title: "Deterministic Primality Certificates: Trust, but Verify",
-    excerpt:
-      "Why probabilistic primality tests are not enough for mathematical discoveries, and how Pocklington, Morrison, and BLS certificates provide independently verifiable proofs.",
-    date: "2026-01-15",
-    author: "darkreach team",
-    tags: ["mathematics", "cryptography"],
+    tags: ["open-source", "philosophy"],
+    readingTime: "4 min read",
   },
 ];

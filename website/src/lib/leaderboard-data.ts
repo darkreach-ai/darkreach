@@ -41,7 +41,7 @@ export const teamStandings: TeamStanding[] = [
 ];
 
 export const leaderboardStats = {
-  totalVolunteers: 38,
+  totalOperators: 38,
   totalPrimes: 2847,
   totalComputeHours: 127000,
 };

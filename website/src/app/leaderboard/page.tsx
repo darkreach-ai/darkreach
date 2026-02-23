@@ -1,10 +1,12 @@
 import { Section } from "@/components/ui/section";
 import { Badge } from "@/components/ui/badge";
+import Link from "next/link";
 import {
   contributors,
   teamStandings,
   leaderboardStats,
 } from "@/lib/leaderboard-data";
+import { WaitlistCTA } from "@/components/waitlist-cta";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -20,7 +22,7 @@ function RankBadge({ rank }: { rank: number }) {
   if (rank === 1) return <Badge variant="purple">1st</Badge>;
   if (rank === 2) return <Badge variant="green">2nd</Badge>;
   if (rank === 3) return <Badge variant="orange">3rd</Badge>;
-  return <span className="text-muted-foreground font-mono text-sm">#{rank}</span>;
+  return <span className="text-muted-foreground text-sm tabular-nums">#{rank}</span>;
 }
 
 export default function LeaderboardPage() {
@@ -34,19 +36,19 @@ export default function LeaderboardPage() {
 
         <div className="grid grid-cols-3 gap-6 mb-12">
           <div className="text-center p-6 rounded-md border border-border bg-card">
-            <div className="text-3xl font-bold font-mono text-foreground">
-              {formatNumber(leaderboardStats.totalVolunteers)}
+            <div className="text-3xl font-bold tabular-nums text-foreground">
+              {formatNumber(leaderboardStats.totalOperators)}
             </div>
-            <div className="text-sm text-muted-foreground">Total Volunteers</div>
+            <div className="text-sm text-muted-foreground">Total Operators</div>
           </div>
           <div className="text-center p-6 rounded-md border border-border bg-card">
-            <div className="text-3xl font-bold font-mono text-accent-purple">
+            <div className="text-3xl font-bold tabular-nums text-accent-purple">
               {formatNumber(leaderboardStats.totalPrimes)}
             </div>
             <div className="text-sm text-muted-foreground">Total Primes Found</div>
           </div>
           <div className="text-center p-6 rounded-md border border-border bg-card">
-            <div className="text-3xl font-bold font-mono text-foreground">
+            <div className="text-3xl font-bold tabular-nums text-foreground">
               {formatNumber(leaderboardStats.totalComputeHours)}h
             </div>
             <div className="text-sm text-muted-foreground">Compute Time</div>
@@ -81,13 +83,13 @@ export default function LeaderboardPage() {
                     {c.username}
                   </td>
                   <td className="px-4 py-3 text-muted-foreground">{c.team}</td>
-                  <td className="px-4 py-3 font-mono text-foreground text-right">
+                  <td className="px-4 py-3 tabular-nums text-foreground text-right">
                     {formatNumber(c.credit)}
                   </td>
-                  <td className="px-4 py-3 font-mono text-accent-purple text-right">
+                  <td className="px-4 py-3 tabular-nums text-accent-purple text-right">
                     {formatNumber(c.primesFound)}
                   </td>
-                  <td className="px-4 py-3 font-mono text-muted-foreground text-right">
+                  <td className="px-4 py-3 tabular-nums text-muted-foreground text-right">
                     {formatNumber(c.computeHours)}
                   </td>
                 </tr>
@@ -126,10 +128,10 @@ export default function LeaderboardPage() {
                   <td className="px-4 py-3 text-muted-foreground text-right">
                     {team.members}
                   </td>
-                  <td className="px-4 py-3 font-mono text-foreground text-right">
+                  <td className="px-4 py-3 tabular-nums text-foreground text-right">
                     {formatNumber(team.totalCredit)}
                   </td>
-                  <td className="px-4 py-3 font-mono text-accent-purple text-right">
+                  <td className="px-4 py-3 tabular-nums text-accent-purple text-right">
                     {formatNumber(team.totalPrimes)}
                   </td>
                 </tr>
@@ -138,6 +140,26 @@ export default function LeaderboardPage() {
           </table>
         </div>
       </Section>
+
+      <Section>
+        <div className="text-center py-8">
+          <h2 className="text-2xl font-bold text-foreground mb-3">
+            Join the Leaderboard
+          </h2>
+          <p className="text-muted-foreground mb-6 max-w-lg mx-auto">
+            Contribute compute to the network and climb the rankings. Every prime
+            discovered earns credit for you and your team.
+          </p>
+          <Link
+            href="/operators"
+            className="inline-flex items-center justify-center rounded-md bg-accent-purple text-white font-medium px-6 py-3 hover:bg-accent-purple/90 transition-colors"
+          >
+            Become an Operator
+          </Link>
+        </div>
+      </Section>
+
+      <WaitlistCTA />
     </>
   );
 }

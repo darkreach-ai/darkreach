@@ -3,23 +3,33 @@ import Link from "next/link";
 
 const columns = [
   {
-    title: "Product",
+    title: "Platform",
     links: [
-      { label: "Dashboard", href: "https://app.darkreach.ai", external: true },
-      { label: "Download", href: "/download" },
+      { label: "How It Works", href: "/platform#how-it-works" },
+      { label: "Technology", href: "/platform#technology" },
       { label: "Status", href: "/status" },
-      { label: "Leaderboard", href: "/leaderboard" },
+      { label: "Docs", href: "/docs/getting-started" },
     ],
   },
   {
-    title: "Documentation",
+    title: "Research",
     links: [
-      { label: "Getting Started", href: "/docs/getting-started" },
-      { label: "Architecture", href: "/docs/architecture" },
-      { label: "Prime Forms", href: "/docs/prime-forms" },
-      { label: "AI Engine", href: "/docs/ai-engine" },
-      { label: "Verification", href: "/docs/verification" },
-      { label: "API Reference", href: "/docs/api" },
+      { label: "Prime Discovery", href: "/research" },
+      { label: "For Universities", href: "/research#universities" },
+      { label: "Initiatives", href: "/research#initiatives" },
+    ],
+  },
+  {
+    title: "Company",
+    links: [
+      { label: "About", href: "/about" },
+      { label: "Blog", href: "/blog" },
+      { label: "Careers", href: "/about#careers" },
+      {
+        label: "Open Source",
+        href: "https://github.com/darkreach-ai/darkreach",
+        external: true,
+      },
     ],
   },
   {
@@ -31,18 +41,8 @@ const columns = [
         external: true,
       },
       { label: "Discord", href: "https://discord.gg/2Khf4t8M33", external: true },
+      { label: "X / Twitter", href: "https://x.com/darkreach_ai", external: true },
       { label: "Leaderboard", href: "/leaderboard" },
-      { label: "Contributing", href: "/docs/contributing" },
-    ],
-  },
-  {
-    title: "Legal",
-    links: [
-      {
-        label: "MIT License",
-        href: "https://github.com/darkreach-ai/darkreach/blob/master/LICENSE",
-        external: true,
-      },
     ],
   },
 ];
@@ -50,15 +50,15 @@ const columns = [
 export function Footer() {
   return (
     <footer className="border-t border-border">
-      <div className="mx-auto max-w-7xl px-6 sm:px-8 lg:px-12 py-12">
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-8">
-          <div className="col-span-2 md:col-span-1">
+      <div className="mx-auto max-w-7xl px-6 sm:px-8 lg:px-12 py-16">
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-8">
+          <div className="col-span-2">
             <div className="flex items-center gap-2 mb-4">
               <DarkReachLogo size={20} />
               <span className="text-foreground font-semibold">darkreach</span>
             </div>
-            <p className="text-sm text-muted-foreground leading-relaxed">
-              AI-driven distributed computing for scientific discovery.
+            <p className="text-sm text-muted-foreground leading-relaxed max-w-xs">
+              Building the world&apos;s biggest supercomputer.
             </p>
           </div>
 
@@ -96,16 +96,24 @@ export function Footer() {
 
         <div className="mt-12 pt-8 border-t border-border flex flex-col sm:flex-row items-center justify-between gap-4">
           <span className="text-muted-foreground text-sm">
-            &copy; {new Date().getFullYear()} darkreach. Open source under MIT.
+            &copy; {new Date().getFullYear()} darkreach.
           </span>
-          <a
-            href="https://github.com/darkreach-ai/darkreach"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-          >
-            github.com/darkreach-ai/darkreach
-          </a>
+          <div className="flex items-center gap-6">
+            <Link
+              href="/privacy"
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Privacy
+            </Link>
+            <a
+              href="https://github.com/darkreach-ai/darkreach/blob/master/LICENSE"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              MIT License
+            </a>
+          </div>
         </div>
       </div>
     </footer>

@@ -47,7 +47,7 @@ const quickLinks = [
   {
     icon: Network,
     title: "Network & Operators",
-    description: "Operators, nodes, work distribution, and joining the fleet.",
+    description: "Operators, nodes, work distribution, and joining the network.",
     href: "/docs/network",
   },
   {
@@ -81,10 +81,9 @@ export default function DocsPage() {
     <div className="prose-docs">
       <h1>darkreach Documentation</h1>
       <p>
-        darkreach is an AI-driven distributed computing platform for hunting
-        special-form prime numbers. It combines high-performance number theory
-        algorithms with autonomous AI agents to push the boundaries of
-        mathematical discovery.
+        darkreach is an open-source distributed computing platform. Operators
+        contribute compute, an AI engine orchestrates work across the network,
+        and every result is independently verifiable.
       </p>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-8 not-prose">

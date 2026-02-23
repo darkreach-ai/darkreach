@@ -1,23 +1,30 @@
 import { Hero } from "@/components/hero";
-import { StatsBar } from "@/components/stats-bar";
-import { FeatureGrid } from "@/components/feature-grid";
-import { Pipeline } from "@/components/pipeline";
-import { PrimeForms } from "@/components/prime-forms";
-import { LiveFeed } from "@/components/live-feed";
-import { Comparison } from "@/components/comparison";
-import { CtaSection } from "@/components/cta-section";
+import { ProofBar } from "@/components/proof-bar";
+import { VisionCards } from "@/components/vision-cards";
+import { HowItWorks } from "@/components/how-it-works";
+import { InitiativePreview } from "@/components/initiative-preview";
+import { OperatorRecruit } from "@/components/operator-recruit";
+import { SocialProof } from "@/components/social-proof";
+import { WaitlistCTA } from "@/components/waitlist-cta";
+
+function Divider() {
+  return <div className="section-divider" />;
+}
 
 export default function Home() {
   return (
     <>
       <Hero />
-      <StatsBar />
-      <FeatureGrid />
-      <Pipeline />
-      <PrimeForms />
-      <LiveFeed />
-      <Comparison />
-      <CtaSection />
+      <ProofBar />
+      <Divider />
+      <VisionCards />
+      <HowItWorks />
+      <Divider />
+      <InitiativePreview />
+      <OperatorRecruit />
+      <Divider />
+      <SocialProof />
+      <WaitlistCTA />
     </>
   );
 }

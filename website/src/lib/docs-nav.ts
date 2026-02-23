@@ -10,27 +10,32 @@ export interface DocNavSection {
 
 export const docsNav: DocNavSection[] = [
   {
-    title: "Overview",
+    title: "Getting Started",
     items: [
-      { title: "Documentation", href: "/docs" },
-      { title: "Getting Started", href: "/docs/getting-started" },
+      { title: "Overview", href: "/docs" },
+      { title: "Quick Start", href: "/docs/getting-started" },
       { title: "Architecture", href: "/docs/architecture" },
     ],
   },
   {
-    title: "Guides",
+    title: "Platform",
+    items: [
+      { title: "AI Engine", href: "/docs/ai-engine" },
+      { title: "Network & Operators", href: "/docs/network" },
+      { title: "Projects & Campaigns", href: "/docs/projects" },
+      { title: "API Reference", href: "/docs/api" },
+    ],
+  },
+  {
+    title: "Research",
     items: [
       { title: "Prime Forms", href: "/docs/prime-forms" },
-      { title: "AI Engine", href: "/docs/ai-engine" },
-      { title: "Projects & Campaigns", href: "/docs/projects" },
-      { title: "Network & Operators", href: "/docs/network" },
       { title: "Verification", href: "/docs/verification" },
     ],
   },
   {
-    title: "Reference",
+    title: "Community",
     items: [
-      { title: "API Reference", href: "/docs/api" },
       { title: "Contributing", href: "/docs/contributing" },
     ],
   },

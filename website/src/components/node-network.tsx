@@ -6,12 +6,12 @@ import { PerspectiveCamera } from "@react-three/drei";
 import * as THREE from "three";
 
 // ── Scene constants ──────────────────────────────────────────────────
-const NODE_COUNT_DESKTOP = 80;
-const NODE_COUNT_MOBILE = 40;
+const NODE_COUNT_DESKTOP = 50;
+const NODE_COUNT_MOBILE = 25;
 const CONNECTION_DIST_DESKTOP = 4.2;
 const CONNECTION_DIST_MOBILE = 3.5;
 const MAX_CONNECTIONS = 400;
-const ROTATION_SPEED = 0.012;
+const ROTATION_SPEED = 0.006;
 const PULSE_INTERVAL = 2.5; // seconds between discovery pulses
 const PULSE_SPEED = 3.0; // how fast pulses travel along edges
 
@@ -302,7 +302,7 @@ function NetworkScene({ isMobile }: { isMobile: boolean }) {
         {/* Nodes — instanced spheres with size variation */}
         <instancedMesh ref={meshRef} args={[undefined, undefined, nodeCount]}>
           <sphereGeometry args={[0.06, 10, 10]} />
-          <meshBasicMaterial transparent opacity={0.35} />
+          <meshBasicMaterial transparent opacity={0.20} />
         </instancedMesh>
 
         {/* Connection lines */}
@@ -320,7 +320,7 @@ function NetworkScene({ isMobile }: { isMobile: boolean }) {
           <lineBasicMaterial
             vertexColors
             transparent
-            opacity={0.12}
+            opacity={0.08}
             blending={THREE.AdditiveBlending}
             depthWrite={false}
           />

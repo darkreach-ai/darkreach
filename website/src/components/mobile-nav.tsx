@@ -5,38 +5,18 @@ import { X, Github } from "lucide-react";
 import Link from "next/link";
 import { DarkReachLogo } from "./darkreach-logo";
 
-const navSections = [
-  {
-    title: "Product",
-    links: [
-      { label: "About", href: "/about" },
-      { label: "Download", href: "/download" },
-      { label: "Status", href: "/status" },
-      { label: "Leaderboard", href: "/leaderboard" },
-      { label: "Blog", href: "/blog" },
-    ],
-  },
-  {
-    title: "Documentation",
-    links: [
-      { label: "Getting Started", href: "/docs/getting-started" },
-      { label: "Architecture", href: "/docs/architecture" },
-      { label: "Prime Forms", href: "/docs/prime-forms" },
-      { label: "AI Engine", href: "/docs/ai-engine" },
-      { label: "Projects & Campaigns", href: "/docs/projects" },
-      { label: "Network & Operators", href: "/docs/network" },
-      { label: "Verification", href: "/docs/verification" },
-      { label: "API Reference", href: "/docs/api" },
-      { label: "Contributing", href: "/docs/contributing" },
-    ],
-  },
-  {
-    title: "Deploy",
-    links: [
-      { label: "Coordinator Setup", href: "/download/server" },
-      { label: "Worker Deployment", href: "/download/worker" },
-    ],
-  },
+const primaryLinks = [
+  { label: "Platform", href: "/platform" },
+  { label: "Research", href: "/research" },
+  { label: "Operators", href: "/operators" },
+  { label: "About", href: "/about" },
+  { label: "Blog", href: "/blog" },
+];
+
+const secondaryLinks = [
+  { label: "Status", href: "/status" },
+  { label: "Leaderboard", href: "/leaderboard" },
+  { label: "Docs", href: "/docs/getting-started" },
 ];
 
 interface MobileNavProps {
@@ -77,27 +57,36 @@ export function MobileNav({ open, onClose }: MobileNavProps) {
           </button>
         </div>
 
-        <div className="px-6 py-6 space-y-8">
-          {navSections.map((section) => (
-            <div key={section.title}>
-              <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">
-                {section.title}
-              </h3>
-              <div className="space-y-1">
-                {section.links.map((link) => (
-                  <Link
-                    key={link.href}
-                    href={link.href}
-                    onClick={onClose}
-                    className="block py-2 text-sm text-foreground hover:text-accent-purple transition-colors"
-                  >
-                    {link.label}
-                  </Link>
-                ))}
-              </div>
-            </div>
-          ))}
+        <div className="px-6 py-6 space-y-6">
+          {/* Primary links */}
+          <div className="space-y-1">
+            {primaryLinks.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                onClick={onClose}
+                className="block py-2.5 text-base font-medium text-foreground hover:text-accent-purple transition-colors"
+              >
+                {link.label}
+              </Link>
+            ))}
+          </div>
 
+          {/* Secondary links */}
+          <div className="pt-4 border-t border-border space-y-1">
+            {secondaryLinks.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                onClick={onClose}
+                className="block py-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+              >
+                {link.label}
+              </Link>
+            ))}
+          </div>
+
+          {/* Social links */}
           <div className="pt-4 border-t border-border space-y-3">
             <a
               href="https://discord.gg/2Khf4t8M33"
@@ -118,12 +107,24 @@ export function MobileNav({ open, onClose }: MobileNavProps) {
               GitHub
             </a>
             <a
-              href="https://app.darkreach.ai"
-              className="block w-full text-center px-4 py-2.5 rounded-md bg-accent-purple text-white text-sm font-medium hover:opacity-90 transition-opacity"
+              href="https://x.com/darkreach_ai"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
             >
-              Open Dashboard
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+              X / Twitter
             </a>
           </div>
+
+          {/* CTA */}
+          <Link
+            href="/#waitlist"
+            onClick={onClose}
+            className="block w-full text-center px-4 py-2.5 rounded-lg bg-accent-purple text-white text-sm font-medium hover:bg-accent-purple/90 transition-colors"
+          >
+            Join Waitlist
+          </Link>
         </div>
       </div>
     </div>

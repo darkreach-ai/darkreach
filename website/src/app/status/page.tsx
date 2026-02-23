@@ -5,15 +5,15 @@ import { Section } from "@/components/ui/section";
 import { StatusCard } from "@/components/status-card";
 import { UptimeBar } from "@/components/uptime-bar";
 import { Badge } from "@/components/ui/badge";
+import { WaitlistCTA } from "@/components/waitlist-cta";
 import {
   services as fallbackServices,
-  fleetStats as fallbackFleet,
+  networkStats as fallbackNetwork,
   recentIncidents,
   type Service,
-  type FleetStats,
+  type NetworkStats,
 } from "@/lib/status-data";
-
-const API_BASE = "https://api.darkreach.ai";
+import { API_BASE } from "@/lib/api";
 
 /** Probe a URL and return latency + status. */
 async function probeService(
@@ -33,7 +33,7 @@ async function probeService(
 
 export default function StatusPage() {
   const [serviceList, setServiceList] = useState<Service[]>(fallbackServices);
-  const [fleet, setFleet] = useState<FleetStats>(fallbackFleet);
+  const [network, setNetwork] = useState<NetworkStats>(fallbackNetwork);
   const [live, setLive] = useState(false);
 
   useEffect(() => {
@@ -57,43 +57,43 @@ export default function StatusPage() {
       }));
       setServiceList(updated);
 
-      // Fetch fleet stats from API
+      // Fetch network stats from API
       try {
-        const [statusRes, fleetRes] = await Promise.all([
+        const [statusRes, networkRes] = await Promise.all([
           fetch(`${API_BASE}/api/status`),
-          fetch(`${API_BASE}/api/fleet`),
+          fetch(`${API_BASE}/api/network`),
         ]);
-        if (statusRes.ok && fleetRes.ok) {
+        if (statusRes.ok && networkRes.ok) {
           const status = (await statusRes.json()) as {
             total_primes?: number;
             uptime_secs?: number;
           };
-          const network = (await fleetRes.json()) as {
+          const networkData = (await networkRes.json()) as {
             workers?: Array<{
               status?: string;
               cores?: number;
             }>;
           };
-          const workers = network.workers ?? [];
-          const activeWorkers = workers.filter(
+          const nodes = networkData.workers ?? [];
+          const activeNodes = nodes.filter(
             (w) => w.status === "active" || w.status === "running"
           ).length;
-          const totalCores = workers.reduce((sum, w) => sum + (w.cores ?? 0), 0);
+          const totalCores = nodes.reduce((sum, w) => sum + (w.cores ?? 0), 0);
           const uptimeDays = status.uptime_secs
             ? (status.uptime_secs / 86400).toFixed(0)
             : "0";
 
           if (active) {
-            setFleet({
-              activeWorkers: activeWorkers || workers.length,
-              totalCores: totalCores || fallbackFleet.totalCores,
-              uptimePercent: Number(uptimeDays) > 0 ? 99.9 : fallbackFleet.uptimePercent,
-              primesLast24h: fallbackFleet.primesLast24h, // Kept as fallback (no 24h endpoint)
+            setNetwork({
+              activeNodes: activeNodes || nodes.length,
+              totalCores: totalCores || fallbackNetwork.totalCores,
+              uptimePercent: Number(uptimeDays) > 0 ? 99.9 : fallbackNetwork.uptimePercent,
+              primesLast24h: fallbackNetwork.primesLast24h, // Kept as fallback (no 24h endpoint)
             });
           }
         }
       } catch {
-        // Keep fallback fleet stats
+        // Keep fallback network stats
       }
 
       if (active) setLive(true);
@@ -135,29 +135,29 @@ export default function StatusPage() {
       </Section>
 
       <Section secondary>
-        <h2 className="text-2xl font-bold text-foreground mb-8">Fleet Overview</h2>
+        <h2 className="text-2xl font-bold text-foreground mb-8">Network Overview</h2>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-12">
           <div className="text-center">
-            <div className="text-3xl font-bold font-mono text-foreground">
-              {fleet.activeWorkers}
+            <div className="text-3xl font-bold tabular-nums text-foreground">
+              {network.activeNodes}
             </div>
-            <div className="text-sm text-muted-foreground">Active Workers</div>
+            <div className="text-sm text-muted-foreground">Active Nodes</div>
           </div>
           <div className="text-center">
-            <div className="text-3xl font-bold font-mono text-foreground">
-              {fleet.totalCores}
+            <div className="text-3xl font-bold tabular-nums text-foreground">
+              {network.totalCores}
             </div>
             <div className="text-sm text-muted-foreground">Total Cores</div>
           </div>
           <div className="text-center">
-            <div className="text-3xl font-bold font-mono text-accent-green">
-              {fleet.uptimePercent}%
+            <div className="text-3xl font-bold tabular-nums text-accent-green">
+              {network.uptimePercent}%
             </div>
             <div className="text-sm text-muted-foreground">Uptime (30d)</div>
           </div>
           <div className="text-center">
-            <div className="text-3xl font-bold font-mono text-foreground">
-              {fleet.primesLast24h}
+            <div className="text-3xl font-bold tabular-nums text-foreground">
+              {network.primesLast24h}
             </div>
             <div className="text-sm text-muted-foreground">Primes (24h)</div>
           </div>
@@ -210,6 +210,8 @@ export default function StatusPage() {
           </div>
         )}
       </Section>
+
+      <WaitlistCTA />
     </>
   );
 }

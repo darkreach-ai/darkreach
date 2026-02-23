@@ -4,13 +4,31 @@ import { Section } from "@/components/ui/section";
 import { InstallCommand } from "@/components/install-command";
 import { Card } from "@/components/ui/card";
 import { systemRequirements } from "@/lib/install-commands";
-import { Server, Monitor, ArrowRight } from "lucide-react";
+import { Server, Monitor, ArrowRight, Info } from "lucide-react";
 import Link from "next/link";
 
 export default function DownloadPage() {
   return (
     <>
       <Section>
+        <Link
+          href="/operators"
+          className="flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/5 p-4 mb-10 hover:bg-amber-500/10 transition-colors"
+        >
+          <Info size={20} className="text-amber-500 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm text-foreground font-medium">
+              Looking to contribute compute?
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Visit our{" "}
+              <span className="text-amber-500 font-medium">
+                Operators page &rarr;
+              </span>{" "}
+              for the quickest way to join the network.
+            </p>
+          </div>
+        </Link>
         <h1 className="text-4xl font-bold text-foreground mb-4">Download darkreach</h1>
         <p className="text-muted-foreground max-w-2xl mb-10">
           Install darkreach and start hunting primes. Detected your OS

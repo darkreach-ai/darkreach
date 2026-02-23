@@ -28,7 +28,7 @@ export const services: Service[] = [
     status: "operational",
     url: "Supabase (eu-central-1)",
     latency: "8ms",
-    description: "PostgreSQL storage for primes, workers, and jobs",
+    description: "PostgreSQL storage for primes, nodes, and jobs",
   },
   {
     name: "Website",
@@ -39,15 +39,15 @@ export const services: Service[] = [
   },
 ];
 
-export interface FleetStats {
-  activeWorkers: number;
+export interface NetworkStats {
+  activeNodes: number;
   totalCores: number;
   uptimePercent: number;
   primesLast24h: number;
 }
 
-export const fleetStats: FleetStats = {
-  activeWorkers: 38,
+export const networkStats: NetworkStats = {
+  activeNodes: 38,
   totalCores: 152,
   uptimePercent: 99.94,
   primesLast24h: 12,
@@ -92,9 +92,9 @@ export const recentIncidents: Incident[] = [
   },
   {
     date: "2026-02-10",
-    title: "Worker heartbeat delays",
+    title: "Node heartbeat delays",
     description:
-      "Network congestion caused heartbeat timeouts for 3 workers. Workers auto-reconnected.",
+      "Network congestion caused heartbeat timeouts for 3 nodes. Nodes auto-reconnected.",
     status: "resolved",
     duration: "8 minutes",
   },

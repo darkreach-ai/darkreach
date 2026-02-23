@@ -25,9 +25,9 @@ const events: TimelineEvent[] = [
   },
   {
     date: "2026 Jan",
-    title: "Fleet infrastructure",
+    title: "Network infrastructure",
     description:
-      "Built coordinator/worker architecture with PostgreSQL work distribution and real-time dashboard.",
+      "Built coordinator/node architecture with PostgreSQL work distribution and real-time dashboard.",
   },
   {
     date: "2026 Feb",
@@ -40,6 +40,18 @@ const events: TimelineEvent[] = [
     title: "AI agent integration",
     description:
       "Autonomous agents for research, strategy optimization, and campaign orchestration.",
+  },
+  {
+    date: "2026 Q2",
+    title: "Website v1 launch",
+    description:
+      "Repositioned as the world's biggest supercomputer. New marketing site, operator onboarding, and research initiatives.",
+  },
+  {
+    date: "2026 H2",
+    title: "New research initiatives",
+    description:
+      "Expanding beyond prime discovery to protein folding, climate models, and cryptographic research.",
   },
 ];
 
