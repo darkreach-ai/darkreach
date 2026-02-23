@@ -280,19 +280,19 @@ function StrategyPageInner() {
                             {s.total.toFixed(3)}
                           </td>
                           <td className="py-2 pr-4 text-right font-mono text-muted-foreground">
-                            {s.record_gap.toFixed(2)}
+                            {(s.record_gap ?? 0).toFixed(2)}
                           </td>
                           <td className="py-2 pr-4 text-right font-mono text-muted-foreground">
-                            {s.yield_rate.toFixed(2)}
+                            {(s.yield_rate ?? 0).toFixed(2)}
                           </td>
                           <td className="py-2 pr-4 text-right font-mono text-muted-foreground">
-                            {s.cost_efficiency.toFixed(2)}
+                            {(s.cost_efficiency ?? 0).toFixed(2)}
                           </td>
                           <td className="py-2 pr-4 text-right font-mono text-muted-foreground">
-                            {s.coverage_gap.toFixed(2)}
+                            {(s.coverage_gap ?? 0).toFixed(2)}
                           </td>
                           <td className="py-2 text-right font-mono text-muted-foreground">
-                            {s.fleet_fit.toFixed(2)}
+                            {(s.fleet_fit ?? 0).toFixed(2)}
                           </td>
                         </tr>
                       ))}

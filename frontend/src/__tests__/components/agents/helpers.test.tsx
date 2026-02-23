@@ -180,7 +180,7 @@ describe("roleBadge", () => {
     ["engine", "Engine", "amber"],
     ["frontend", "Frontend", "blue"],
     ["ops", "Ops", "green"],
-    ["research", "Research", "indigo"],
+    ["research", "Research", "purple"],
   ] as const)("renders %s role with label '%s' and %s color", (role, label, color) => {
     const { container } = render(roleBadge(role));
     const badge = container.querySelector("[data-testid='badge']");
