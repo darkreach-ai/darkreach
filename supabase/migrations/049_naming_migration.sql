@@ -4,7 +4,7 @@
 --   volunteer_id → operator_id   (FK columns left unchanged in Phase 0)
 --   worker_id    → node_id       (operator_nodes table, operator-facing)
 --   worker_count → node_count    (leaderboard view)
---   fleet.*      → network.*     (system_metrics keys)
+--   fleet.*      → network.*     (metric_samples keys)
 --   fleet_fit    → network_fit   (ai_engine_state JSON)
 --
 -- Backward-compatibility views from 025 are refreshed to reflect
@@ -185,25 +185,25 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- ============================================================
--- 8. Data migration: system_metrics fleet.* → network.*
+-- 8. Data migration: metric_samples fleet.* → network.*
 -- ============================================================
 
-UPDATE system_metrics
-SET metric_key = REPLACE(metric_key, 'fleet.', 'network.')
-WHERE metric_key LIKE 'fleet.%';
+UPDATE metric_samples
+SET metric = REPLACE(metric, 'fleet.', 'network.')
+WHERE metric LIKE 'fleet.%';
 
 -- ============================================================
 -- 9. Data migration: ai_engine_state fleet_fit → network_fit
 -- ============================================================
 
 UPDATE ai_engine_state
-SET state = state || jsonb_build_object(
-    'network_fit', state->'fleet_fit'
+SET scoring_weights = scoring_weights || jsonb_build_object(
+    'network_fit', scoring_weights->'fleet_fit'
 )
-WHERE state ? 'fleet_fit';
+WHERE scoring_weights ? 'fleet_fit';
 
 UPDATE ai_engine_state
-SET state = state - 'fleet_fit'
-WHERE state ? 'fleet_fit';
+SET scoring_weights = scoring_weights - 'fleet_fit'
+WHERE scoring_weights ? 'fleet_fit';
 
 COMMIT;
