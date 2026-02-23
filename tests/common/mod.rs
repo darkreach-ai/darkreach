@@ -229,7 +229,8 @@ pub async fn truncate_all_tables(pool: &sqlx::PgPool) {
           ('engine', 'Engine specialist', '[\"engine\"]', 2, 'sonnet', 'Engine role prompt', 5.00),
           ('frontend', 'Frontend specialist', '[\"frontend\"]', 2, 'sonnet', 'Frontend role prompt', 3.00),
           ('ops', 'Ops specialist', '[\"deploy\",\"server\"]', 3, 'sonnet', 'Ops role prompt', 10.00),
-          ('research', 'Research analyst', '[\"docs\"]', 0, 'haiku', 'Research role prompt', 1.00)",
+          ('research', 'Research analyst', '[\"docs\"]', 0, 'haiku', 'Research role prompt', 1.00),
+          ('strategy-advisor', 'Strategy advisor', '[\"engine\",\"research\"]', 0, 'haiku', 'Strategy advisor prompt', 1.00)",
     )
     .execute(pool)
     .await
@@ -511,6 +512,7 @@ async fn run_migrations(pool: &sqlx::PgPool) {
         "supabase/migrations/058_batch_claiming.sql",
         "supabase/migrations/059_ml_engine.sql",
         "supabase/migrations/060_fix_source_constraint.sql",
+        "supabase/migrations/061_strategy_advisor_role.sql",
     ];
 
     // Create user_profiles table (simplified: no FK to auth.users which is Supabase-specific)

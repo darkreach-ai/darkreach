@@ -59,10 +59,11 @@ source "$HOME/.cargo/env" 2>/dev/null || true
 RUSTFLAGS="-C target-cpu=native" cargo build --release
 
 echo "--- Installing binary ---"
+# Ensure the binary is executable before copying (cargo build sets +x already)
+chmod +x target/release/darkreach
 # Stop the service first to avoid "Text file busy" errors when overwriting
-sudo systemctl stop darkreach-coordinator 2>/dev/null || true
-sudo cp target/release/darkreach "${BIN_DIR}/darkreach"
-sudo chmod +x "${BIN_DIR}/darkreach"
+sudo /usr/bin/systemctl stop darkreach-coordinator 2>/dev/null || true
+sudo /usr/bin/cp target/release/darkreach "${BIN_DIR}/darkreach"
 
 echo "--- Installing .env ---"
 if [ -f .env ]; then
@@ -71,12 +72,12 @@ if [ -f .env ]; then
 fi
 
 echo "--- Installing systemd units ---"
-sudo cp deploy/darkreach-coordinator.service /etc/systemd/system/ 2>/dev/null || true
-sudo cp deploy/darkreach-worker@.service /etc/systemd/system/ 2>/dev/null || true
-sudo systemctl daemon-reload
+sudo /usr/bin/cp deploy/darkreach-coordinator.service /etc/systemd/system/darkreach-coordinator.service 2>/dev/null || true
+sudo /usr/bin/cp deploy/darkreach-worker@.service /etc/systemd/system/darkreach-worker@.service 2>/dev/null || true
+sudo /usr/bin/systemctl daemon-reload
 
 echo "--- Restarting services ---"
-sudo systemctl start darkreach-coordinator 2>/dev/null || true
+sudo /usr/bin/systemctl start darkreach-coordinator 2>/dev/null || true
 
 echo "--- Done! ---"
 darkreach --help | head -1
