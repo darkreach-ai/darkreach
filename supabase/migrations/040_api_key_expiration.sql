@@ -8,8 +8,8 @@
 ALTER TABLE operators ADD COLUMN IF NOT EXISTS key_rotated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 
 -- Backfill: set to registration date for existing operators
-UPDATE operators SET key_rotated_at = created_at
-WHERE key_rotated_at = NOW() AND created_at IS NOT NULL;
+UPDATE operators SET key_rotated_at = joined_at
+WHERE key_rotated_at = NOW() AND joined_at IS NOT NULL;
 
 -- Index for expiration queries (periodic cleanup)
 CREATE INDEX IF NOT EXISTS idx_operators_key_rotated_at ON operators (key_rotated_at);
