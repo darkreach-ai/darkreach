@@ -376,7 +376,7 @@ async fn evaluate_cron_schedules(state: &AppState) -> Result<(), String> {
 /// Increments the `agent_schedule_fires` Prometheus counter on success and
 /// updates `last_fired_at` via [`Database::fire_schedule`].
 pub(crate) async fn fire_schedule(state: &AppState, sched: &AgentScheduleRow) {
-    let source = format!("schedule:{}", sched.name);
+    let source = "schedule";
     let result = if sched.action_type == "template" {
         if let Some(ref tpl) = sched.template_name {
             state

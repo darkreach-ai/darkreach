@@ -510,6 +510,7 @@ async fn run_migrations(pool: &sqlx::PgPool) {
         "supabase/migrations/057_waitlist.sql",
         "supabase/migrations/058_batch_claiming.sql",
         "supabase/migrations/059_ml_engine.sql",
+        "supabase/migrations/060_fix_source_constraint.sql",
     ];
 
     // Create user_profiles table (simplified: no FK to auth.users which is Supabase-specific)
