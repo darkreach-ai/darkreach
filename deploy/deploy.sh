@@ -28,17 +28,18 @@ INSTALL_DIR="/opt/darkreach"
 BIN_DIR="/usr/local/bin"
 
 echo "--- Installing dependencies ---"
+source "$HOME/.cargo/env" 2>/dev/null || true
 if ! command -v cargo &>/dev/null; then
     echo "Installing Rust..."
     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
     source "$HOME/.cargo/env"
 fi
 
+# Install system deps (non-fatal — deps may already be present)
 if [ -f /etc/debian_version ]; then
-    sudo apt-get update -qq
-    sudo apt-get install -y -qq build-essential libgmp-dev m4 git pkg-config
+    sudo apt-get update -qq && sudo apt-get install -y -qq build-essential libgmp-dev m4 git pkg-config || echo "WARN: apt-get failed (deps may already be installed)"
 elif [ -f /etc/redhat-release ]; then
-    sudo yum install -y gcc gcc-c++ gmp-devel m4 git pkgconfig
+    sudo yum install -y gcc gcc-c++ gmp-devel m4 git pkgconfig || echo "WARN: yum failed (deps may already be installed)"
 fi
 
 echo "--- Fetching code ---"
