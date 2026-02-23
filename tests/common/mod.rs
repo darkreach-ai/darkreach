@@ -181,13 +181,21 @@ pub async fn truncate_all_tables(pool: &sqlx::PgPool) {
                        agent_logs, agent_schedules, agent_role_templates, agent_task_deps, agent_memory,
                        agent_events, agent_tasks, agent_budgets, agent_templates,
                        agent_roles, project_events, project_phases, projects,
+                       operator_badges, badge_definitions,
+                       operator_preferences, resource_contributions, resource_credit_rates,
                        operator_credits, operator_trust, operator_nodes, operators,
                        cost_calibration,
                        metric_rollups_daily, metric_rollups_hourly, metric_samples, system_logs,
                        strategy_decisions, strategy_config,
                        node_block_results, verification_queue,
                        ai_engine_decisions, ai_engine_state,
+                       scoring_weight_history,
                        prime_verification_queue, prime_verification_summary,
+                       relay_sieve_cache, relay_events, shared_sieves,
+                       node_commands, audit_log, waitlist,
+                       ml_model_registry, ml_node_form_affinity, ml_node_profiles,
+                       ml_bayesopt_state, ml_bayesopt_observations,
+                       ml_gp_state, ml_gp_training, ml_bandit_arms,
                        work_blocks, search_jobs, workers, primes
          CASCADE",
     )
@@ -258,6 +266,42 @@ pub async fn truncate_all_tables(pool: &sqlx::PgPool) {
     sqlx::raw_sql(
         "INSERT INTO agent_budgets (period, budget_usd) VALUES
           ('daily', 10.00), ('weekly', 50.00), ('monthly', 150.00)",
+    )
+    .execute(pool)
+    .await
+    .unwrap();
+
+    // Re-seed badge definitions (from migration 047).
+    sqlx::raw_sql(
+        "INSERT INTO badge_definitions (id, name, description, tier, threshold, metric, icon) VALUES
+          ('first_prime',  'First Blood',     'Discover your first prime',              'bronze', 1,     'primes_found',     'zap'),
+          ('primes_10',    'Prime Finder',    'Discover 10 primes',                     'silver', 10,    'primes_found',     'search'),
+          ('primes_100',   'Prime Hunter',    'Discover 100 primes',                    'gold',   100,   'primes_found',     'target'),
+          ('blocks_100',   'Centurion',       'Complete 100 work blocks',               'bronze', 100,   'blocks_completed', 'box'),
+          ('blocks_1000',  'Workhorse',       'Complete 1,000 work blocks',             'silver', 1000,  'blocks_completed', 'cpu'),
+          ('blocks_10000', 'Iron Node',       'Complete 10,000 work blocks',            'gold',   10000, 'blocks_completed', 'server'),
+          ('hours_100',    'Contributor',     'Contribute 100 core-hours',              'bronze', 100,   'core_hours',       'clock'),
+          ('hours_1000',   'Powerhouse',      'Contribute 1,000 core-hours',            'silver', 1000,  'core_hours',       'battery-charging'),
+          ('hours_10000',  'Compute Legend',   'Contribute 10,000 core-hours',           'gold',   10000, 'core_hours',       'flame'),
+          ('trust_2',      'Reliable',        'Reach trust level 2 (proven)',            'bronze', 2,     'trust_level',      'shield'),
+          ('trust_3',      'Trusted',         'Reach trust level 3 (trusted)',           'silver', 3,     'trust_level',      'shield-check'),
+          ('trust_4',      'Core Member',     'Reach trust level 4 (core)',              'gold',   4,     'trust_level',      'crown'),
+          ('streak_50',    'Streak Master',   '50 consecutive valid results',            'silver', 50,    'consecutive_valid','trending-up'),
+          ('multi_node',   'Fleet Commander', 'Run 5 or more nodes simultaneously',      'silver', 5,     'worker_count',     'network')
+         ON CONFLICT (id) DO NOTHING",
+    )
+    .execute(pool)
+    .await
+    .unwrap();
+
+    // Re-seed resource credit rates (from migration 043).
+    sqlx::raw_sql(
+        "INSERT INTO resource_credit_rates (resource_type, credits_per_unit, unit_label) VALUES
+          ('cpu', 1.0, 'core-hour'),
+          ('gpu', 5.0, 'gpu-hour'),
+          ('storage', 0.1, 'gb-hour'),
+          ('bandwidth', 0.5, 'gb')
+         ON CONFLICT DO NOTHING",
     )
     .execute(pool)
     .await
@@ -354,6 +398,32 @@ pub fn test_admin_jwt() -> String {
 /// 32. `033_ai_engine_phase6.sql` -- Component scores + worker speed view
 /// 33. `033_prime_tags.sql` -- Multi-classification tags on primes
 /// 34. `034_prime_verification_queue.sql` -- Distributed prime verification
+/// 35. `035_resource_pooling.sql` -- GPU/storage/network columns on operator_nodes
+/// 36. `036_shared_sieves.sql` -- Shared sieve blob cache
+/// 37. `037_api_key_hashing.sql` -- SHA-256 API key hashing on operators
+/// 38. `038_network_relay.sql` -- Relay sieve cache + relay events
+/// 39. `039_audit_log.sql` -- Admin action audit trail
+/// 40. `040_api_key_expiration.sql` -- API key rotation timestamp
+/// 41. `041_operator_ip_allowlist.sql` -- IP allowlist + active flag
+/// 42. `042_drop_plaintext_api_key.sql` -- Drop plaintext api_key, enforce hash
+/// 43. `043_resource_contributions.sql` -- Resource contribution tracking + credit rates
+/// 44. `044_node_commands.sql` -- Command queue with lifecycle tracking
+/// 45. `045_pipeline_stages.sql` -- Multi-stage work block pipeline
+/// 46. `046_operator_preferences.sql` -- Per-operator work preferences
+/// 47. `047_operator_badges.sql` -- Achievement badge system
+/// 48. `048_ai_engine_phases.sql` -- Worker benchmark/capability columns
+/// 49. `049_naming_migration.sql` -- volunteer→operator, worker→node column renames
+/// 50. `050_ai_engine_phases_4_6.sql` -- Scoring weight history, block sieve data
+/// 51. `051_agent_hardening.sql` -- Agent task timeout + working directory
+/// 52. `052_log_improvements.sql` -- Request correlation for system logs
+/// 53. `053_browser_result_hash.sql` -- Content-addressed block result hash
+/// 54. `054_hash_verification.sql` -- Hash verification + duration tracking
+/// 55. `055_browser_block_ttl.sql` -- Block lease TTL for browser workers
+/// 56. `055_adaptive_verification.sql` -- Adaptive verification methods
+/// 57. `056_listen_notify.sql` -- PG LISTEN/NOTIFY triggers
+/// 58. `057_waitlist.sql` -- Waitlist signups
+/// 59. `058_batch_claiming.sql` -- Batch block claiming function
+/// 60. `059_ml_engine.sql` -- ML engine tables (bandits, GP, BayesOpt, node intel)
 ///
 /// Note: Migration `003` is intentionally absent (superseded by later migrations).
 /// Migration `026` is skipped (requires Supabase auth.users table).
@@ -413,6 +483,32 @@ async fn run_migrations(pool: &sqlx::PgPool) {
         "supabase/migrations/033_ai_engine_phase6.sql",
         "supabase/migrations/033_prime_tags.sql",
         "supabase/migrations/034_prime_verification_queue.sql",
+        "supabase/migrations/035_resource_pooling.sql",
+        "supabase/migrations/036_shared_sieves.sql",
+        "supabase/migrations/037_api_key_hashing.sql",
+        "supabase/migrations/038_network_relay.sql",
+        "supabase/migrations/039_audit_log.sql",
+        "supabase/migrations/040_api_key_expiration.sql",
+        "supabase/migrations/041_operator_ip_allowlist.sql",
+        "supabase/migrations/042_drop_plaintext_api_key.sql",
+        "supabase/migrations/043_resource_contributions.sql",
+        "supabase/migrations/044_node_commands.sql",
+        "supabase/migrations/045_pipeline_stages.sql",
+        "supabase/migrations/046_operator_preferences.sql",
+        "supabase/migrations/047_operator_badges.sql",
+        "supabase/migrations/048_ai_engine_phases.sql",
+        "supabase/migrations/049_naming_migration.sql",
+        "supabase/migrations/050_ai_engine_phases_4_6.sql",
+        "supabase/migrations/051_agent_hardening.sql",
+        "supabase/migrations/052_log_improvements.sql",
+        "supabase/migrations/053_browser_result_hash.sql",
+        "supabase/migrations/054_hash_verification.sql",
+        "supabase/migrations/055_browser_block_ttl.sql",
+        "supabase/migrations/055_adaptive_verification.sql",
+        "supabase/migrations/056_listen_notify.sql",
+        "supabase/migrations/057_waitlist.sql",
+        "supabase/migrations/058_batch_claiming.sql",
+        "supabase/migrations/059_ml_engine.sql",
     ];
 
     // Create user_profiles table (simplified: no FK to auth.users which is Supabase-specific)

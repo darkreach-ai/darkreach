@@ -12,7 +12,9 @@ docs/
 benches/
 tests/
 scripts/
+!scripts/init-db-docker.sh
 supabase/
+!supabase/migrations/
 .cargo/
 .claude/
 .github/
