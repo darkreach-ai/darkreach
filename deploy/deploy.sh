@@ -66,7 +66,7 @@ sudo /usr/bin/systemctl stop darkreach-coordinator 2>/dev/null || true
 sudo /usr/bin/cp target/release/darkreach "${BIN_DIR}/darkreach"
 
 echo "--- Installing .env ---"
-if [ -f .env ]; then
+if [ -f .env ] && [ "$(realpath .env)" != "$(realpath "${INSTALL_DIR}/.env" 2>/dev/null)" ]; then
     cp .env "${INSTALL_DIR}/.env"
     chmod 600 "${INSTALL_DIR}/.env"
 fi
