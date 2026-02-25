@@ -329,7 +329,22 @@ pub fn search(
                     digit_count, base, lead_digit
                 );
 
-                // Only candidates surviving the digit filter need primality testing.
+                // Batch GCD pre-filter: eliminate candidates sharing a factor with the
+                // primorial (product of small primes) via Bernstein product/remainder trees.
+                // O(n log²n) vs O(n·π(L)) for sequential trial division.
+                let batch: Vec<Integer> = if batch.len() >= 100 {
+                    let composites = crate::batch_gcd::batch_has_small_factor(&batch, sieve_limit);
+                    batch
+                        .into_iter()
+                        .zip(composites.iter())
+                        .filter(|(_, &is_composite)| !is_composite)
+                        .map(|(c, _)| c)
+                        .collect()
+                } else {
+                    batch
+                };
+
+                // Only candidates surviving the digit + batch GCD filters need primality testing.
                 // Try PFGW first for large candidates (50-100x faster), fall back to GMP MR.
                 let found_primes: Vec<_> = batch
                     .into_par_iter()
@@ -357,6 +372,11 @@ pub fn search(
 
                         // Adaptive P-1 pre-filter (Stage 1 + Stage 2, auto-tuned B1/B2)
                         if crate::p1::adaptive_p1_filter(&num) {
+                            return None;
+                        }
+
+                        // ECM pre-filter — catches composites with smooth curve order
+                        if crate::ecm::adaptive_ecm_filter(&num, 20) {
                             return None;
                         }
 

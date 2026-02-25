@@ -1,0 +1,49 @@
+[project]
+name = "kbn-25k-digit-primes"
+description = "Search for 25K+ digit primes of the form k*2^n+/-1"
+objective = "record"
+form = "kbn"
+tags = ["large-prime", "25k-digits", "proth", "riesel"]
+
+[target]
+target_digits = 25000
+range_start = 83000
+range_end = 100000
+
+[strategy]
+auto_strategy = false
+
+[[strategy.phases]]
+name = "k3-base2-sweep"
+description = "k=3, base=2, n=83000..100000 (25K-30K digits)"
+search_params = { search_type = "kbn", k = 3, base = 2, min_n = 83000, max_n = 100000 }
+block_size = 500
+completion = "all_blocks_done"
+
+[[strategy.phases]]
+name = "k5-base2-sweep"
+description = "k=5, base=2, n=83000..100000"
+search_params = { search_type = "kbn", k = 5, base = 2, min_n = 83000, max_n = 100000 }
+block_size = 500
+completion = "all_blocks_done"
+
+[[strategy.phases]]
+name = "k7-base2-sweep"
+description = "k=7, base=2, n=83000..100000"
+search_params = { search_type = "kbn", k = 7, base = 2, min_n = 83000, max_n = 100000 }
+block_size = 500
+completion = "all_blocks_done"
+
+[infrastructure]
+min_ram_gb = 16
+min_cores = 8
+preferred_tools = ["prst", "pfgw"]
+
+[budget]
+max_cost_usd = 200.0
+cost_alert_threshold_usd = 100.0
+cloud_rate_usd_per_core_hour = 0.04
+
+[workers]
+min_workers = 4
+max_workers = 4

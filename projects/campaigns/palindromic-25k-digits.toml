@@ -1,0 +1,28 @@
+[project]
+name = "palindromic-25k-digit-primes"
+description = "Search for palindromic primes with 25K+ digits"
+objective = "record"
+form = "palindromic"
+tags = ["large-prime", "25k-digits", "palindromic"]
+
+[target]
+target_digits = 25000
+
+[strategy]
+auto_strategy = false
+
+[[strategy.phases]]
+name = "palindromic-sweep"
+description = "25001-digit base-10 palindromes (odd digit count)"
+search_params = { search_type = "palindromic", base = 10, min_digits = 25001, max_digits = 25001 }
+block_size = 2
+completion = "all_blocks_done"
+
+[infrastructure]
+min_ram_gb = 32
+min_cores = 8
+preferred_tools = ["pfgw"]
+
+[budget]
+max_cost_usd = 500.0
+cloud_rate_usd_per_core_hour = 0.04

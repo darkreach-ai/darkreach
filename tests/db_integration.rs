@@ -1851,9 +1851,9 @@ async fn operator_node_register_and_heartbeat() {
     let entry = leaderboard.iter().find(|e| e.username == "noderunner");
     assert!(entry.is_some(), "Operator should appear on leaderboard");
     assert_eq!(
-        entry.unwrap().worker_count,
+        entry.unwrap().node_count,
         Some(1),
-        "Should have 1 worker (upsert, not duplicate)"
+        "Should have 1 node (upsert, not duplicate)"
     );
 }
 

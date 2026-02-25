@@ -183,8 +183,10 @@ pub fn adaptive_p1_filter(n: &Integer) -> bool {
         (100_000u64, 10_000_000u64)
     } else if bits < 50_000 {
         (500_000u64, 50_000_000u64)
+    } else if bits < 100_000 {
+        (2_000_000u64, 200_000_000u64) // 25K+ digits (~83K bits)
     } else {
-        (1_000_000u64, 100_000_000u64)
+        (5_000_000u64, 500_000_000u64) // 30K+ digits (~100K bits)
     };
 
     p1_factor(n, b1, Some(b2)).is_some()
