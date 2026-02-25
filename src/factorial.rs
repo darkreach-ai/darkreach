@@ -243,6 +243,10 @@ pub fn search(
                 if crate::p1::adaptive_p1_filter(&plus) {
                     return (IsPrime::No, None);
                 }
+                // ECM pre-filter — catches composites with smooth curve order
+                if crate::ecm::adaptive_ecm_filter(&plus, 20) {
+                    return (IsPrime::No, None);
+                }
                 // Try PFGW acceleration for large candidates
                 if let Some(pfgw_result) =
                     pfgw::try_test(&format!("{}!+1", n), &plus, pfgw::PfgwMode::NMinus1Proof)
@@ -272,6 +276,10 @@ pub fn search(
                 let minus = factorial.clone() - 1u32;
                 // Adaptive P-1 pre-filter (Stage 1 + Stage 2, auto-tuned B1/B2)
                 if crate::p1::adaptive_p1_filter(&minus) {
+                    return (IsPrime::No, None);
+                }
+                // ECM pre-filter — catches composites with smooth curve order
+                if crate::ecm::adaptive_ecm_filter(&minus, 20) {
                     return (IsPrime::No, None);
                 }
                 // Try PFGW acceleration for large candidates

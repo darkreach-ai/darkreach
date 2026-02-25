@@ -206,7 +206,11 @@ fn random_curve_and_point(n: &Integer, seed: u64) -> Option<(EdwardsCurve, Edwar
     // -x² + y² = 1 + d·x²·y²  =>  d = (-x² + y² - 1)/(x²·y²)
     let numerator = {
         let val = (Integer::from(&y2) - Integer::from(&x2) - 1u32) % n;
-        if val < 0 { val + n } else { val }
+        if val < 0 {
+            val + n
+        } else {
+            val
+        }
     };
     let denominator = Integer::from(&x2 * &y2) % n;
 
@@ -243,12 +247,7 @@ fn random_curve_and_point(n: &Integer, seed: u64) -> Option<(EdwardsCurve, Edwar
 /// multiplies the point by q^e. On Edwards curves, the identity is
 /// (0:1:0:1), so when the point reaches the identity mod a prime factor p,
 /// X ≡ 0 mod p (not Z ≡ 0). We check gcd(X, n) to find factors.
-fn ecm_stage1(
-    point: &EdwardsPoint,
-    curve_d: &Integer,
-    n: &Integer,
-    b1: u64,
-) -> Option<Integer> {
+fn ecm_stage1(point: &EdwardsPoint, curve_d: &Integer, n: &Integer, b1: u64) -> Option<Integer> {
     let primes = crate::sieve::generate_primes(b1);
     let mut current = point.clone();
 
@@ -350,13 +349,7 @@ fn ecm_stage2(
 fn ecm_one_curve(n: &Integer, b1: u64, b2: u64, curve_seed: u64) -> Option<Integer> {
     let (curve, point) = random_curve_and_point(n, curve_seed)?;
 
-    // Stage 1
-    if let Some(factor) = ecm_stage1(&point, &curve.d, n, b1) {
-        return Some(factor);
-    }
-
-    // Recompute the point after Stage 1 for Stage 2
-    // (We need to re-run Stage 1 to get the accumulated point)
+    // Stage 1: compute accumulated point P * lcm(1..B1) and check for factors
     let primes = crate::sieve::generate_primes(b1);
     let mut accumulated = point.clone();
     for &q in &primes {
@@ -365,6 +358,23 @@ fn ecm_one_curve(n: &Integer, b1: u64, b2: u64, curve_seed: u64) -> Option<Integ
             pk *= q;
         }
         accumulated = scalar_mul(&Integer::from(pk), &accumulated, &curve.d, n);
+    }
+
+    // Check for factor from Stage 1 (X coordinate reveals identity mod p)
+    let x_mod = Integer::from(&accumulated.x % n);
+    if x_mod != 0u32 {
+        let g = x_mod.gcd(n);
+        if g > 1u32 && &g < n {
+            return Some(g);
+        }
+    }
+    // Also check T coordinate
+    let t_mod = Integer::from(&accumulated.t % n);
+    if t_mod != 0u32 {
+        let g = t_mod.gcd(n);
+        if g > 1u32 && &g < n {
+            return Some(g);
+        }
     }
 
     // Stage 2
@@ -391,8 +401,10 @@ pub fn adaptive_ecm_filter(n: &Integer, num_curves: u32) -> bool {
         (50_000u64, 5_000_000u64, num_curves.min(5))
     } else if bits < 80_000 {
         (200_000u64, 20_000_000u64, num_curves.min(10))
-    } else {
+    } else if bits < 120_000 {
         (1_000_000u64, 100_000_000u64, num_curves.min(20))
+    } else {
+        (3_000_000u64, 300_000_000u64, num_curves.min(30)) // 36K+ digits
     };
 
     for seed in 0..curves {
@@ -436,7 +448,10 @@ mod tests {
                 }
             }
         }
-        assert!(found, "ECM should find a factor of 41*10007 within 500 curves");
+        assert!(
+            found,
+            "ECM should find a factor of 41*10007 within 500 curves"
+        );
     }
 
     /// ECM returns no factor for primes.
@@ -446,10 +461,7 @@ mod tests {
         for seed in 1..10u64 {
             if let Some((curve, point)) = random_curve_and_point(&p, seed) {
                 let result = ecm_stage1(&point, &curve.d, &p, 100);
-                assert!(
-                    result.is_none(),
-                    "ECM should not find factors of primes"
-                );
+                assert!(result.is_none(), "ECM should not find factors of primes");
             }
         }
     }
@@ -458,7 +470,10 @@ mod tests {
     #[test]
     fn ecm_adaptive_skips_small() {
         let n = Integer::from(41u32 * 10007);
-        assert!(!adaptive_ecm_filter(&n, 10), "ECM should skip small candidates");
+        assert!(
+            !adaptive_ecm_filter(&n, 10),
+            "ECM should skip small candidates"
+        );
     }
 
     /// Edwards point identity check.

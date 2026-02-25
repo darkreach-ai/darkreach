@@ -77,8 +77,14 @@ pub fn auto_sieve_depth(candidate_bits: u64, n_range: u64) -> u64 {
     // Optimal depth ≈ test_cost^(2/3), with scaling
     let raw_depth = test_cost.powf(2.0 / 3.0) * 10.0;
 
-    // Clamp to reasonable range
-    let depth = (raw_depth as u64).clamp(1_000_000, 1_000_000_000); // 1M minimum (meaningful sieve), 1B max (memory/time limit)
+    // Clamp to reasonable range — raise cap for very large candidates (25K+ digits / 83K+ bits)
+    // where each eliminated composite saves 1-40s with PRST/PFGW
+    let max_depth = if candidate_bits > 50_000 {
+        10_000_000_000u64 // 10B for 25K+ digit candidates
+    } else {
+        1_000_000_000u64 // 1B standard cap
+    };
+    let depth = (raw_depth as u64).clamp(1_000_000, max_depth);
 
     // For very small ranges, deep sieving isn't worth it
     // (BSGS cost is per-prime, amortized over the range)
@@ -137,8 +143,8 @@ pub fn calibrated_sieve_depth(test_secs: f64, n_range: u64) -> u64 {
 
     let depth = budget.powf(2.0 / 3.0) as u64;
 
-    // Clamp to [1M, 1B]
-    depth.clamp(1_000_000, 1_000_000_000)
+    // Clamp to [1M, 10B] — higher cap for expensive candidates via calibration
+    depth.clamp(1_000_000, 10_000_000_000)
 }
 
 /// Generate all primes up to `limit` using a wheel-30 sieve.
@@ -1113,13 +1119,13 @@ mod tests {
         assert_eq!(calibrated_sieve_depth(1.0, 0), SIEVE_LIMIT);
     }
 
-    /// Very expensive candidates (1000s each) should not exceed 1B cap.
+    /// Very expensive candidates (1000s each) should not exceed 10B cap.
     #[test]
-    fn calibrated_sieve_depth_capped_at_1b() {
+    fn calibrated_sieve_depth_capped_at_10b() {
         let depth = calibrated_sieve_depth(1000.0, 1_000_000);
         assert!(
-            depth <= 1_000_000_000,
-            "should be capped at 1B, got {}",
+            depth <= 10_000_000_000,
+            "should be capped at 10B, got {}",
             depth
         );
     }

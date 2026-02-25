@@ -550,6 +550,12 @@ pub(crate) fn test_prime(
         return (IsPrime::No, "", None);
     }
 
+    // ECM composite pre-filter for large candidates — catches ~1-3% more composites
+    // where the curve order is smooth even when p-1 is not (complementary to P-1).
+    if crate::ecm::adaptive_ecm_filter(candidate, 20) {
+        return (IsPrime::No, "", None);
+    }
+
     // Try GWNUM direct FFI for large candidates (when --features gwnum is enabled)
     #[cfg(feature = "gwnum")]
     {

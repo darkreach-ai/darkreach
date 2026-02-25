@@ -1,0 +1,30 @@
+[project]
+name = "factorial-25k-digit-primes"
+description = "Search for factorial primes n!±1 with 25K+ digits"
+objective = "record"
+form = "factorial"
+tags = ["large-prime", "25k-digits", "factorial"]
+
+[target]
+target_digits = 25000
+range_start = 7000
+range_end = 12000
+
+[strategy]
+auto_strategy = false
+
+[[strategy.phases]]
+name = "factorial-sweep"
+description = "n=7000..12000 (n! gives ~23K-40K digits)"
+search_params = { search_type = "factorial", start = 7000, end = 12000 }
+block_size = 100
+completion = "all_blocks_done"
+
+[infrastructure]
+min_ram_gb = 16
+min_cores = 8
+preferred_tools = ["pfgw"]
+
+[budget]
+max_cost_usd = 100.0
+cloud_rate_usd_per_core_hour = 0.04

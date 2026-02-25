@@ -41,6 +41,7 @@
 
 pub mod agent;
 pub mod ai_engine;
+pub mod batch_gcd;
 pub mod carol_kynea;
 pub mod certificate;
 pub mod checkpoint;
@@ -50,6 +51,7 @@ pub mod cullen_woodall;
 pub mod dashboard;
 pub mod db;
 pub mod deploy;
+pub mod ecm;
 pub mod events;
 pub mod factorial;
 pub mod fleet;
@@ -213,8 +215,15 @@ fn poly_pow_mod(exp: &Integer, coeff_b: &Integer, coeff_c: &Integer, n: &Integer
         result = poly_sqr(&result, coeff_b, coeff_c, n);
         if exp.get_bit(i) {
             // Multiply by x: [r0, r1] * [0, 1] = [-r1*c, r0 + r1*b]
-            let new_r0 = (Integer::from(n) - Integer::from(&result[1] * coeff_c) % n) % n;
+            // Compute -r1*c mod n = n - (r1*c mod n), with care for the zero case
+            let r1c_mod_n = Integer::from(&result[1] * coeff_c) % n;
+            let new_r0 = if r1c_mod_n == 0u32 {
+                Integer::from(0u32)
+            } else {
+                Integer::from(n - &r1c_mod_n)
+            };
             let new_r1 = (Integer::from(&result[0]) + Integer::from(&result[1] * coeff_b)) % n;
+            let new_r1 = if new_r1 < 0 { new_r1 + n } else { new_r1 };
             result = [new_r0, new_r1];
         }
     }
