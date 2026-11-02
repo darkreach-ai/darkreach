@@ -267,7 +267,7 @@ impl Database {
             .bind(verification_id)
             .fetch_one(&self.pool)
             .await?;
-            self.mark_block_verified(block_id as i32).await?;
+            self.mark_block_verified(block_id).await?;
 
             Ok(VerificationOutcome::Matched)
         } else {

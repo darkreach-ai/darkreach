@@ -38,6 +38,40 @@ Migrations are numbered sequentially in `supabase/migrations/`. Apply in order.
 | 027 | `strategy_engine.sql` | Strategy tables | Strategy engine for search optimization |
 | 028 | `network_scaling.sql` | Network tables | Network scaling infrastructure |
 | 029 | `security_hardening.sql` | — | RLS on 22 tables, SECURITY INVOKER views, function search_path, tighten write policies |
+| 030 | `materialized_views.sql` | Materialized views | Pre-computed views for dashboard queries |
+| 031 | `timescaledb_hypertables.sql` | Hypertables | TimescaleDB time-series optimization |
+| 032 | `ai_engine.sql` | `ai_engine_state`, `ai_engine_decisions` | AI engine OODA loop state + decision audit trail |
+| 033 | `ai_engine_phase6.sql` | AI engine (alter) | AI engine phase 6 enhancements |
+| 033 | `prime_tags.sql` | `prime_tags` | Tagging system for primes |
+| 034 | `prime_verification_queue.sql` | `prime_verification_queue` | Queued verification pipeline |
+| 035 | `resource_pooling.sql` | `resource_pools`, `resource_allocations` | Compute resource pooling |
+| 036 | `shared_sieves.sql` | `shared_sieves` | Cross-search sieve sharing |
+| 037 | `api_key_hashing.sql` | — | Hash API keys (bcrypt), remove plaintext storage |
+| 038 | `network_relay.sql` | Network tables (alter) | Network relay infrastructure |
+| 039 | `audit_log.sql` | `audit_log` | Comprehensive audit logging |
+| 040 | `api_key_expiration.sql` | — | API key expiration dates |
+| 041 | `operator_ip_allowlist.sql` | `operator_ip_allowlist` | IP allowlisting per operator |
+| 042 | `drop_plaintext_api_key.sql` | — | Drop plaintext API key column |
+| 043 | `resource_contributions.sql` | `resource_contributions` | Track operator resource contributions |
+| 044 | `node_commands.sql` | `node_commands` | Remote command queue for nodes |
+| 045 | `pipeline_stages.sql` | `pipeline_stages` | Multi-stage work block pipeline |
+| 046 | `operator_preferences.sql` | `operator_preferences` | Operator configuration preferences |
+| 047 | `operator_badges.sql` | `operator_badges` | Achievement badges for operators |
+| 048 | `ai_engine_phases.sql` | AI engine (alter) | AI engine phases 1-3 |
+| 049 | `naming_migration.sql` | Renames | volunteer->operator, fleet->network naming migration |
+| 050 | `ai_engine_phases_4_6.sql` | AI engine (alter) | AI engine phases 4-6 |
+| 051 | `agent_hardening.sql` | Agent tables (alter) | Agent security hardening |
+| 052 | `log_improvements.sql` | `system_logs` (alter) | Log level and metadata improvements |
+| 053 | `browser_result_hash.sql` | `work_blocks` (alter) | Browser-submitted result hashing |
+| 054 | `hash_verification.sql` | — | Hash verification functions |
+| 055 | `adaptive_verification.sql` | — | Adaptive verification thresholds |
+| 055 | `browser_block_ttl.sql` | `work_blocks` (alter) | Browser block TTL settings |
+| 056 | `listen_notify.sql` | — | PostgreSQL LISTEN/NOTIFY channels |
+| 057 | `waitlist.sql` | `waitlist` | Operator waitlist registration |
+| 058 | `batch_claiming.sql` | — | Batch work block claiming |
+| 059 | `ml_engine.sql` | `ml_models`, `ml_experiments`, `ml_predictions` | ML engine model registry + experiments |
+| 060 | `fix_source_constraint.sql` | — | Fix agent_tasks source constraint |
+| 061 | `strategy_advisor_role.sql` | `agent_roles` (alter) | Add strategy-advisor role |
 
 ## Schema Overview
 
@@ -113,6 +147,49 @@ worker_release_channels — Release channel config (stable, beta, nightly)
 cost_calibrations — Per-form cost model coefficients
 ```
 
+### Security & API Tables
+
+```
+audit_log — Comprehensive audit trail (action, actor, target, detail JSONB)
+operator_ip_allowlist — IP allowlisting per operator
+```
+
+### AI Engine Tables
+
+```
+ai_engine_state — OODA loop state, scoring weights, snapshots
+ai_engine_decisions — Decision audit trail (reasoning, confidence, outcome)
+```
+
+### ML Engine Tables
+
+```
+ml_models — Model registry (version, parameters, metrics, shadow mode flag)
+ml_experiments — A/B experiment tracking
+ml_predictions — Model prediction log with outcomes
+```
+
+### Operator & Badge Tables
+
+```
+operator_badges — Achievement badges for operators
+operator_preferences — Operator configuration preferences
+node_commands — Remote command queue for nodes
+resource_contributions — Track operator resource contributions
+resource_pools — Compute resource pooling
+resource_allocations — Resource allocation tracking
+waitlist — Operator waitlist registration
+```
+
+### Pipeline & Verification Tables
+
+```
+prime_verification_queue — Queued verification pipeline
+pipeline_stages — Multi-stage work block pipeline
+shared_sieves — Cross-search sieve sharing
+prime_tags — Tagging system for primes
+```
+
 ## Key RPC Functions
 
 | Function | Purpose |
@@ -140,16 +217,29 @@ cost_calibrations — Per-form cost model coefficients
 
 | Supabase table | Rust db module | Dashboard route module |
 |----------------|---------------|----------------------|
-| `primes` | `db/primes.rs` | `routes_status`, `routes_verify` |
-| `workers` | `db/workers.rs` | `routes_workers` |
+| `primes`, `prime_tags` | `db/primes.rs` | `routes_primes`, `routes_status`, `routes_verify` |
+| `workers` | `db/workers.rs` | `routes_fleet` |
 | `search_jobs`, `work_blocks` | `db/jobs.rs` | `routes_jobs`, `routes_searches` |
 | `agent_*` | `db/agents.rs`, `db/memory.rs`, `db/roles.rs`, `db/schedules.rs` | `routes_agents` |
 | `projects`, `project_*` | `db/projects.rs` | `routes_projects` |
 | `records` | `db/records.rs` | `routes_projects` |
 | `system_*`, `metric_*` | `db/observability.rs` | `routes_observability` |
-| `operators`, `operator_*` | `db/operators.rs` | `routes_operator` |
+| `operators`, `operator_*` | `db/operators.rs` | `routes_operator`, `routes_contribute` |
+| `operator_badges` | `db/badges.rs` | `routes_operator` |
+| `node_commands` | `db/commands.rs` | `routes_operator` |
 | `worker_release*` | `db/releases.rs` | `routes_releases` |
 | `cost_calibrations` | `db/calibrations.rs` | `routes_projects` |
+| `ai_engine_*` | `db/ai_engine.rs` | `routes_strategy` |
+| `audit_log` | `db/audit.rs` | `routes_audit` |
+| `resource_*` | `db/resources.rs` | `routes_resources` |
+| `shared_sieves` | `db/sieves.rs` | `routes_sieve` |
+| `strategy_*` | `db/strategy.rs` | `routes_strategy` |
+| `*_trust` | `db/trust.rs` | `routes_operator` |
+| `user_profiles` | `db/user_profiles.rs` | `routes_auth` |
+| `prime_verification_queue` | `db/prime_verification.rs` | `routes_prime_verification` |
+| `ml_models`, `ml_experiments`, `ml_predictions` | `db/ai_engine.rs` | `routes_strategy` |
+| `waitlist` | `db/operators.rs` | `routes_contribute` |
+| `*_schedules` | `db/schedules.rs` | `routes_schedules` |
 
 ## Infrastructure Evolution
 
@@ -193,6 +283,6 @@ cost_calibrations — Per-form cost model coefficients
 
 ### Migration numbering
 
-- Sequential: 001, 002, ..., 024, 025
-- Exception: `0121` exists between 012 and 013 (legacy conflict)
-- Always use the next available number
+- Sequential: 001, 002, ..., 061 (64 files total)
+- Exceptions: `0121` exists between 012 and 013 (legacy conflict); duplicate prefix `033` and `055` (two files each)
+- Always use the next available number (currently 062)

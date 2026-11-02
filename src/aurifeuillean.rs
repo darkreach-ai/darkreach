@@ -117,8 +117,14 @@ pub fn aurifeuillean_factors_base2(exponent: u64) -> Option<(Integer, Integer)> 
 
     let k = (exponent + 2) / 4;
 
+    // Guard: shift amounts must fit in u32 for rug::Integer::shl
+    let shift_2k_minus_1 = 2 * k - 1;
+    if shift_2k_minus_1 > u32::MAX as u64 || k > u32::MAX as u64 {
+        return None; // exponent too large for this computation
+    }
+
     // L = 2^(2k-1) - 2^k + 1
-    let power_2k_minus_1 = Integer::from(1u32) << (2 * k - 1) as u32;
+    let power_2k_minus_1 = Integer::from(1u32) << shift_2k_minus_1 as u32;
     let power_k = Integer::from(1u32) << k as u32;
     let l = Integer::from(&power_2k_minus_1 - &power_k) + 1u32;
 

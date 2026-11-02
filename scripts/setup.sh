@@ -35,6 +35,14 @@ check_cmd age "brew install age"
 check_cmd sops "brew install sops"
 check_cmd yq "brew install yq"
 
+# Optional: cargo-watch for dev server hot-reload
+if command -v cargo-watch &>/dev/null; then
+    echo "  [ok] cargo-watch ($(command -v cargo-watch))"
+else
+    echo "  [opt] cargo-watch not found — install with: cargo install cargo-watch"
+    echo "        (optional, enables hot-reload in scripts/dev)"
+fi
+
 # Check GMP
 if pkg-config --exists gmp 2>/dev/null || [ -f /opt/homebrew/lib/libgmp.dylib ] || [ -f /usr/lib/libgmp.so ]; then
     echo "  [ok] GMP library"
@@ -104,12 +112,14 @@ cd "$ROOT/frontend"
 npm install --silent 2>&1 | tail -3
 echo "  Frontend deps installed"
 
-# ── Step 6: Install pre-commit hook ──────────────────────────
+# ── Step 6: Install git hooks ────────────────────────────────
 echo ""
-echo "==> [6/6] Installing pre-commit hook"
+echo "==> [6/6] Installing git hooks"
 cd "$ROOT"
 ln -sf ../../scripts/pre-commit .git/hooks/pre-commit
-echo "  Pre-commit hook installed"
+ln -sf ../../scripts/pre-push .git/hooks/pre-push
+ln -sf ../../scripts/commit-msg .git/hooks/commit-msg 2>/dev/null || true
+echo "  Git hooks installed (pre-commit, pre-push, commit-msg)"
 
 # ── Done ─────────────────────────────────────────────────────
 echo ""

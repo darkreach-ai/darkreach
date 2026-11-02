@@ -604,6 +604,15 @@ fn public_api_routes() -> Router<Arc<AppState>> {
             get(routes_agents::handler_api_agent_task_children),
         )
         .route(
+            "/agents/tasks/{id}/subtasks",
+            get(routes_agents::handler_api_agent_task_list_subtasks)
+                .post(routes_agents::handler_api_agent_task_create_subtask),
+        )
+        .route(
+            "/agents/tasks/from-template",
+            post(routes_agents::handler_api_agent_tasks_from_template),
+        )
+        .route(
             "/agents/budgets",
             get(routes_agents::handler_api_agent_budgets)
                 .put(routes_agents::handler_api_agent_budget_update),
@@ -852,6 +861,10 @@ pub fn build_router(state: Arc<AppState>, static_dir: Option<&Path>) -> Router {
             get(routes_operator::handler_v1_leaderboard),
         )
         .route(
+            "/api/v1/operators/public-stats",
+            get(routes_operator::handler_public_operator_stats),
+        )
+        .route(
             "/api/v1/operators/me/nodes",
             get(routes_operator::handler_v1_operator_nodes),
         )
@@ -959,6 +972,12 @@ pub async fn run(
         let mut last_housekeeping = std::time::Instant::now() - Duration::from_secs(3600);
         let mut last_reliability_refresh = std::time::Instant::now() - Duration::from_secs(300);
         let mut last_worker_speed_refresh = std::time::Instant::now() - Duration::from_secs(300);
+        // Partition maintenance runs hourly (3600s), not every 5 min tick.
+        let mut last_partition_maintenance = std::time::Instant::now() - Duration::from_secs(3600);
+        // Tracks whether metric_samples is range-partitioned (migration 063).
+        // When true, prune_metric_samples() is skipped since partition drops
+        // handle retention.
+        let mut partitioning_active = false;
         let mut last_event_id: u64 = 0;
         let mut last_tick = std::time::Instant::now();
         let mut event_counts = std::collections::HashMap::<String, i64>::new();
@@ -1103,6 +1122,24 @@ pub async fn run(
                 last_worker_speed_refresh = std::time::Instant::now();
                 if let Err(e) = prune_state.db.refresh_worker_speed_view().await {
                     warn!(error = %e, "failed to refresh worker_speed view");
+                }
+            }
+
+            // Partition maintenance: create upcoming weekly partitions and drop
+            // expired ones.  Runs hourly (3600s), not every tick — partition
+            // creation only needs to stay ahead of the current week.
+            if last_partition_maintenance.elapsed() >= Duration::from_secs(3600) {
+                last_partition_maintenance = std::time::Instant::now();
+                match prune_state.db.maintain_metric_partitions().await {
+                    Ok(active) => {
+                        partitioning_active = active;
+                        if active {
+                            tracing::debug!("metric partition maintenance completed");
+                        }
+                    }
+                    Err(e) => {
+                        warn!(error = %e, "failed to run metric partition maintenance");
+                    }
                 }
             }
 
@@ -1620,12 +1657,17 @@ pub async fn run(
                 if let Err(e) = prune_state.db.rollup_metrics_day(prev_day).await {
                     warn!(error = %e, "failed to roll up daily metrics");
                 }
-                if let Err(e) = prune_state
-                    .db
-                    .prune_metric_samples(metric_retention_days)
-                    .await
-                {
-                    warn!(error = %e, "failed to prune metric samples");
+                // Skip row-level DELETE when partitioning is active — retention
+                // is handled by maintain_metric_partitions() dropping whole
+                // weekly partitions instead.
+                if !partitioning_active {
+                    if let Err(e) = prune_state
+                        .db
+                        .prune_metric_samples(metric_retention_days)
+                        .await
+                    {
+                        warn!(error = %e, "failed to prune metric samples");
+                    }
                 }
                 if let Err(e) = prune_state
                     .db

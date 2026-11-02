@@ -25,10 +25,12 @@
 darkreach is a distributed platform for hunting special-form prime numbers. It consists of:
 
 - An **engine** that implements 12 search forms with sieve-then-test pipelines
-- An **API server** that coordinates distributed work via PostgreSQL
+- An **API server** (22 route modules) that coordinates distributed work via PostgreSQL (64 migrations, 24 DB submodules)
 - A **dashboard** that provides real-time monitoring and search management
-- An **AI engine** that autonomously designs search campaigns
+- An **AI engine** that autonomously designs search campaigns (OODA loop + 7-component scoring)
+- An **ML engine** for data-driven optimization (Thompson Sampling, GP cost prediction, Bayesian search optimization, node intelligence)
 - A **network** of compute nodes that claim work, execute searches, and report results
+- A **public website** at darkreach.ai (deployed to Vercel, ~22 pages)
 
 ### Key Differentiators
 
@@ -158,7 +160,7 @@ The AI engine runs a continuous OODA loop (Observe-Orient-Decide-Act-Learn). It 
                     │  ┌────────┐  ┌──────────┐  ┌────────────┐  │
                     │  │ Static │  │ REST API │  │ WebSocket  │  │
      Browser ──────┼─▶│Frontend│  │ (Axum)   │  │ (push 2s)  │  │
-                    │  │(Next.js│  │ 15 route │  │            │  │
+                    │  │(Next.js│  │ 22 route │  │            │  │
                     │  │ export)│  │ modules  │  │            │  │
                     │  └────────┘  └────┬─────┘  └─────┬──────┘  │
                     │                   │              │          │
@@ -318,6 +320,12 @@ When all blocks completed → job status = 'completed'
 | Verify | `/api/verify` | `POST` — re-verify a prime |
 | Sieve | `/api/sieve` | Sieve configuration and status |
 | Prime Verification | `/api/prime-verification` | Verification queue management |
+| Strategy | `/api/strategy` | AI strategy engine configuration |
+| Audit | `/api/audit` | Audit log queries |
+| Contribute | `/api/contribute` | Browser-based operator contribution |
+| Resources | `/api/resources` | Resource pool management |
+| Schedules | `/api/schedules` | Scheduled automation management |
+| Auth | `/api/auth` | Authentication endpoints |
 
 ### WebSocket Protocol
 
@@ -344,7 +352,7 @@ Message types:
 
 ## Database Schema
 
-40+ migrations in `supabase/migrations/`. Core tables:
+64 migrations in `supabase/migrations/`. Core tables:
 
 ### Prime Records
 

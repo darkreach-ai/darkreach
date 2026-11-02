@@ -27,7 +27,7 @@ impl Database {
                         source, result, tokens_used, cost_usd::FLOAT8 AS cost_usd,
                         created_at, started_at, completed_at, parent_task_id,
                         max_cost_usd::FLOAT8 AS max_cost_usd, permission_level,
-                        template_name, on_child_failure, role_name
+                        template_name, on_child_failure, role_name, retry_count
                  FROM agent_tasks WHERE status = $1
                  ORDER BY created_at DESC LIMIT $2",
             )
@@ -41,7 +41,7 @@ impl Database {
                         source, result, tokens_used, cost_usd::FLOAT8 AS cost_usd,
                         created_at, started_at, completed_at, parent_task_id,
                         max_cost_usd::FLOAT8 AS max_cost_usd, permission_level,
-                        template_name, on_child_failure, role_name
+                        template_name, on_child_failure, role_name, retry_count
                  FROM agent_tasks
                  ORDER BY created_at DESC LIMIT $1",
             )
@@ -59,7 +59,7 @@ impl Database {
                     source, result, tokens_used, cost_usd::FLOAT8 AS cost_usd,
                     created_at, started_at, completed_at, parent_task_id,
                     max_cost_usd::FLOAT8 AS max_cost_usd, permission_level,
-                    template_name, on_child_failure, role_name
+                    template_name, on_child_failure, role_name, retry_count
              FROM agent_tasks WHERE id = $1",
         )
         .bind(id)
@@ -87,7 +87,7 @@ impl Database {
                        source, result, tokens_used, cost_usd::FLOAT8 AS cost_usd,
                        created_at, started_at, completed_at, parent_task_id,
                        max_cost_usd::FLOAT8 AS max_cost_usd, permission_level,
-                       template_name, on_child_failure, role_name",
+                       template_name, on_child_failure, role_name, retry_count",
         )
         .bind(title)
         .bind(description)
@@ -366,7 +366,7 @@ impl Database {
                     t.cost_usd::FLOAT8 AS cost_usd, t.created_at, t.started_at,
                     t.completed_at, t.parent_task_id,
                     t.max_cost_usd::FLOAT8 AS max_cost_usd, t.permission_level,
-                    t.template_name, t.on_child_failure, t.role_name
+                    t.template_name, t.on_child_failure, t.role_name, t.retry_count
              FROM agent_tasks t
              WHERE t.template_name IS NOT NULL
                AND t.tokens_used > $1 * (
@@ -455,7 +455,7 @@ impl Database {
                       agent_tasks.max_cost_usd::FLOAT8 AS max_cost_usd,
                       agent_tasks.permission_level,
                       agent_tasks.template_name, agent_tasks.on_child_failure,
-                      agent_tasks.role_name",
+                      agent_tasks.role_name, agent_tasks.retry_count",
         )
         .bind(assigned_agent)
         .fetch_optional(&self.pool)
@@ -694,9 +694,46 @@ impl Database {
     /// Check if all children of a parent task are terminal (completed/cancelled/failed).
     ///
     /// If so, mark the parent as completed or failed based on `on_child_failure` policy.
-    /// Returns `Some(parent_row)` if the parent was just completed, `None` if children
-    /// are still pending/running.
+    /// When `on_child_failure` is `"retry"`, failed children with `retry_count < 3` are
+    /// retried automatically. If all retry attempts are exhausted, the parent is failed.
+    ///
+    /// Uses a transaction with `FOR UPDATE` on the parent row to prevent race conditions
+    /// when multiple children complete concurrently.
+    ///
+    /// Returns `Some(parent_row)` if the parent was just completed/failed, `None` if
+    /// children are still pending/running.
     pub async fn try_complete_parent(&self, parent_id: i64) -> Result<Option<AgentTaskRow>> {
+        const MAX_RETRIES: i32 = 3;
+
+        let mut tx = self.pool.begin().await?;
+
+        // Lock the parent row to prevent concurrent completion attempts
+        let parent = sqlx::query_as::<_, AgentTaskRow>(
+            "SELECT id, title, description, status, priority, agent_model, assigned_agent,
+                    source, result, tokens_used, cost_usd::FLOAT8 AS cost_usd,
+                    created_at, started_at, completed_at, parent_task_id,
+                    max_cost_usd::FLOAT8 AS max_cost_usd, permission_level,
+                    template_name, on_child_failure, role_name, retry_count
+             FROM agent_tasks WHERE id = $1 FOR UPDATE",
+        )
+        .bind(parent_id)
+        .fetch_optional(&mut *tx)
+        .await?;
+
+        let parent = match parent {
+            Some(p) => p,
+            None => {
+                tx.commit().await?;
+                return Err(anyhow::anyhow!("Parent task {} not found", parent_id));
+            }
+        };
+
+        // Already terminal — nothing to do
+        if matches!(parent.status.as_str(), "completed" | "failed" | "cancelled") {
+            tx.commit().await?;
+            return Ok(None);
+        }
+
         // Count non-terminal children
         let pending: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM agent_tasks
@@ -704,24 +741,15 @@ impl Database {
              AND status NOT IN ('completed', 'cancelled', 'failed')",
         )
         .bind(parent_id)
-        .fetch_one(&self.pool)
+        .fetch_one(&mut *tx)
         .await?;
 
         if pending > 0 {
+            tx.commit().await?;
             return Ok(None);
         }
 
         // All children are terminal — check for failures
-        let parent = self
-            .get_agent_task(parent_id)
-            .await?
-            .ok_or_else(|| anyhow::anyhow!("Parent task {} not found", parent_id))?;
-
-        // Already terminal
-        if matches!(parent.status.as_str(), "completed" | "failed" | "cancelled") {
-            return Ok(None);
-        }
-
         let any_failed: bool = sqlx::query_scalar(
             "SELECT EXISTS(
                 SELECT 1 FROM agent_tasks
@@ -729,11 +757,39 @@ impl Database {
             )",
         )
         .bind(parent_id)
-        .fetch_one(&self.pool)
+        .fetch_one(&mut *tx)
         .await?;
 
-        let new_status = if any_failed && parent.on_child_failure == "fail" {
-            "failed"
+        let new_status = if any_failed {
+            match parent.on_child_failure.as_str() {
+                "fail" => "failed",
+                "retry" => {
+                    // Check if all failed children have exhausted their retries
+                    let retries_exhausted: bool = sqlx::query_scalar(
+                        "SELECT NOT EXISTS(
+                            SELECT 1 FROM agent_tasks
+                            WHERE parent_task_id = $1
+                              AND status = 'failed'
+                              AND retry_count < $2
+                        )",
+                    )
+                    .bind(parent_id)
+                    .bind(MAX_RETRIES)
+                    .fetch_one(&mut *tx)
+                    .await?;
+
+                    if retries_exhausted {
+                        // All retries exhausted — treat as failure
+                        "failed"
+                    } else {
+                        // Some children can still be retried — don't complete parent yet
+                        tx.commit().await?;
+                        return Ok(None);
+                    }
+                }
+                // "continue", "skip", or any other policy — treat failures as acceptable
+                _ => "completed",
+            }
         } else {
             "completed"
         };
@@ -741,8 +797,10 @@ impl Database {
         sqlx::query("UPDATE agent_tasks SET status = $1, completed_at = NOW() WHERE id = $2")
             .bind(new_status)
             .bind(parent_id)
-            .execute(&self.pool)
+            .execute(&mut *tx)
             .await?;
+
+        tx.commit().await?;
 
         self.get_agent_task(parent_id).await
     }
@@ -754,7 +812,7 @@ impl Database {
                     source, result, tokens_used, cost_usd::FLOAT8 AS cost_usd,
                     created_at, started_at, completed_at, parent_task_id,
                     max_cost_usd::FLOAT8 AS max_cost_usd, permission_level,
-                    template_name, on_child_failure, role_name
+                    template_name, on_child_failure, role_name, retry_count
              FROM agent_tasks
              WHERE parent_task_id = $1
              ORDER BY id",
@@ -798,7 +856,7 @@ impl Database {
                     source, result, tokens_used, cost_usd::FLOAT8 AS cost_usd,
                     created_at, started_at, completed_at, parent_task_id,
                     max_cost_usd::FLOAT8 AS max_cost_usd, permission_level,
-                    template_name, on_child_failure, role_name
+                    template_name, on_child_failure, role_name, retry_count
              FROM agent_tasks
              WHERE parent_task_id = $1 AND id != $2
              ORDER BY created_at DESC LIMIT 10",
@@ -821,7 +879,7 @@ impl Database {
                     source, result, tokens_used, cost_usd::FLOAT8 AS cost_usd,
                     created_at, started_at, completed_at, parent_task_id,
                     max_cost_usd::FLOAT8 AS max_cost_usd, permission_level,
-                    template_name, on_child_failure, role_name
+                    template_name, on_child_failure, role_name, retry_count
              FROM agent_tasks
              WHERE title = $1 AND id != $2 AND status IN ('failed', 'cancelled')
              ORDER BY created_at DESC LIMIT 5",
@@ -831,5 +889,272 @@ impl Database {
         .fetch_all(&self.read_pool)
         .await?;
         Ok(rows)
+    }
+
+    // --- Subtask creation ---
+
+    /// Create a child task under an existing parent task.
+    ///
+    /// Inherits `permission_level`, `max_cost_usd`, and `role_name` from the
+    /// parent task. The child's permission level is capped at the parent's level.
+    /// Returns the new child task ID.
+    pub async fn create_child_task(
+        &self,
+        parent_task_id: i64,
+        title: &str,
+        description: &str,
+        priority: i32,
+        agent_model: &str,
+    ) -> Result<i64> {
+        // Fetch parent to inherit fields
+        let parent = self
+            .get_agent_task(parent_task_id)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("Parent task {} not found", parent_task_id))?;
+
+        let priority_str = match priority {
+            0 => "urgent",
+            1 => "high",
+            2 => "normal",
+            _ => "low",
+        };
+
+        let child_id: i64 = sqlx::query_scalar(
+            "INSERT INTO agent_tasks (title, description, priority, agent_model, source,
+                                      parent_task_id, permission_level, max_cost_usd, role_name)
+             VALUES ($1, $2, $3, $4, 'automated', $5, $6, $7, $8)
+             RETURNING id",
+        )
+        .bind(title)
+        .bind(description)
+        .bind(priority_str)
+        .bind(agent_model)
+        .bind(parent_task_id)
+        .bind(parent.permission_level)
+        .bind(parent.max_cost_usd)
+        .bind(parent.role_name.as_deref())
+        .fetch_one(&self.pool)
+        .await?;
+
+        Ok(child_id)
+    }
+
+    /// Instantiate tasks from a named template, optionally under a parent task.
+    ///
+    /// Loads the template by name, creates one task per step, and wires up
+    /// dependencies via `agent_task_deps`. If `parent_task_id` is provided,
+    /// all created tasks are linked as children of that parent. The `variables`
+    /// JSON is used for template variable substitution in titles and descriptions
+    /// (replacing `{{key}}` patterns).
+    ///
+    /// Returns a list of created task IDs in step order.
+    pub async fn create_tasks_from_template(
+        &self,
+        template_name: &str,
+        parent_task_id: Option<i64>,
+        variables: &serde_json::Value,
+    ) -> Result<Vec<i64>> {
+        let template = self
+            .get_template_by_name(template_name)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("Template '{}' not found", template_name))?;
+
+        let steps = template
+            .steps
+            .as_array()
+            .ok_or_else(|| anyhow::anyhow!("Template steps is not an array"))?;
+
+        // Determine inherited fields from parent (if provided) or use defaults
+        let (permission_level, max_cost_usd, role_name, priority) =
+            if let Some(pid) = parent_task_id {
+                let parent = self
+                    .get_agent_task(pid)
+                    .await?
+                    .ok_or_else(|| anyhow::anyhow!("Parent task {} not found", pid))?;
+                (
+                    parent.permission_level,
+                    parent.max_cost_usd,
+                    parent.role_name.clone(),
+                    parent.priority.clone(),
+                )
+            } else {
+                (1, None, template.role_name.clone(), "normal".to_string())
+            };
+
+        let mut tx = self.pool.begin().await?;
+        let mut task_ids: Vec<i64> = Vec::with_capacity(steps.len());
+
+        for step in steps {
+            let raw_title = step
+                .get("title")
+                .and_then(|t| t.as_str())
+                .unwrap_or("Untitled step");
+            let raw_desc = step
+                .get("description")
+                .and_then(|d| d.as_str())
+                .unwrap_or("");
+            let step_level = step
+                .get("permission_level")
+                .and_then(|l| l.as_i64())
+                .unwrap_or(1) as i32;
+
+            // Apply variable substitution: replace {{key}} with value from variables
+            let step_title = substitute_variables(raw_title, variables);
+            let step_desc = substitute_variables(raw_desc, variables);
+
+            // Child permission = min(step requested, inherited level)
+            let child_level = step_level.min(permission_level);
+
+            let task_id: i64 = sqlx::query_scalar(
+                "INSERT INTO agent_tasks (title, description, priority, source, parent_task_id,
+                                          permission_level, max_cost_usd, template_name, role_name)
+                 VALUES ($1, $2, $3, 'automated', $4, $5, $6, $7, $8)
+                 RETURNING id",
+            )
+            .bind(&step_title)
+            .bind(&step_desc)
+            .bind(&priority)
+            .bind(parent_task_id)
+            .bind(child_level)
+            .bind(max_cost_usd)
+            .bind(template_name)
+            .bind(role_name.as_deref())
+            .fetch_one(&mut *tx)
+            .await?;
+
+            task_ids.push(task_id);
+        }
+
+        // Wire up dependencies based on depends_on_step indices
+        for (i, step) in steps.iter().enumerate() {
+            if let Some(dep_idx) = step.get("depends_on_step").and_then(|d| d.as_u64()) {
+                let dep_idx = dep_idx as usize;
+                if dep_idx < task_ids.len() && dep_idx != i {
+                    sqlx::query(
+                        "INSERT INTO agent_task_deps (task_id, depends_on) VALUES ($1, $2)",
+                    )
+                    .bind(task_ids[i])
+                    .bind(task_ids[dep_idx])
+                    .execute(&mut *tx)
+                    .await?;
+                }
+            }
+        }
+
+        tx.commit().await?;
+        Ok(task_ids)
+    }
+
+    /// Create a retry child task by cloning a failed task's parameters.
+    ///
+    /// Used by the `on_child_failure = 'retry'` policy. Copies the failed task's
+    /// title, description, priority, agent_model, and parent_task_id. Increments
+    /// the retry_count. Returns the new task ID, or `None` if max retries (3)
+    /// have been reached.
+    pub async fn retry_child_task(&self, failed_task: &AgentTaskRow) -> Result<Option<i64>> {
+        const MAX_RETRIES: i32 = 3;
+
+        if failed_task.retry_count >= MAX_RETRIES {
+            return Ok(None);
+        }
+
+        let new_retry_count = failed_task.retry_count + 1;
+
+        let new_id: i64 = sqlx::query_scalar(
+            "INSERT INTO agent_tasks (title, description, priority, agent_model, source,
+                                      parent_task_id, permission_level, max_cost_usd,
+                                      role_name, template_name, retry_count)
+             VALUES ($1, $2, $3, $4, 'automated', $5, $6, $7, $8, $9, $10)
+             RETURNING id",
+        )
+        .bind(&failed_task.title)
+        .bind(&failed_task.description)
+        .bind(&failed_task.priority)
+        .bind(failed_task.agent_model.as_deref())
+        .bind(failed_task.parent_task_id)
+        .bind(failed_task.permission_level)
+        .bind(failed_task.max_cost_usd)
+        .bind(failed_task.role_name.as_deref())
+        .bind(failed_task.template_name.as_deref())
+        .bind(new_retry_count)
+        .fetch_one(&self.pool)
+        .await?;
+
+        Ok(Some(new_id))
+    }
+}
+
+/// Replace `{{key}}` patterns in a template string with values from a JSON object.
+///
+/// If a key is not found in the variables object, the placeholder is left as-is.
+/// Supports string, number, and boolean values (other types are ignored).
+fn substitute_variables(template: &str, variables: &serde_json::Value) -> String {
+    let mut result = template.to_string();
+    if let Some(obj) = variables.as_object() {
+        for (key, value) in obj {
+            let placeholder = format!("{{{{{}}}}}", key);
+            let replacement = match value {
+                serde_json::Value::String(s) => s.clone(),
+                serde_json::Value::Number(n) => n.to_string(),
+                serde_json::Value::Bool(b) => b.to_string(),
+                _ => continue,
+            };
+            result = result.replace(&placeholder, &replacement);
+        }
+    }
+    result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn substitute_variables_replaces_string_values() {
+        let vars = serde_json::json!({"form": "factorial", "range": "1-1000"});
+        let result = substitute_variables("Search {{form}} in range {{range}}", &vars);
+        assert_eq!(result, "Search factorial in range 1-1000");
+    }
+
+    #[test]
+    fn substitute_variables_replaces_number_values() {
+        let vars = serde_json::json!({"start": 100, "end": 500});
+        let result = substitute_variables("Range {{start}} to {{end}}", &vars);
+        assert_eq!(result, "Range 100 to 500");
+    }
+
+    #[test]
+    fn substitute_variables_replaces_boolean_values() {
+        let vars = serde_json::json!({"verbose": true});
+        let result = substitute_variables("Verbose: {{verbose}}", &vars);
+        assert_eq!(result, "Verbose: true");
+    }
+
+    #[test]
+    fn substitute_variables_leaves_unknown_placeholders() {
+        let vars = serde_json::json!({"form": "kbn"});
+        let result = substitute_variables("{{form}} with {{unknown}}", &vars);
+        assert_eq!(result, "kbn with {{unknown}}");
+    }
+
+    #[test]
+    fn substitute_variables_handles_empty_object() {
+        let vars = serde_json::json!({});
+        let result = substitute_variables("No {{substitutions}} here", &vars);
+        assert_eq!(result, "No {{substitutions}} here");
+    }
+
+    #[test]
+    fn substitute_variables_handles_non_object() {
+        let vars = serde_json::json!("not an object");
+        let result = substitute_variables("Template {{text}}", &vars);
+        assert_eq!(result, "Template {{text}}");
+    }
+
+    #[test]
+    fn substitute_variables_ignores_array_values() {
+        let vars = serde_json::json!({"list": [1, 2, 3], "name": "test"});
+        let result = substitute_variables("{{name}}: {{list}}", &vars);
+        assert_eq!(result, "test: {{list}}");
     }
 }

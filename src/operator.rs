@@ -102,7 +102,8 @@ pub struct LeaderboardEntry {
     pub team: Option<String>,
     pub credit: i64,
     pub primes_found: i32,
-    pub worker_count: i64,
+    pub node_count: Option<i64>,
+    pub trust_level: Option<i16>,
 }
 
 /// Latest worker release metadata from `/api/v1/worker/latest`.
@@ -144,6 +145,9 @@ pub fn load_config() -> Result<OperatorConfig> {
 }
 
 /// Save volunteer config to `~/.darkreach/config.toml`.
+///
+/// On Unix systems, the file permissions are set to 0600 (owner read/write only)
+/// because the config contains the plaintext API key.
 pub fn save_config(config: &OperatorConfig) -> Result<()> {
     let path = config_path()?;
     if let Some(parent) = path.parent() {
@@ -151,6 +155,11 @@ pub fn save_config(config: &OperatorConfig) -> Result<()> {
     }
     let content = toml::to_string_pretty(config)?;
     std::fs::write(&path, content)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))?;
+    }
     Ok(())
 }
 
@@ -164,11 +173,25 @@ fn config_path() -> Result<std::path::PathBuf> {
 }
 
 /// Register a new volunteer account with the coordinator.
-pub fn register(server: &str, username: &str, email: &str) -> Result<OperatorConfig> {
+///
+/// Sends `name`, `forms`, and `max_cpu` alongside the required `username`/`email`
+/// fields. The coordinator may ignore unknown fields, but including them allows
+/// future server versions to process operator preferences at registration time.
+pub fn register(
+    server: &str,
+    username: &str,
+    email: &str,
+    name: Option<&str>,
+    forms: Option<&[String]>,
+    max_cpu: Option<usize>,
+) -> Result<OperatorConfig> {
     let url = format!("{}/api/v1/register", server.trim_end_matches('/'));
     let body = serde_json::json!({
         "username": username,
         "email": email,
+        "name": name,
+        "forms": forms,
+        "max_cpu": max_cpu,
     });
 
     let response: RegisterResponse = ureq::post(&url).send_json(&body)?.body_mut().read_json()?;
@@ -611,6 +634,58 @@ fn rand_u32() -> u32 {
     h.finish() as u32
 }
 
+/// All recognized search form names that operators can opt into.
+const KNOWN_FORMS: &[&str] = &[
+    "factorial",
+    "palindromic",
+    "kbn",
+    "near_repdigit",
+    "primorial",
+    "cullen_woodall",
+    "wagstaff",
+    "carol_kynea",
+    "twin",
+    "sophie_germain",
+    "repunit",
+    "gen_fermat",
+];
+
+/// Validate and deduplicate a list of search form names.
+///
+/// Returns an error if any form name is unrecognized. Duplicate entries are
+/// removed while preserving the original order (first occurrence wins).
+pub fn validate_forms(forms: &[String]) -> Result<Vec<String>> {
+    for f in forms {
+        if !KNOWN_FORMS.contains(&f.as_str()) {
+            return Err(anyhow::anyhow!(
+                "Unknown search form '{}'. Known forms: {}",
+                f,
+                KNOWN_FORMS.join(", ")
+            ));
+        }
+    }
+    let mut seen = std::collections::HashSet::new();
+    let deduped: Vec<String> = forms
+        .iter()
+        .filter(|f| seen.insert(f.as_str().to_string()))
+        .cloned()
+        .collect();
+    Ok(deduped)
+}
+
+/// Check for updates at startup by querying the coordinator's `/api/v1/worker/latest`
+/// endpoint. Returns the latest release info if a newer version is available, or
+/// `None` if the current binary is up to date. This is a convenience wrapper around
+/// [`check_for_update`] that uses the default "stable" channel and no worker_id.
+pub fn check_for_updates(server: &str) -> Result<Option<WorkerReleaseInfo>> {
+    let latest = get_latest_worker_release(server, "stable", None)?;
+    let current = env!("CARGO_PKG_VERSION");
+    if latest.version != current {
+        return Ok(Some(latest));
+    }
+    Ok(None)
+}
+
 /// Backward compatibility type alias.
 pub type VolunteerConfig = OperatorConfig;
 /// Backward compatibility type alias.
@@ -827,12 +902,14 @@ mod tests {
             "team": "primes-r-us",
             "credit": 999999,
             "primes_found": 42,
-            "worker_count": 8
+            "node_count": 8,
+            "trust_level": 3
         }"#;
         let entry: LeaderboardEntry = serde_json::from_str(json).unwrap();
         assert_eq!(entry.rank, 1);
         assert_eq!(entry.team, Some("primes-r-us".to_string()));
-        assert_eq!(entry.worker_count, 8);
+        assert_eq!(entry.node_count, Some(8));
+        assert_eq!(entry.trust_level, Some(3));
     }
 
     /// Solo operators have no team. The team field must accept JSON null.
@@ -844,7 +921,7 @@ mod tests {
             "team": null,
             "credit": 100,
             "primes_found": 1,
-            "worker_count": 1
+            "node_count": 1
         }"#;
         let entry: LeaderboardEntry = serde_json::from_str(json).unwrap();
         assert!(entry.team.is_none());
@@ -1022,5 +1099,64 @@ mod tests {
     fn worker_os_and_arch_not_empty() {
         assert!(!worker_os().is_empty());
         assert!(!worker_arch().is_empty());
+    }
+
+    // ── Form Validation ─────────────────────────────────────────
+
+    /// validate_forms accepts known search form names.
+    #[test]
+    fn validate_forms_accepts_known() {
+        let forms = vec!["factorial".to_string(), "kbn".to_string()];
+        let result = validate_forms(&forms).unwrap();
+        assert_eq!(result, vec!["factorial", "kbn"]);
+    }
+
+    /// validate_forms rejects unknown search form names.
+    #[test]
+    fn validate_forms_rejects_unknown() {
+        let forms = vec!["factorial".to_string(), "bogus".to_string()];
+        assert!(validate_forms(&forms).is_err());
+    }
+
+    /// validate_forms deduplicates entries while preserving order.
+    #[test]
+    fn validate_forms_deduplicates() {
+        let forms = vec![
+            "kbn".to_string(),
+            "factorial".to_string(),
+            "kbn".to_string(),
+            "factorial".to_string(),
+            "twin".to_string(),
+        ];
+        let result = validate_forms(&forms).unwrap();
+        assert_eq!(result, vec!["kbn", "factorial", "twin"]);
+    }
+
+    /// validate_forms accepts an empty list.
+    #[test]
+    fn validate_forms_empty() {
+        let result = validate_forms(&[]).unwrap();
+        assert!(result.is_empty());
+    }
+
+    /// Config file permissions are set to 0600 on Unix.
+    #[cfg(unix)]
+    #[test]
+    fn save_config_sets_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", dir.path());
+        let config = OperatorConfig {
+            server: "https://example.com".to_string(),
+            api_key: "key".to_string(),
+            username: "user".to_string(),
+            worker_id: "w1".to_string(),
+        };
+        save_config(&config).unwrap();
+        let path = dir.path().join(".darkreach").join("config.toml");
+        let perms = std::fs::metadata(&path).unwrap().permissions();
+        assert_eq!(perms.mode() & 0o777, 0o600);
+        // Restore HOME (best effort)
+        std::env::remove_var("HOME");
     }
 }

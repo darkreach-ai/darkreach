@@ -13,12 +13,58 @@ Scaling PostgreSQL from hosted Supabase to a production-grade, self-managed data
 **Platform:** Hosted Supabase (managed PostgreSQL 15, PgBouncer, PostgREST, Realtime)
 
 **What works well:**
-- 29 migrations, fully portable standard SQL
+- 64 migration files (001-061, including `0121` and duplicate `033`/`055` numbers), fully portable standard SQL
 - Row-Level Security on all tables
 - Supabase Realtime for live prime notifications to the frontend
 - Supabase JS client for frontend data queries and auth
 - `FOR UPDATE SKIP LOCKED` work claiming in `src/pg_worker.rs`
-- sqlx compile-time checked queries in `src/db/`
+- sqlx compile-time checked queries in `src/db/` (24 submodules: mod.rs, primes.rs, workers.rs, jobs.rs, agents.rs, ai_engine.rs, audit.rs, badges.rs, calibrations.rs, commands.rs, memory.rs, observability.rs, operators.rs, prime_verification.rs, projects.rs, records.rs, releases.rs, resources.rs, roles.rs, schedules.rs, sieves.rs, strategy.rs, trust.rs, user_profiles.rs)
+
+### Migrations 030-061 (added since initial roadmap)
+
+| # | File | Tables/Changes | Purpose |
+|---|------|----------------|---------|
+| 030 | `materialized_views.sql` | Materialized views | Pre-computed views for dashboard queries |
+| 031 | `timescaledb_hypertables.sql` | Hypertables | TimescaleDB time-series optimization |
+| 032 | `ai_engine.sql` | `ai_engine_state`, `ai_engine_decisions` | AI engine OODA loop state + decision audit trail |
+| 033 | `ai_engine_phase6.sql` | AI engine (alter) | AI engine self-improvement enhancements |
+| 033 | `prime_tags.sql` | `prime_tags` | Tagging system for primes (duplicate number) |
+| 034 | `prime_verification_queue.sql` | `prime_verification_queue` | Queued verification pipeline |
+| 035 | `resource_pooling.sql` | `resource_pools`, `resource_allocations` | Compute resource pooling |
+| 036 | `shared_sieves.sql` | `shared_sieves` | Cross-search sieve sharing |
+| 037 | `api_key_hashing.sql` | -- | Hash API keys (bcrypt), remove plaintext storage |
+| 038 | `network_relay.sql` | Network tables (alter) | Network relay infrastructure |
+| 039 | `audit_log.sql` | `audit_log` | Comprehensive audit logging |
+| 040 | `api_key_expiration.sql` | -- | API key expiration dates |
+| 041 | `operator_ip_allowlist.sql` | `operator_ip_allowlist` | IP allowlisting per operator |
+| 042 | `drop_plaintext_api_key.sql` | -- | Drop plaintext API key column |
+| 043 | `resource_contributions.sql` | `resource_contributions` | Track operator resource contributions |
+| 044 | `node_commands.sql` | `node_commands` | Remote command queue for nodes |
+| 045 | `pipeline_stages.sql` | `pipeline_stages` | Multi-stage work block pipeline |
+| 046 | `operator_preferences.sql` | `operator_preferences` | Operator configuration preferences |
+| 047 | `operator_badges.sql` | `operator_badges` | Achievement badges for operators |
+| 048 | `ai_engine_phases.sql` | AI engine (alter) | AI engine phases 1-3 |
+| 049 | `naming_migration.sql` | Renames | volunteer->operator, fleet->network naming migration |
+| 050 | `ai_engine_phases_4_6.sql` | AI engine (alter) | AI engine phases 4-6 |
+| 051 | `agent_hardening.sql` | Agent tables (alter) | Agent security hardening |
+| 052 | `log_improvements.sql` | `system_logs` (alter) | Log level and metadata improvements |
+| 053 | `browser_result_hash.sql` | `work_blocks` (alter) | Browser-submitted result hashing |
+| 054 | `hash_verification.sql` | -- | Hash verification functions |
+| 055 | `adaptive_verification.sql` | -- | Adaptive verification thresholds (duplicate number) |
+| 055 | `browser_block_ttl.sql` | `work_blocks` (alter) | Browser block TTL settings |
+| 056 | `listen_notify.sql` | -- | PostgreSQL LISTEN/NOTIFY channels |
+| 057 | `waitlist.sql` | `waitlist` | Operator waitlist registration |
+| 058 | `batch_claiming.sql` | -- | Batch work block claiming |
+| 059 | `ml_engine.sql` | `ml_bandit_arms`, `ml_gp_*`, `ml_bayesopt_*`, `ml_node_*`, `ml_model_registry` | ML engine model registry, GP training, BayesOpt, node intelligence |
+| 060 | `fix_source_constraint.sql` | -- | Fix agent_tasks source constraint |
+| 061 | `strategy_advisor_role.sql` | `agent_roles` (insert) | Add strategy-advisor role for AI engine |
+
+**Notable groups:**
+- **Naming migration** (049): `volunteer`->`operator`, `fleet`->`network`, backward-compat views
+- **Security hardening** (029, 037, 040-042, 051, 054): RLS on all tables, API key hashing/expiration, agent hardening
+- **ML engine** (059): 8 tables for Thompson Sampling, GP cost model, BayesOpt, node intelligence, model registry
+- **Browser compute** (053-055): Result hashing, verification, TTL for browser-submitted work
+- **Infrastructure** (056-058): PostgreSQL LISTEN/NOTIFY, waitlist, batch claiming
 
 **What's limited:**
 - **Connection pool hardcoded to 2** (`src/db/mod.rs:437`) — no env var override
@@ -229,7 +275,7 @@ autovacuum_analyze_scale_factor = 0.02   # analyze at 2% changes (default 10%)
 3. `pg_restore` data into new server
 4. Convert time-series tables to hypertables
 5. Update `DATABASE_URL` in all services
-6. Verify all 29 migrations applied correctly
+6. Verify all 64 migration files applied correctly
 7. Run integration tests against new database
 8. Cut over: update coordinator + all nodes simultaneously
 

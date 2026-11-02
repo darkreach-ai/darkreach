@@ -108,7 +108,7 @@ ssh -L 5432:localhost:5432 darkreach-coordinator
 ### Engine (Rust)
 
 ```bash
-cargo test                    # All unit tests (449 passing)
+cargo test                    # All tests (1325 passing, 19 ignored)
 cargo fmt                     # Format code
 cargo fmt -- --check          # Check formatting
 cargo clippy                  # Lint

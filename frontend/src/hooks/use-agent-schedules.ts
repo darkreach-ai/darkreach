@@ -12,8 +12,7 @@
  */
 
 import { useEffect, useState, useCallback } from "react";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
+import { API_BASE } from "@/lib/format";
 
 /** An agent schedule that fires tasks on a cron schedule or in response to events. */
 export interface AgentSchedule {

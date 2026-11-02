@@ -6,7 +6,9 @@ The roadmap for transforming darkreach from a private network tool into a modern
 
 **Vision:** A multi-form, AI-powered prime discovery platform where anyone can contribute compute via a native client or Docker container. Modern infra (Rust, PostgreSQL, WebSocket, Docker) replaces 2005-era BOINC. AI agents autonomously research forms, design campaigns, and coordinate nodes.
 
-**Key files:** `src/{dashboard,db,network,operator_client,pg_operator,agent,verify}.rs`
+**Key files:** `src/{dashboard,db,fleet,operator,pg_worker,agent,verify}.rs`
+
+> **Status (Feb 2026):** The naming migration (volunteer -> operator, worker -> node, fleet -> network) is **complete** (migration 049). DB columns, Rust modules, frontend types, and API routes have all been updated. Backward-compatible re-exports and deprecated routes remain for transition. Note: `src/fleet.rs` retains the filename with `pub mod network` re-export; the internal `workers` table is not renamed (it tracks search workers, not operator nodes).
 
 **Reference:** See `docs/architecture-comparison.md` for detailed comparison with GIMPS, PrimeGrid, and BOINC.
 
@@ -55,12 +57,13 @@ Before adding nodes, every result must be trustworthy. GIMPS learned this the ha
 
 > **Architecture note (Feb 2026):** Phase 1 changes have been largely completed. SearchManager has been replaced by PG-backed search jobs. All coordination is now PG-only (no in-memory fleet, no HTTP coordinator heartbeat). The dual-path redundancy (1.5) has been removed.
 
-### 1.1 Batch Block Claiming
+### 1.1 Batch Block Claiming *(Completed)*
 **Problem:** One DB roundtrip per block claim. Bottleneck at 50+ nodes.
 **Solution:** `claim_work_blocks(job_id, node_id, count)` — claim N blocks atomically.
 - Nodes claim 5-10 blocks, process sequentially, claim more when running low
 - Reduces DB queries by 5-10x
 - New PG function: SELECT multiple rows with `FOR UPDATE SKIP LOCKED LIMIT N`
+- **Done:** Migration 058 (`batch_claiming.sql`) implemented batch work block claiming.
 
 ### 1.2 Dynamic Stale Timeouts
 **Problem:** Hard-coded 120s timeout. Large blocks (kbn n>500K) take longer, get reclaimed mid-work.
@@ -69,13 +72,14 @@ Before adding nodes, every result must be trustworthy. GIMPS learned this the ha
 - Estimate from historical block completion times per form
 - Store `estimated_duration_s` on `work_blocks` at creation time
 
-### 1.3 Command Queue (Replace Single pending_command)
+### 1.3 Command Queue (Replace Single pending_command) *(Completed)*
 **Problem:** Only one pending command per node. Second command overwrites first.
 **Solution:** `node_commands` table with queue semantics.
 - `node_commands(id, node_id, command, created_at, acked_at)`
 - Nodes ACK commands explicitly
 - Central service retries unacked commands after 30s
 - Supports: stop, restart, update_config, reassign
+- **Done:** Migration 044 (`node_commands.sql`) and `src/db/commands.rs` implement the command queue.
 
 ### 1.4 Block-Level Progress Reporting
 **Problem:** Progress only visible at node level, not block level.

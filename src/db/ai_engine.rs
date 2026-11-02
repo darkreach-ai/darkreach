@@ -204,10 +204,11 @@ impl Database {
     pub async fn get_recent_agent_results(&self, limit: i64) -> Result<Vec<super::AgentTaskRow>> {
         let rows = sqlx::query_as::<_, super::AgentTaskRow>(
             "SELECT id, title, description, status, priority, agent_model,
-                    assigned_agent, source, result, tokens_used, cost_usd,
+                    assigned_agent, source, result, tokens_used,
+                    cost_usd::FLOAT8 AS cost_usd,
                     created_at, started_at, completed_at, parent_task_id,
-                    max_cost_usd, permission_level, template_name,
-                    on_child_failure, role_name
+                    max_cost_usd::FLOAT8 AS max_cost_usd, permission_level,
+                    template_name, on_child_failure, role_name, retry_count
              FROM agent_tasks
              WHERE status IN ('completed', 'failed')
                AND completed_at > NOW() - INTERVAL '24 hours'
@@ -732,6 +733,7 @@ impl Database {
                     avg_throughput,
                     throughput_var: std::collections::HashMap::new(),
                     failure_rate,
+                    form_block_count: std::collections::HashMap::new(),
                     blocks_completed: row.blocks_completed as u64,
                 },
             );

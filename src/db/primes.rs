@@ -373,6 +373,52 @@ impl Database {
         Ok(row)
     }
 
+    /// Get our largest prime scoped to a specific project.
+    ///
+    /// Joins through `project_phases` → `search_jobs` to find primes discovered
+    /// during search jobs that belong to the given project. Only considers primes
+    /// whose `found_at` timestamp falls within the job's active window. This
+    /// prevents a project from claiming primes found by unrelated searches of
+    /// the same form.
+    pub async fn get_best_prime_for_project(&self, project_id: i64) -> Result<Option<PrimeRecord>> {
+        let row = sqlx::query_as::<_, PrimeRecord>(
+            "SELECT p.id, p.form, p.expression, p.digits, p.found_at, p.proof_method, p.tags
+             FROM primes p
+             JOIN search_jobs sj ON sj.search_type = p.form
+             JOIN project_phases pp ON pp.search_job_id = sj.id
+             WHERE pp.project_id = $1
+               AND p.found_at >= sj.started_at
+               AND (sj.stopped_at IS NULL OR p.found_at <= sj.stopped_at)
+             ORDER BY p.digits DESC LIMIT 1",
+        )
+        .bind(project_id)
+        .fetch_optional(&self.read_pool)
+        .await?;
+        Ok(row)
+    }
+
+    /// Get the largest prime for a form discovered after a given timestamp.
+    ///
+    /// Used by project orchestration to scope "best prime" to primes found
+    /// during the project's lifetime, preventing two projects with the same
+    /// form from claiming each other's discoveries.
+    pub async fn get_best_prime_for_form_since(
+        &self,
+        form: &str,
+        since: chrono::DateTime<chrono::Utc>,
+    ) -> Result<Option<PrimeRecord>> {
+        let row = sqlx::query_as::<_, PrimeRecord>(
+            "SELECT id, form, expression, digits, found_at, proof_method, tags
+             FROM primes WHERE form = $1 AND found_at >= $2
+             ORDER BY digits DESC LIMIT 1",
+        )
+        .bind(form)
+        .bind(since)
+        .fetch_optional(&self.read_pool)
+        .await?;
+        Ok(row)
+    }
+
     /// Count primes discovered within a time range.
     pub async fn count_primes_in_range(
         &self,

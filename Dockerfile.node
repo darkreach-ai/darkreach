@@ -1,0 +1,71 @@
+# Multi-stage Docker build for darkreach operator node
+#
+# Builds a minimal image for operators running compute nodes.
+# The default CMD runs `darkreach run`, the operator daemon that
+# loads config from ~/.darkreach/config.toml, registers with the
+# coordinator, claims work blocks, and submits results.
+#
+# Usage:
+#   docker build -f Dockerfile.node -t darkreach-node .
+#   docker run -v ~/.darkreach:/root/.darkreach -e DATABASE_URL=postgres://... darkreach-node
+#
+# Override CMD for direct work block mode:
+#   docker run -e DATABASE_URL=postgres://... darkreach-node work --search-job-id 42
+#
+# Build args:
+#   RUST_TARGET_CPU  - CPU target for RUSTFLAGS (empty by default for cross-platform safety)
+
+# -- Stage 1: Rust build -------------------------------------------------
+FROM rust:1-bookworm AS rust-build
+WORKDIR /app
+
+# Default to empty string so multi-arch builds via QEMU work correctly.
+# Pass RUST_TARGET_CPU=native at build time for single-platform optimized builds.
+ARG RUST_TARGET_CPU=
+ENV RUSTFLAGS="${RUST_TARGET_CPU:+-C target-cpu=${RUST_TARGET_CPU}}"
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgmp-dev m4 pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+
+# Cache dependencies by building with a dummy main first
+COPY Cargo.toml Cargo.lock ./
+COPY gwnum-sys/ gwnum-sys/
+RUN mkdir src && echo 'fn main() {}' > src/main.rs \
+    && echo 'pub fn dummy() {}' > src/lib.rs \
+    && cargo build --release 2>/dev/null || true \
+    && rm -rf src
+
+COPY src/ src/
+# Create stub bench/test files so Cargo.toml parses (originals in .dockerignore)
+RUN mkdir -p benches tests \
+    && for b in sieve_bench kbn_bench proof_bench core_bench flint_bench; do \
+         echo "fn main(){}" > "benches/${b}.rs"; \
+       done
+# Touch main.rs so cargo rebuilds it (not the cached dummy)
+RUN touch src/main.rs src/lib.rs \
+    && cargo build --release --lib --bins
+
+# -- Stage 2: Runtime ----------------------------------------------------
+FROM debian:bookworm-slim AS runtime
+WORKDIR /app
+
+# OCI metadata labels
+LABEL org.opencontainers.image.title="darkreach-node" \
+      org.opencontainers.image.description="Operator compute node for the darkreach prime-hunting network" \
+      org.opencontainers.image.source="https://github.com/darkreach-ai/darkreach" \
+      org.opencontainers.image.licenses="MIT"
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgmp10 ca-certificates curl \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=rust-build /app/target/release/darkreach /usr/local/bin/darkreach
+COPY deploy/docker-entrypoint-node.sh /usr/local/bin/docker-entrypoint-node.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint-node.sh
+
+# Config volume for operator credentials (~/.darkreach/config.toml)
+VOLUME ["/root/.darkreach"]
+
+ENTRYPOINT ["docker-entrypoint-node.sh"]
+CMD ["run"]

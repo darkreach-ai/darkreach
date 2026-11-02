@@ -12,11 +12,11 @@
 
 | Phase | Description | Status |
 |-------|-------------|--------|
-| Phase 0 | Naming & Concept Migration | In Progress |
+| Phase 0 | Naming & Concept Migration | **Complete** (migration 049) |
 | Phase 1 | Kill the Deployable Coordinator | Planned |
 | Phase 2 | Role-Based Auth & Dashboard Split | Planned |
 | Phase 3 | Operator Experience | Planned |
-| Phase 4 | AI Orchestration Engine | Planned |
+| Phase 4 | AI Orchestration Engine | In Progress (AI engine + ML engine operational) |
 | Phase 5 | Network Scaling | Planned |
 
 ---
@@ -120,7 +120,7 @@ Update all CLAUDE.md files, roadmaps, and references to use new terminology. Upd
 
 ### Verification
 
-- `cargo test` passes (all 449 tests)
+- `cargo test` passes (all 1325 tests, 19 ignored)
 - Old CLI commands still work via hidden aliases
 - Old API endpoints return same responses (with deprecation header)
 - Frontend builds and shows "Network" instead of "Fleet"
@@ -740,7 +740,7 @@ These files are preserved for historical reference but should not be used for pl
 
 | Milestone | Target | Measure |
 |-----------|--------|---------|
-| **Phase 0 complete** | Zero functionality regression | All 449 tests pass, old commands work |
+| **Phase 0 complete** | Zero functionality regression | All 1325 tests pass, old commands work |
 | **Stateless dashboard** | Dashboard restartable without losing state | No `SearchManager`/`Fleet` in `AppState` |
 | **First operator signup** | External person runs a node via dashboard | End-to-end onboarding flow works |
 | **10-node network** | All nodes productive | Block throughput, reclaim rate < 5% |

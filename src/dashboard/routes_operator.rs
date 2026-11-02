@@ -657,7 +657,8 @@ pub(super) async fn handler_v1_leaderboard(
                         "team": e.team,
                         "credit": e.credit,
                         "primes_found": e.primes_found,
-                        "worker_count": e.worker_count,
+                        "node_count": e.node_count,
+                        "trust_level": e.trust_level,
                     })
                 })
                 .collect();
@@ -745,6 +746,26 @@ pub(super) async fn handler_v1_rotate_key(
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"error": "Failed to rotate key"})),
+            )
+        }
+    }
+}
+
+// ── GET /api/v1/operators/public-stats ────────────────────────────
+//
+// Returns aggregate statistics about the operator network.
+// No authentication required.
+
+pub(super) async fn handler_public_operator_stats(
+    State(state): State<Arc<AppState>>,
+) -> impl IntoResponse {
+    match state.db.get_public_operator_stats().await {
+        Ok(stats) => (StatusCode::OK, Json(stats)),
+        Err(e) => {
+            tracing::warn!(error = %e, "public operator stats query failed");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Stats query failed"})),
             )
         }
     }

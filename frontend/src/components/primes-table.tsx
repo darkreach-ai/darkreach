@@ -11,6 +11,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
+import { Download, Search, X } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Table,
@@ -169,19 +170,7 @@ export function PrimesTable({ stats }: PrimesTableProps) {
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <div className="relative flex-1 min-w-[200px] max-w-[300px]">
-              <svg
-                className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <circle cx="11" cy="11" r="8" />
-                <path d="m21 21-4.3-4.3" />
-              </svg>
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
               <Input
                 placeholder="Search expressions..."
                 value={searchInput}
@@ -190,23 +179,12 @@ export function PrimesTable({ stats }: PrimesTableProps) {
               />
               {searchInput && (
                 <button
+                  type="button"
                   onClick={() => setSearchInput("")}
                   className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                   aria-label="Clear search"
                 >
-                  <svg
-                    className="h-4 w-4"
-                    xmlns="http://www.w3.org/2000/svg"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M18 6 6 18" />
-                    <path d="m6 6 12 12" />
-                  </svg>
+                  <X className="size-4" />
                 </button>
               )}
             </div>
@@ -231,20 +209,7 @@ export function PrimesTable({ stats }: PrimesTableProps) {
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="sm">
-                  <svg
-                    className="h-4 w-4 mr-1.5"
-                    xmlns="http://www.w3.org/2000/svg"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                    <polyline points="7 10 12 15 17 10" />
-                    <line x1="12" x2="12" y1="15" y2="3" />
-                  </svg>
+                  <Download className="size-4 mr-1.5" />
                   Export
                 </Button>
               </DropdownMenuTrigger>
@@ -272,29 +237,41 @@ export function PrimesTable({ stats }: PrimesTableProps) {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead
-                className="text-xs font-medium text-muted-foreground cursor-pointer select-none hover:text-foreground"
-                onClick={() => handleSort("expression")}
-              >
-                Expression{sortIndicator("expression")}
+              <TableHead className="text-xs font-medium text-muted-foreground">
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1 cursor-pointer select-none hover:text-foreground"
+                  onClick={() => handleSort("expression")}
+                >
+                  Expression{sortIndicator("expression")}
+                </button>
               </TableHead>
-              <TableHead
-                className="text-xs font-medium text-muted-foreground cursor-pointer select-none hover:text-foreground"
-                onClick={() => handleSort("form")}
-              >
-                Form{sortIndicator("form")}
+              <TableHead className="text-xs font-medium text-muted-foreground">
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1 cursor-pointer select-none hover:text-foreground"
+                  onClick={() => handleSort("form")}
+                >
+                  Form{sortIndicator("form")}
+                </button>
               </TableHead>
-              <TableHead
-                className="text-xs font-medium text-muted-foreground cursor-pointer select-none hover:text-foreground"
-                onClick={() => handleSort("digits")}
-              >
-                Digits{sortIndicator("digits")}
+              <TableHead className="text-xs font-medium text-muted-foreground">
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1 cursor-pointer select-none hover:text-foreground"
+                  onClick={() => handleSort("digits")}
+                >
+                  Digits{sortIndicator("digits")}
+                </button>
               </TableHead>
-              <TableHead
-                className="text-xs font-medium text-muted-foreground cursor-pointer select-none hover:text-foreground"
-                onClick={() => handleSort("found_at")}
-              >
-                Found{sortIndicator("found_at")}
+              <TableHead className="text-xs font-medium text-muted-foreground">
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1 cursor-pointer select-none hover:text-foreground"
+                  onClick={() => handleSort("found_at")}
+                >
+                  Found{sortIndicator("found_at")}
+                </button>
               </TableHead>
             </TableRow>
           </TableHeader>
@@ -314,6 +291,14 @@ export function PrimesTable({ stats }: PrimesTableProps) {
                   key={p.id}
                   className="cursor-pointer"
                   onClick={() => handleRowClick(p.id)}
+                  tabIndex={0}
+                  role="button"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      handleRowClick(p.id);
+                    }
+                  }}
                 >
                   <TableCell className="font-mono text-primary">
                     {p.expression}

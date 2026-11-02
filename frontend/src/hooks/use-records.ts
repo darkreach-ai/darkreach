@@ -24,8 +24,7 @@
  */
 
 import { useEffect, useState, useCallback } from "react";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
+import { API_BASE } from "@/lib/format";
 
 /** A world record entry for a specific prime form/category. */
 export interface WorldRecord {

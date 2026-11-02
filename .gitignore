@@ -26,7 +26,14 @@ Thumbs.db
 
 # Dev tools
 .dev/
-.claude/
+
+# Claude Code — ignore runtime data, allow config files
+.claude/*
+!.claude/settings.json
+!.claude/commands/
+!.claude/agents/
+!.claude/hooks/
+!.claude/commenting-standards.md
 
 # Node
 node_modules/
@@ -37,3 +44,6 @@ frontend/out/
 
 # Logs
 *.log
+
+# wasm-pack build output
+frontend/wasm/target/

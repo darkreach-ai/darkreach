@@ -9,6 +9,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { API_BASE } from "@/lib/format";
+import type { CreditRow } from "@/hooks/use-earnings";
+
+export type { CreditRow };
 
 export interface OperatorBadge {
   badge_id: string;
@@ -22,14 +25,6 @@ export interface BadgeDefinition {
   icon: string;
   requirement_type: string;
   requirement_value: number;
-}
-
-export interface CreditRow {
-  id: number;
-  block_id: number | null;
-  credit: number;
-  reason: string | null;
-  granted_at: string;
 }
 
 export interface TrustInfo {

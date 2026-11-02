@@ -241,10 +241,12 @@ fn parse_carol_kynea(expr: &str) -> Result<Integer> {
         return Err(anyhow!("No +/- in carol_kynea inner: {}", inner));
     };
     let n: u32 = n_str.trim().parse()?;
+    // Use Integer shift to avoid u32 overflow for n >= 32
+    let two_pow_n = Integer::from(1u32) << n;
     let base = if sign == '-' {
-        Integer::from(1u32 << n) - 1u32 // Carol: 2^n - 1
+        Integer::from(&two_pow_n - 1u32) // Carol: 2^n - 1
     } else {
-        Integer::from(1u32 << n) + 1u32 // Kynea: 2^n + 1
+        Integer::from(&two_pow_n + 1u32) // Kynea: 2^n + 1
     };
     Ok(base.square() - 2u32)
 }
@@ -331,7 +333,15 @@ fn parse_gen_fermat(expr: &str) -> Result<Integer> {
         .find('^')
         .ok_or_else(|| anyhow!("No inner '^' in gen_fermat: {}", inner))?;
     let n: u32 = inner[caret2 + 1..].trim().parse()?;
-    let exponent = 1u32 << n; // 2^n
+    // Guard against overflow: 2^n as a u32 exponent for pow() requires n < 32,
+    // and the resulting exponent must fit in u32 for rug::Integer::pow().
+    if n >= 31 {
+        return Err(anyhow!(
+            "gen_fermat exponent 2^{} exceeds u32 range for pow()",
+            n
+        ));
+    }
+    let exponent = 1u32 << n; // 2^n, safe because n < 31
     Ok(Integer::from(b).pow(exponent) + 1u32)
 }
 

@@ -273,6 +273,15 @@ enum Commands {
         /// Coordinator server URL
         #[arg(long)]
         server: String,
+        /// Display name for the operator (shown on leaderboard)
+        #[arg(long)]
+        name: Option<String>,
+        /// Comma-separated list of search forms to accept (e.g. "kbn,factorial")
+        #[arg(long)]
+        forms: Option<String>,
+        /// Maximum CPU usage percentage (1-100)
+        #[arg(long)]
+        max_cpu: Option<u8>,
     },
     /// Run as an operator node (claim work, compute, submit results)
     #[command(alias = "volunteer")]
@@ -413,7 +422,17 @@ fn main() -> Result<()> {
             username,
             email,
             server,
-        } => cli::run_register(server, username, email),
+            name,
+            forms,
+            max_cpu,
+        } => cli::run_register(
+            server,
+            username,
+            email,
+            name.as_deref(),
+            forms.as_deref(),
+            *max_cpu,
+        ),
         Commands::Run => cli::run_operator(&cli),
         Commands::VerifyWorker {
             worker_id,

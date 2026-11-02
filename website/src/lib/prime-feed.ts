@@ -3,13 +3,14 @@ export interface PrimeEntry {
   form: string;
   expression: string;
   digits: number;
-  discovered_at: string;
+  /** Matches the Rust PrimeRecord.found_at field (ISO 8601). */
+  found_at: string;
 }
 
 export const FALLBACK_ENTRIES: PrimeEntry[] = [
-  { id: 1, form: "kbn", expression: "3 \u00b7 2^59973 + 1", digits: 18055, discovered_at: "2026-02-18T14:22:00Z" },
-  { id: 2, form: "palindromic", expression: "10^502 + R(501)^rev + 1", digits: 503, discovered_at: "2026-02-18T13:05:00Z" },
-  { id: 3, form: "kbn", expression: "3 \u00b7 2^59941 - 1", digits: 18046, discovered_at: "2026-02-18T11:30:00Z" },
+  { id: 1, form: "kbn", expression: "3 \u00b7 2^59973 + 1", digits: 18055, found_at: "2026-02-18T14:22:00Z" },
+  { id: 2, form: "palindromic", expression: "10^502 + R(501)^rev + 1", digits: 503, found_at: "2026-02-18T13:05:00Z" },
+  { id: 3, form: "kbn", expression: "3 \u00b7 2^59941 - 1", digits: 18046, found_at: "2026-02-18T11:30:00Z" },
 ];
 
 export function timeAgo(iso: string): string {

@@ -10,8 +10,7 @@
  */
 
 import { supabase } from "@/lib/supabase";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
+import { API_BASE } from "@/lib/format";
 
 /** Fetch wrapper that auto-attaches the Supabase JWT for admin endpoints. */
 export async function adminFetch(

@@ -1,6 +1,6 @@
 import { Section } from "@/components/ui/section";
 import { BlogCard } from "@/components/blog-card";
-import { blogPosts } from "@/lib/blog-posts";
+import { getAllPosts } from "@/lib/blog-posts";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -9,6 +9,8 @@ export const metadata: Metadata = {
 };
 
 export default function BlogPage() {
+  const posts = getAllPosts();
+
   return (
     <Section>
       <h1 className="text-4xl font-bold text-foreground mb-4">Blog</h1>
@@ -17,7 +19,7 @@ export default function BlogPage() {
       </p>
 
       <div className="space-y-6">
-        {blogPosts.map((post) => (
+        {posts.map((post) => (
           <BlogCard key={post.slug} post={post} />
         ))}
       </div>

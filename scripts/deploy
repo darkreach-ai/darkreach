@@ -1,0 +1,437 @@
+#!/usr/bin/env bash
+# Unified deploy command for darkreach.
+#
+# Usage:
+#   scripts/deploy all              Deploy coordinator + nodes + web
+#   scripts/deploy coordinator      Deploy coordinator only
+#   scripts/deploy nodes            Deploy all worker nodes
+#   scripts/deploy frontend         Deploy frontend to Vercel
+#   scripts/deploy website          Deploy website to Vercel
+#   scripts/deploy web              Deploy frontend + website in parallel
+#   scripts/deploy rollback         Rollback coordinator to previous binary
+#   scripts/deploy status           Show health of all services
+#
+# Flags:
+#   --dry-run       Show what would be done without executing
+#   --skip-build    Skip cargo build (use existing binary)
+#
+# All connection details are loaded from SOPS-encrypted secrets/infra.enc.yaml
+# via scripts/load-infra.sh.
+
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+info()  { echo -e "${GREEN}[deploy]${NC} $*"; }
+warn()  { echo -e "${YELLOW}[deploy]${NC} $*"; }
+error() { echo -e "${RED}[deploy]${NC} $*" >&2; }
+
+DRY_RUN=false
+SKIP_BUILD=false
+
+# ── Parse flags ─────────────────────────────────────────────────
+ARGS=()
+for arg in "$@"; do
+    case "$arg" in
+        --dry-run)   DRY_RUN=true ;;
+        --skip-build) SKIP_BUILD=true ;;
+        *)           ARGS+=("$arg") ;;
+    esac
+done
+set -- "${ARGS[@]:-}"
+
+SUBCOMMAND="${1:-help}"
+
+# ── Load infrastructure config ──────────────────────────────────
+load_infra() {
+    if [[ -f "$ROOT/scripts/load-infra.sh" ]]; then
+        # shellcheck source=load-infra.sh
+        source "$ROOT/scripts/load-infra.sh"
+    else
+        error "scripts/load-infra.sh not found. Cannot load infrastructure config."
+        exit 1
+    fi
+}
+
+# ── SSH helper ──────────────────────────────────────────────────
+ssh_cmd() {
+    local host="$1"
+    local port="${2:-22}"
+    shift 2
+    ssh -o StrictHostKeyChecking=accept-new \
+        -i "${DEPLOY_SSH_KEY_PATH/#\~/$HOME}" \
+        -p "$port" \
+        "${DEPLOY_SSH_USER}@${host}" "$@"
+}
+
+# ── Build binary ────────────────────────────────────────────────
+build_binary() {
+    if [[ "$SKIP_BUILD" == true ]]; then
+        info "Skipping build (--skip-build)"
+        return
+    fi
+
+    info "Building release binary..."
+    if [[ "$(uname)" == "Darwin" ]]; then
+        if command -v cross &>/dev/null; then
+            info "Cross-compiling for linux/amd64..."
+            if [[ "$DRY_RUN" == true ]]; then
+                info "[dry-run] cross build --release --target x86_64-unknown-linux-gnu"
+            else
+                cross build --release --target x86_64-unknown-linux-gnu
+            fi
+        else
+            warn "On macOS without 'cross' — building native binary."
+            warn "Install cross for cross-compilation: cargo install cross"
+            if [[ "$DRY_RUN" == true ]]; then
+                info "[dry-run] cargo build --release"
+            else
+                cargo build --release
+            fi
+        fi
+    else
+        if [[ "$DRY_RUN" == true ]]; then
+            info "[dry-run] RUSTFLAGS='-C target-cpu=native' cargo build --release"
+        else
+            RUSTFLAGS="-C target-cpu=native" cargo build --release
+        fi
+    fi
+}
+
+# ── Health check with retry ─────────────────────────────────────
+health_check() {
+    local host="$1"
+    local port="${2:-22}"
+    local max_attempts="${3:-15}"
+    local endpoint="/api/health"
+
+    info "Health checking $host..."
+    for i in $(seq 1 "$max_attempts"); do
+        if ssh_cmd "$host" "$port" "curl -sf http://localhost:7001${endpoint}" &>/dev/null; then
+            info "Health check passed ($i/$max_attempts)"
+            return 0
+        fi
+        sleep 2
+    done
+
+    error "Health check failed after $max_attempts attempts"
+    return 1
+}
+
+# ── Deploy to a single host ────────────────────────────────────
+deploy_host() {
+    local host="$1"
+    local port="${2:-22}"
+    local name="${3:-$host}"
+    local binary_path="target/release/darkreach"
+
+    if [[ "$(uname)" == "Darwin" ]] && command -v cross &>/dev/null; then
+        binary_path="target/x86_64-unknown-linux-gnu/release/darkreach"
+    fi
+
+    info "Deploying to $name ($host)..."
+
+    if [[ "$DRY_RUN" == true ]]; then
+        info "[dry-run] scp $binary_path → $host:/tmp/darkreach"
+        info "[dry-run] ssh $host: backup, stop, copy, start"
+        return 0
+    fi
+
+    # Upload binary
+    scp -o StrictHostKeyChecking=accept-new \
+        -i "${DEPLOY_SSH_KEY_PATH/#\~/$HOME}" \
+        -P "$port" \
+        "$binary_path" "${DEPLOY_SSH_USER}@${host}:/tmp/darkreach"
+
+    # Backup, stop, copy, start
+    ssh_cmd "$host" "$port" bash -s <<'REMOTE'
+set -euo pipefail
+BIN="/usr/local/bin/darkreach"
+
+# Backup current binary for rollback
+if [ -f "$BIN" ]; then
+    sudo /usr/bin/cp "$BIN" "${BIN}.prev"
+fi
+
+# Stop service
+sudo /usr/bin/systemctl stop darkreach-coordinator 2>/dev/null || true
+
+# Install new binary
+sudo /usr/bin/cp /tmp/darkreach "$BIN"
+sudo chmod +x "$BIN"
+rm -f /tmp/darkreach
+
+# Start service
+sudo /usr/bin/systemctl start darkreach-coordinator 2>/dev/null || true
+
+echo "Deploy complete. Version: $($BIN --version 2>/dev/null || echo 'unknown')"
+REMOTE
+}
+
+# ── Rollback a host ─────────────────────────────────────────────
+rollback_host() {
+    local host="$1"
+    local port="${2:-22}"
+    local name="${3:-$host}"
+
+    info "Rolling back $name ($host)..."
+
+    if [[ "$DRY_RUN" == true ]]; then
+        info "[dry-run] ssh $host: swap darkreach.prev → darkreach, restart"
+        return 0
+    fi
+
+    ssh_cmd "$host" "$port" bash -s <<'REMOTE'
+set -euo pipefail
+BIN="/usr/local/bin/darkreach"
+if [ ! -f "${BIN}.prev" ]; then
+    echo "No previous binary found at ${BIN}.prev — cannot rollback"
+    exit 1
+fi
+sudo /usr/bin/systemctl stop darkreach-coordinator 2>/dev/null || true
+sudo /usr/bin/cp "${BIN}.prev" "$BIN"
+sudo /usr/bin/systemctl start darkreach-coordinator 2>/dev/null || true
+echo "Rolled back. Version: $($BIN --version 2>/dev/null || echo 'unknown')"
+REMOTE
+}
+
+# ── Vercel deploy ───────────────────────────────────────────────
+deploy_vercel() {
+    local dir="$1"
+    local project="$2"
+    local label="$3"
+
+    info "Deploying $label to Vercel..."
+
+    if [[ -z "$VERCEL_TOKEN" ]]; then
+        error "VERCEL_TOKEN not set. Configure it in secrets/infra.enc.yaml"
+        return 1
+    fi
+
+    if [[ "$DRY_RUN" == true ]]; then
+        info "[dry-run] cd $dir && npx vercel --prod --token *** --yes"
+        return 0
+    fi
+
+    (cd "$ROOT/$dir" && npx vercel --prod --token "$VERCEL_TOKEN" --yes 2>&1) || {
+        error "$label Vercel deploy failed"
+        return 1
+    }
+
+    info "$label deployed to Vercel"
+}
+
+# ── Subcommands ─────────────────────────────────────────────────
+
+cmd_coordinator() {
+    load_infra
+    build_binary
+    deploy_host "$DEPLOY_COORDINATOR_HOST" "$DEPLOY_COORDINATOR_PORT" "$DEPLOY_COORDINATOR_NAME"
+
+    if ! health_check "$DEPLOY_COORDINATOR_HOST" "$DEPLOY_COORDINATOR_PORT"; then
+        warn "Health check failed — auto-rolling back..."
+        rollback_host "$DEPLOY_COORDINATOR_HOST" "$DEPLOY_COORDINATOR_PORT" "$DEPLOY_COORDINATOR_NAME"
+        health_check "$DEPLOY_COORDINATOR_HOST" "$DEPLOY_COORDINATOR_PORT" 5 || {
+            error "Rollback also failed. Manual intervention required."
+            exit 1
+        }
+        info "Rollback successful."
+        exit 1
+    fi
+}
+
+cmd_nodes() {
+    load_infra
+    build_binary
+
+    local pids=()
+    local failed=false
+
+    for i in $(seq 1 "$DEPLOY_NODE_COUNT"); do
+        host_var="DEPLOY_NODE_${i}_HOST"
+        port_var="DEPLOY_NODE_${i}_PORT"
+        name_var="DEPLOY_NODE_${i}_NAME"
+
+        host="${!host_var}"
+        port="${!port_var:-22}"
+        name="${!name_var:-node-$i}"
+
+        deploy_host "$host" "$port" "$name" &
+        pids+=($!)
+    done
+
+    # Wait for all parallel deploys
+    for pid in "${pids[@]}"; do
+        wait "$pid" || failed=true
+    done
+
+    if [[ "$failed" == true ]]; then
+        error "One or more node deploys failed"
+        exit 1
+    fi
+
+    info "All nodes deployed"
+}
+
+cmd_frontend() {
+    load_infra
+    deploy_vercel "frontend" "$VERCEL_FRONTEND_PROJECT" "Dashboard frontend"
+}
+
+cmd_website() {
+    load_infra
+    deploy_vercel "website" "$VERCEL_WEBSITE_PROJECT" "Website"
+}
+
+cmd_web() {
+    load_infra
+    deploy_vercel "frontend" "$VERCEL_FRONTEND_PROJECT" "Dashboard frontend" &
+    local pid1=$!
+    deploy_vercel "website" "$VERCEL_WEBSITE_PROJECT" "Website" &
+    local pid2=$!
+
+    local failed=false
+    wait "$pid1" || failed=true
+    wait "$pid2" || failed=true
+
+    if [[ "$failed" == true ]]; then
+        error "One or more web deploys failed"
+        exit 1
+    fi
+}
+
+cmd_all() {
+    load_infra
+    build_binary
+
+    info "Deploying coordinator..."
+    deploy_host "$DEPLOY_COORDINATOR_HOST" "$DEPLOY_COORDINATOR_PORT" "$DEPLOY_COORDINATOR_NAME"
+
+    if ! health_check "$DEPLOY_COORDINATOR_HOST" "$DEPLOY_COORDINATOR_PORT"; then
+        warn "Coordinator health check failed — rolling back..."
+        rollback_host "$DEPLOY_COORDINATOR_HOST" "$DEPLOY_COORDINATOR_PORT" "$DEPLOY_COORDINATOR_NAME"
+        exit 1
+    fi
+
+    info "Deploying nodes in parallel..."
+    cmd_nodes
+
+    info "Deploying web in parallel..."
+    cmd_web
+
+    info "Full deploy complete"
+}
+
+cmd_rollback() {
+    load_infra
+
+    info "Rolling back coordinator..."
+    rollback_host "$DEPLOY_COORDINATOR_HOST" "$DEPLOY_COORDINATOR_PORT" "$DEPLOY_COORDINATOR_NAME"
+
+    if ! health_check "$DEPLOY_COORDINATOR_HOST" "$DEPLOY_COORDINATOR_PORT" 5; then
+        error "Rollback failed. Manual intervention required."
+        exit 1
+    fi
+
+    info "Rollback complete"
+}
+
+cmd_status() {
+    load_infra
+
+    echo -e "${BOLD}Deployment Status${NC}"
+    echo ""
+
+    # Coordinator
+    echo -e "  ${BLUE}Coordinator${NC} ($DEPLOY_COORDINATOR_NAME — $DEPLOY_COORDINATOR_HOST)"
+    if [[ "$DRY_RUN" == true ]]; then
+        echo "    [dry-run] would check health"
+    else
+        if ssh_cmd "$DEPLOY_COORDINATOR_HOST" "$DEPLOY_COORDINATOR_PORT" \
+            "curl -sf http://localhost:7001/api/health" &>/dev/null; then
+            echo -e "    Status: ${GREEN}healthy${NC}"
+        else
+            echo -e "    Status: ${RED}unreachable${NC}"
+        fi
+        VERSION=$(ssh_cmd "$DEPLOY_COORDINATOR_HOST" "$DEPLOY_COORDINATOR_PORT" \
+            "darkreach --version 2>/dev/null || echo 'unknown'" 2>/dev/null || echo "ssh failed")
+        echo "    Version: $VERSION"
+    fi
+    echo ""
+
+    # Nodes
+    for i in $(seq 1 "$DEPLOY_NODE_COUNT"); do
+        host_var="DEPLOY_NODE_${i}_HOST"
+        name_var="DEPLOY_NODE_${i}_NAME"
+        port_var="DEPLOY_NODE_${i}_PORT"
+        host="${!host_var}"
+        name="${!name_var:-node-$i}"
+        port="${!port_var:-22}"
+
+        echo -e "  ${BLUE}Node${NC} ($name — $host)"
+        if [[ "$DRY_RUN" == true ]]; then
+            echo "    [dry-run] would check status"
+        else
+            if ssh_cmd "$host" "$port" "true" &>/dev/null; then
+                echo -e "    SSH: ${GREEN}reachable${NC}"
+            else
+                echo -e "    SSH: ${RED}unreachable${NC}"
+            fi
+        fi
+        echo ""
+    done
+}
+
+cmd_help() {
+    cat <<EOF
+${BOLD}scripts/deploy${NC} — Unified deployment for darkreach
+
+${BOLD}Usage:${NC}
+  scripts/deploy <command> [flags]
+
+${BOLD}Commands:${NC}
+  all           Deploy coordinator + nodes + web (full deploy)
+  coordinator   Deploy coordinator only
+  nodes         Deploy all worker nodes (parallel)
+  frontend      Deploy dashboard frontend to Vercel
+  website       Deploy marketing website to Vercel
+  web           Deploy frontend + website in parallel
+  rollback      Rollback coordinator to previous binary
+  status        Show health of all services
+
+${BOLD}Flags:${NC}
+  --dry-run     Show what would be done without executing
+  --skip-build  Skip cargo build (use existing binary)
+
+${BOLD}Examples:${NC}
+  scripts/deploy all
+  scripts/deploy coordinator --dry-run
+  scripts/deploy web
+  scripts/deploy rollback
+EOF
+}
+
+# ── Dispatch ────────────────────────────────────────────────────
+case "$SUBCOMMAND" in
+    all)         cmd_all ;;
+    coordinator) cmd_coordinator ;;
+    nodes)       cmd_nodes ;;
+    frontend)    cmd_frontend ;;
+    website)     cmd_website ;;
+    web)         cmd_web ;;
+    rollback)    cmd_rollback ;;
+    status)      cmd_status ;;
+    help|--help|-h) cmd_help ;;
+    *)
+        error "Unknown command: $SUBCOMMAND"
+        cmd_help
+        exit 1
+        ;;
+esac

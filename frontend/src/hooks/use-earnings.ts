@@ -35,11 +35,6 @@ export function useEarnings(limit = 50, offset = 0) {
   const [earnings, setEarnings] = useState<MonthlyEarning[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const headers: Record<string, string> = {};
-  if (session?.access_token) {
-    headers["Authorization"] = `Bearer ${session.access_token}`;
-  }
-
   const fetchCredits = useCallback(async () => {
     if (!session?.access_token) return;
     try {

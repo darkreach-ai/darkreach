@@ -48,6 +48,15 @@
 
 ---
 
+## Recent Changes (Feb 2026)
+
+- **Naming migration complete** (migration 049): volunteer -> operator, worker -> node, fleet -> network. Backward-compat re-exports preserved. Internal `workers` table not renamed (search workers, not operator nodes).
+- **Website deployed** to Vercel (`darkreach.ai`) with ~22 pages.
+- **ML engine** added (migration 059): Thompson Sampling bandits, GP cost model, Bayesian optimization, node intelligence.
+- **22 route modules** (was 15), **24 DB submodules** (was 15), **64 migrations** (was ~40).
+
+---
+
 ## Repository Map
 
 ### `darkreach` — Engine & CLI (Public, MIT)
@@ -60,7 +69,7 @@ The open-source core. Everything needed to hunt primes independently.
 | **Language** | Rust |
 | **Contents** | 12 search forms, sieving primitives, primality testing, proofs, verification, certificates, PFGW/PRST/GWNUM integration, checkpoint system, CLI |
 | **Deployment** | crates.io (`darkreach`), GitHub Releases (binaries: x86_64 + aarch64, Linux + macOS) |
-| **CI** | Build, test (1,235 tests), clippy, benchmark, cross-compile, release signing |
+| **CI** | Build, test (1,325 tests, 19 ignored), clippy, benchmark, cross-compile, release signing |
 
 **What's included:**
 ```
@@ -125,11 +134,11 @@ src/
 ├── dashboard/              # Axum web server
 │   ├── mod.rs              # Router, AppState, middleware, static serving
 │   ├── websocket.rs        # WebSocket (2s push interval)
-│   ├── routes_*.rs         # 15 route modules
+│   ├── routes_*.rs         # 22 route modules
 │   └── middleware_auth.rs  # JWT auth middleware
 ├── db/                     # PostgreSQL via sqlx
 │   ├── mod.rs              # Database struct, connection pool
-│   └── *.rs                # 15 domain submodules
+│   └── *.rs                # 24 domain submodules
 ├── project/                # Campaign management
 ├── ai_engine.rs            # OODA decision loop
 ├── agent.rs                # Agent infrastructure
@@ -155,17 +164,18 @@ frontend/
 
 ---
 
-### `darkreach-web` — Public Website (Public)
+### `darkreach-web` — Public Website (Public, Deployed)
 
 Marketing, docs, and community presence at darkreach.ai.
 
 | Attribute | Value |
 |-----------|-------|
 | **Visibility** | Public |
-| **Language** | TypeScript (Next.js) |
-| **Contents** | Landing page, docs, blog, leaderboard, download page, live stats |
-| **Deployment** | Cloudflare Pages or Vercel, served at darkreach.ai |
-| **CI** | Build, deploy on push to main |
+| **Language** | TypeScript (Next.js + MDX) |
+| **Contents** | Landing page, docs (~8 doc pages), blog, leaderboard, download, research, operators, status, about, platform |
+| **Deployment** | **Vercel** (deployed), served at `darkreach.ai` via `website/vercel.json` |
+| **CI** | Build, deploy on push to master (Vercel GitHub integration) |
+| **Pages** | ~22 pages across docs, blog, research, operators, download, leaderboard, status, about, platform |
 
 **Structure:**
 ```
@@ -241,7 +251,7 @@ Schema, migrations, and database utilities.
 ```
 db/
 ├── supabase/
-│   ├── migrations/         # 40+ sequential SQL migrations
+│   ├── migrations/         # 64 sequential SQL migrations
 │   └── seed.sql            # Development seed data
 ├── scripts/
 │   ├── migrate.sh          # Migration runner
@@ -319,7 +329,7 @@ darkreach = { path = "../darkreach" }
 
 | Domain | Target | Content |
 |--------|--------|---------|
-| `darkreach.ai` | Cloudflare Pages / Vercel | Public website (landing, docs, blog, leaderboard) |
+| `darkreach.ai` | Vercel (deployed) | Public website (landing, docs, blog, research, operators, leaderboard) |
 | `app.darkreach.ai` | Hetzner coordinator (Nginx -> port 7001) | Dashboard SPA (static export served by Axum) |
 | `api.darkreach.ai` | Hetzner coordinator (Nginx -> port 7001) | REST API + WebSocket |
 
@@ -353,7 +363,7 @@ server {
 
 | Record | Type | Value |
 |--------|------|-------|
-| `darkreach.ai` | CNAME | CDN endpoint |
+| `darkreach.ai` | CNAME | Vercel deployment |
 | `app.darkreach.ai` | A | 178.156.211.107 (coordinator) |
 | `api.darkreach.ai` | A | 178.156.211.107 (coordinator) |
 
@@ -365,7 +375,7 @@ The current codebase is a single monorepo. The split happens incrementally:
 
 ### Phase 1: Extract darkreach-web (Low risk)
 
-The `website/` directory is already self-contained. Move it to its own repo, set up CI/CD to deploy to Cloudflare Pages.
+The `website/` directory is already self-contained and deployed to Vercel. Move it to its own repo when ready. Currently deployed directly from monorepo via Vercel GitHub integration.
 
 ### Phase 2: Extract darkreach-ops (Low risk)
 

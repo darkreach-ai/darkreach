@@ -48,7 +48,7 @@ pub struct LeaderboardRow {
     pub joined_at: chrono::DateTime<chrono::Utc>,
     pub last_seen: Option<chrono::DateTime<chrono::Utc>>,
     pub trust_level: Option<i16>,
-    pub worker_count: Option<i64>,
+    pub node_count: Option<i64>,
 }
 
 impl Database {
@@ -498,13 +498,43 @@ impl Database {
     pub async fn get_operator_leaderboard(&self, limit: i64) -> Result<Vec<LeaderboardRow>> {
         let rows = sqlx::query_as::<_, LeaderboardRow>(
             "SELECT id, username, team, credit, primes_found, joined_at, last_seen,
-                        trust_level::SMALLINT AS trust_level, worker_count
+                        trust_level::SMALLINT AS trust_level, node_count
                  FROM volunteer_leaderboard LIMIT $1",
         )
         .bind(limit)
         .fetch_all(&self.read_pool)
         .await?;
         Ok(rows)
+    }
+
+    /// Return aggregate network statistics (total operators, active nodes,
+    /// total CPU cores).  No authentication required.
+    pub async fn get_public_operator_stats(&self) -> Result<serde_json::Value> {
+        let total_operators: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM volunteers WHERE status = 'active'")
+                .fetch_one(&self.read_pool)
+                .await
+                .unwrap_or(0);
+
+        let active_nodes: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM operator_nodes WHERE last_heartbeat > NOW() - INTERVAL '5 minutes'",
+        )
+        .fetch_one(&self.read_pool)
+        .await
+        .unwrap_or(0);
+
+        let total_cores: i64 = sqlx::query_scalar(
+            "SELECT COALESCE(SUM(cpu_cores), 0)::BIGINT FROM operator_nodes WHERE last_heartbeat > NOW() - INTERVAL '5 minutes'",
+        )
+        .fetch_one(&self.read_pool)
+        .await
+        .unwrap_or(0);
+
+        Ok(serde_json::json!({
+            "total_operators": total_operators,
+            "active_nodes": active_nodes,
+            "total_cores": total_cores,
+        }))
     }
 
     // ── Quorum & Verification ─────────────────────────────────────
@@ -520,7 +550,7 @@ impl Database {
     }
 
     /// Mark a work block as verified after quorum is met.
-    pub async fn mark_block_verified(&self, block_id: i32) -> Result<()> {
+    pub async fn mark_block_verified(&self, block_id: i64) -> Result<()> {
         sqlx::query("UPDATE work_blocks SET verified = TRUE WHERE id = $1")
             .bind(block_id)
             .execute(&self.pool)
@@ -625,7 +655,7 @@ pub struct OperatorNodeRow {
 /// Unverified work block needing quorum check.
 #[derive(sqlx::FromRow)]
 pub struct UnverifiedBlock {
-    pub block_id: i32,
+    pub block_id: i64,
     pub search_job_id: i64,
     pub volunteer_id: Option<uuid::Uuid>,
     pub min_quorum: Option<i16>,

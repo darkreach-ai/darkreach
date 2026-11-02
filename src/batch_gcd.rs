@@ -133,17 +133,12 @@ pub fn batch_has_small_factor(candidates: &[Integer], sieve_limit: u64) -> Vec<b
 
     // For small batches, sequential is faster (no tree overhead)
     if candidates.len() < BATCH_THRESHOLD {
-        return candidates
-            .iter()
-            .map(crate::has_small_factor)
-            .collect();
+        return candidates.iter().map(crate::has_small_factor).collect();
     }
 
     // Compute primorial = product of all primes up to sieve_limit
     let primes = crate::sieve::generate_primes(sieve_limit);
-    let primorial = primes.iter().fold(Integer::from(1u32), |acc, &p| {
-        acc * p
-    });
+    let primorial = primes.iter().fold(Integer::from(1u32), |acc, &p| acc * p);
 
     // Build product tree from candidates
     let tree = build_product_tree(candidates);
@@ -196,10 +191,7 @@ mod tests {
     /// Level 2: [210]
     #[test]
     fn product_tree_basic() {
-        let leaves: Vec<Integer> = vec![2u32, 3, 5, 7]
-            .into_iter()
-            .map(Integer::from)
-            .collect();
+        let leaves: Vec<Integer> = vec![2u32, 3, 5, 7].into_iter().map(Integer::from).collect();
         let tree = build_product_tree(&leaves);
 
         assert_eq!(tree.len(), 3); // 3 levels
@@ -216,10 +208,7 @@ mod tests {
     /// The unpaired element is carried up as-is.
     #[test]
     fn product_tree_odd_count() {
-        let leaves: Vec<Integer> = vec![2u32, 3, 5]
-            .into_iter()
-            .map(Integer::from)
-            .collect();
+        let leaves: Vec<Integer> = vec![2u32, 3, 5].into_iter().map(Integer::from).collect();
         let tree = build_product_tree(&leaves);
 
         assert_eq!(tree[0].len(), 3);
@@ -269,11 +258,11 @@ mod tests {
     #[test]
     fn batch_matches_sequential_composites() {
         let candidates: Vec<Integer> = vec![
-            Integer::from(15u32),    // 3*5 — composite
+            Integer::from(15u32),     // 3*5 — composite
             Integer::from(104729u32), // prime
-            Integer::from(100u32),   // 2^2*5^2 — composite
-            Integer::from(1009u32),  // prime
-            Integer::from(6u32),     // 2*3 — composite
+            Integer::from(100u32),    // 2^2*5^2 — composite
+            Integer::from(1009u32),   // prime
+            Integer::from(6u32),      // 2*3 — composite
         ];
 
         let batch_results = batch_has_small_factor(&candidates, 311);
@@ -307,9 +296,7 @@ mod tests {
     /// Cross-validate batch vs sequential on 200 random-ish numbers.
     #[test]
     fn batch_cross_validate_200_numbers() {
-        let candidates: Vec<Integer> = (1000u32..1200)
-            .map(Integer::from)
-            .collect();
+        let candidates: Vec<Integer> = (1000u32..1200).map(Integer::from).collect();
 
         let batch_results = batch_has_small_factor(&candidates, 311);
         let sequential_results: Vec<bool> = candidates
@@ -317,14 +304,15 @@ mod tests {
             .map(|c| crate::has_small_factor(c))
             .collect();
 
-        for (i, (b, s)) in batch_results.iter().zip(sequential_results.iter()).enumerate() {
+        for (i, (b, s)) in batch_results
+            .iter()
+            .zip(sequential_results.iter())
+            .enumerate()
+        {
             assert_eq!(
                 b, s,
                 "Mismatch at index {} (candidate {}): batch={}, sequential={}",
-                i,
-                candidates[i],
-                b,
-                s
+                i, candidates[i], b, s
             );
         }
     }

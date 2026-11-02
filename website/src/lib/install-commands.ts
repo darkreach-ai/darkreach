@@ -23,8 +23,8 @@ cargo build --release
     {
       label: "Docker",
       commands: `# Pull and run
-docker pull darkreach/darkreach:latest
-docker run --rm darkreach/darkreach --version`,
+docker pull ghcr.io/darkreach-ai/darkreach:latest
+docker run --rm ghcr.io/darkreach-ai/darkreach --version`,
     },
   ],
   linux: [
@@ -45,8 +45,8 @@ cargo build --release
     {
       label: "Docker",
       commands: `# Pull and run
-docker pull darkreach/darkreach:latest
-docker run --rm darkreach/darkreach --version`,
+docker pull ghcr.io/darkreach-ai/darkreach:latest
+docker run --rm ghcr.io/darkreach-ai/darkreach --version`,
     },
   ],
   windows: [
@@ -63,8 +63,8 @@ cargo build --release`,
     {
       label: "Docker Desktop",
       commands: `# Pull and run
-docker pull darkreach/darkreach:latest
-docker run --rm darkreach/darkreach --version`,
+docker pull ghcr.io/darkreach-ai/darkreach:latest
+docker run --rm ghcr.io/darkreach-ai/darkreach --version`,
     },
   ],
 };

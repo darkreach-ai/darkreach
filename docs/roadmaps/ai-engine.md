@@ -4,7 +4,7 @@ The autonomous intelligence layer that optimizes prime discovery end-to-end: for
 
 **This is the pivotal differentiator.** GIMPS and PrimeGrid rely on human administrators to configure searches. darkreach's AI engine should autonomously decide what to search, how to search it, and how to allocate compute — producing better discoveries per dollar than any human could manually manage.
 
-**Key files:** `src/strategy.rs`, `src/agent.rs`, `src/project/orchestration.rs`, `src/project/cost.rs`, `src/db/calibrations.rs`
+**Key files:** `src/ai_engine.rs`, `src/strategy.rs`, `src/agent.rs`, `src/agent_daemon.rs`, `src/cost_model.rs`, `src/ml/`, `src/project/orchestration.rs`, `src/project/cost.rs`, `src/db/calibrations.rs`, `src/db/ai_engine.rs`
 
 **Related roadmaps:** [agents.md](agents.md) (execution infrastructure), [projects.md](projects.md) (campaign management), [engine.md](engine.md) (algorithms)
 
@@ -14,41 +14,59 @@ The autonomous intelligence layer that optimizes prime discovery end-to-end: for
 
 ### What exists
 
-Three layers of AI autonomy are partially built:
+Five layers of AI autonomy are built:
 
 | Layer | File | Status | What it does |
 |-------|------|--------|-------------|
-| **Agent Execution** | `src/agent.rs` | ~90% | Spawns Claude Code CLI subprocesses, context injection, domain detection, 4 permission levels, output streaming |
-| **Strategy Engine** | `src/strategy.rs` | MVP | 5-component scoring model, survey→score→decide→execute pipeline, auto-project creation, stall detection, near-record verification |
-| **Project Orchestration** | `src/project/orchestration.rs` | MVP | 30s tick loop, phase state machine, auto-strategy generation for all 12 forms, adaptive phases, cost tracking |
+| **AI Engine (OODA)** | `src/ai_engine.rs` | **Done** | Unified OODA decision loop (Observe→Orient→Decide→Act→Learn), WorldSnapshot, 7-component scoring, drift detection, decision audit trail |
+| **Agent Daemon** | `src/agent_daemon.rs` | **Done** | Two-frequency loop (5s/10s), subprocess management, budget enforcement, orphan recovery, schedule execution |
+| **ML Engine** | `src/ml/` (7 modules) | **Done** | Thompson Sampling bandits, GP cost prediction, BayesOpt sieve tuning, node intelligence, feature store, model registry with shadow mode |
+| **Strategy Engine** | `src/strategy.rs` | **Done** | 7-component scoring model (record_gap, yield_rate, cost_efficiency, opportunity_density, network_fit, momentum, competition), learned weights via online gradient descent |
+| **Project Orchestration** | `src/project/orchestration.rs` | **Done** | 30s tick loop, phase state machine, auto-strategy generation for all 12 forms, adaptive phases, cost tracking |
 
 Supporting infrastructure:
-- **Cost model** (`src/project/cost.rs`): Power-law timing curves per form, PFGW acceleration factors
+- **Shared cost model** (`src/cost_model.rs`): Power-law timing curves per form with OLS fitting, PFGW acceleration factors, GP fallback integration
 - **Calibration** (`src/db/calibrations.rs`): Database-backed coefficient storage for cost model tuning
+- **AI Engine DB** (`src/db/ai_engine.rs`): Decision persistence, state loading, ML data queries
 - **Strategy config** (`strategy_config` table): Enabled flag, budget limits, preferred/excluded forms, tick interval
 - **Yield data** (`form_yield_rates` SQL view): Historical found/tested ratios per form
 - **Record tracking** (`src/project/records.rs`): t5k.org scraping for world record comparison
+- **Agent scheduling** (`src/schedule.rs`): Cron expression parser for automated agent task creation
+- **ML tables** (migration 059): `ml_bandit_arms`, `ml_gp_training`, `ml_gp_state`, `ml_bayesopt_observations`, `ml_bayesopt_state`, `ml_node_profiles`, `ml_node_form_affinity`, `ml_model_registry`
+
+### ML Engine (`src/ml/`)
+
+The ML engine is embedded in `AiEngine` and participates in each OODA phase:
+
+| Module | File | Purpose | Replaces | Status |
+|--------|------|---------|----------|--------|
+| **Thompson Sampling** | `src/ml/bandits.rs` | Form selection via Beta(alpha, beta) posteriors with 90-day sliding window | 10-weight heuristic scoring | **Done** |
+| **GP Cost Model** | `src/ml/gp_cost.rs` | Gaussian Process regression on (log_digits, node_class, log_sieve_depth) with Matern 5/2 kernel and ARD | OLS power-law fitting | **Done** |
+| **BayesOpt** | `src/ml/bayesopt.rs` | Bayesian optimization for sieve depth + block size via Expected Improvement acquisition | `auto_sieve_depth()` heuristic | **Done** |
+| **Node Intelligence** | `src/ml/node_intel.rs` | EWMA anomaly detection + per-(node, form) Thompson Sampling affinity | Static `score_job_for_worker()` | **Done** |
+| **Feature Store** | `src/ml/features.rs` | Cached feature vectors refreshed per OODA tick; NodeClass hardware classification | Inline feature extraction | **Done** |
+| **Model Registry** | `src/ml/registry.rs` | Model versioning, shadow mode evaluation, automatic promotion when shadow outperforms active by 5%+ over 100+ predictions | -- | **Done** |
+
+**Confidence gates**: Each subsystem declares a minimum observation count. Below that threshold, ML predictions are blended with heuristic fallbacks using `ml_blend()` (linear ramp from 0% ML at confidence 0.3 to 100% ML at confidence 1.0).
+
+**59 ML unit tests** across all 7 modules.
 
 ### What's missing — the gap to full autonomy
 
 | Gap | Impact | Current workaround |
 |-----|--------|-------------------|
-| **No task runner loop** | Agents never execute — tasks sit in `pending` forever | Manual intervention |
-| **No daily budget enforcement** | Agents could run without spending limits | Not running agents |
-| **Cost model uncalibrated** | Hardcoded power-law curves, never validated against real data | Estimates may be 10x off |
-| **No second-order parameter tuning** | Strategy picks forms but doesn't optimize sieve depth, block size, or tool selection per form | Manual configuration |
 | **No competitive awareness** | Strategy doesn't know what GIMPS/PrimeGrid are currently searching | Misses strategic niches |
 | **No research integration** | Can't read papers, check OEIS, or discover new theoretical shortcuts | Human must feed insights |
-| **No sieve optimization** | Fixed sieve depths, no adaptive tuning based on candidate survival rates | Suboptimal sieve/test ratio |
 | **No auto-scaling** | Can't provision/deprovision nodes based on workload | Manual fleet management |
 | **No discovery pipeline** | After finding a prime, no auto-verification, t5k submission, or publication | Manual post-discovery |
-| **No learning loop** | Doesn't learn from past searches to improve future decisions | Static scoring weights |
 
 ---
 
-## Phase 1: Task Runner & Budget Enforcement (Critical Path)
+## Phase 1: Task Runner & Budget Enforcement (Critical Path) -- DONE
 
 > **Priority: P0** — Nothing else works without this. Unblocks all subsequent phases.
+>
+> **Status: COMPLETE.** Implemented in `src/agent_daemon.rs`. Two-frequency loop (5s fast tick for polling, 10s slow tick for claiming), subprocess isolation, budget enforcement, orphan recovery, schedule execution. See [agents.md](agents.md) for details.
 
 ### 1.1 Agent Task Runner Daemon
 
@@ -121,9 +139,16 @@ The scheduler estimates task complexity from description length, domain keywords
 
 ---
 
-## Phase 2: Cost Model Calibration & Feedback Loop
+## Phase 2: Cost Model Calibration & Feedback Loop -- DONE
 
 > **Priority: P1** — Accurate cost estimates are the foundation for intelligent resource allocation.
+>
+> **Status: COMPLETE.** Two-tier cost model implemented:
+> - **Shared power-law model** (`src/cost_model.rs`): OLS-fitted coefficients from work block data, hardcoded defaults for all 12 forms as fallback.
+> - **GP cost model** (`src/ml/gp_cost.rs`): Gaussian Process regression with Matern 5/2 kernel on (log_digits, node_class, log_sieve_depth) features. Uncertainty quantification enables exploration of cost anomalies. Falls back to power-law when data insufficient.
+> - **Node performance profiling** (`src/ml/node_intel.rs`): Per-node throughput tracking with EWMA anomaly detection, learned (node, form) affinity scores via Thompson Sampling posteriors.
+> - **ML tables** (migration 059): `ml_gp_training`, `ml_gp_state` for persistent GP model state.
+> - **23 cost_model.rs tests, 9 gp_cost.rs tests.**
 
 ### 2.1 Calibrate Power-Law Curves Against Real Data
 
@@ -182,9 +207,16 @@ ALTER TABLE workers ADD COLUMN preferred_forms TEXT[];  -- forms this node is fa
 
 ---
 
-## Phase 3: Intelligent Workforce Allocation
+## Phase 3: Intelligent Workforce Allocation -- DONE
 
 > **Priority: P1** — The core of what makes AI-managed search superior to manual configuration.
+>
+> **Status: COMPLETE.** Node intelligence and affinity scoring implemented:
+> - **Node Intelligence** (`src/ml/node_intel.rs`): EWMA-based anomaly detection tracks per-node throughput, error rate, and latency. Anomalous nodes are deprioritized.
+> - **Affinity learning**: Per-(node, form) Thompson Sampling posteriors learn which forms run well on which hardware. Nodes that consistently complete blocks fast develop high affinity scores.
+> - **Feature engineering** (`src/ml/features.rs`): NodeClass classification (CpuSmall/CpuMedium/CpuLarge/GpuEnabled), cached feature vectors refreshed per OODA tick.
+> - **ML tables** (migration 059): `ml_node_profiles`, `ml_node_form_affinity` with Thompson Sampling posteriors.
+> - **13 node_intel.rs tests, 5 features.rs tests.**
 
 ### 3.1 Dynamic Form-to-Node Assignment
 
@@ -246,9 +278,14 @@ fn optimal_block_size(form: &str, digit_estimate: u64, node_benchmark: f64) -> u
 
 ---
 
-## Phase 4: Sieve & Algorithm Optimization
+## Phase 4: Sieve & Algorithm Optimization -- DONE
 
 > **Priority: P2** — The AI should optimize not just *what* to search but *how* to search it.
+>
+> **Status: COMPLETE.** Bayesian optimization for sieve depth and block size implemented:
+> - **BayesOpt** (`src/ml/bayesopt.rs`): Per-form (sieve_depth_log, block_size_log) -> throughput optimization using Expected Improvement (EI) acquisition function over GP surrogate. Falls back to heuristic values below minimum evaluations.
+> - **ML tables** (migration 059): `ml_bayesopt_observations`, `ml_bayesopt_state` with per-form best parameters.
+> - **10 bayesopt.rs tests.**
 
 ### 4.1 Adaptive Sieve Depth Tuning
 
@@ -726,30 +763,32 @@ The AI scheduler enforces these in real-time. If commercial demand pushes open s
 
 ## Implementation Priority
 
-| Phase | Items | Effort | Impact | Dependencies |
-|-------|-------|--------|--------|-------------|
-| **1. Task Runner & Budget** | 1.1, 1.2, 1.3 | Large | **Critical** | Schema exists |
-| **2. Cost Calibration** | 2.1, 2.2, 2.3 | Medium | High | Phase 1 + real search data |
-| **3. Workforce Allocation** | 3.1, 3.2, 3.3 | Large | **Critical** | Phase 2 |
-| **4. Sieve Optimization** | 4.1, 4.2, 4.3, 4.4 | Large | High | Phase 2 |
-| **5. Research Intelligence** | 5.1, 5.2, 5.3 | Medium | High | Phase 1 |
-| **6. Self-Improvement** | 6.1, 6.2, 6.3, 6.4 | Medium | Medium | Phases 2, 3 |
-| **7. Full Autonomy** | 7.1, 7.2, 7.3, 7.4 | Large | **Strategic** | Phases 1-6 |
-| **8. Advanced AI** | 8.1, 8.2, 8.3 | Very Large | Strategic | All prior phases |
-| **9. Commercial Scheduling** | 9.1, 9.2, 9.3, 9.4, 9.5 | Large | **Strategic** | Phases 1-3, Path C platform |
+| Phase | Items | Effort | Impact | Dependencies | Status |
+|-------|-------|--------|--------|-------------|--------|
+| **1. Task Runner & Budget** | 1.1, 1.2, 1.3 | Large | **Critical** | Schema exists | **DONE** |
+| **2. Cost Calibration** | 2.1, 2.2, 2.3 | Medium | High | Phase 1 + real search data | **DONE** |
+| **3. Workforce Allocation** | 3.1, 3.2, 3.3 | Large | **Critical** | Phase 2 | **DONE** |
+| **4. Sieve Optimization** | 4.1, 4.2, 4.3, 4.4 | Large | High | Phase 2 | **DONE** |
+| **5. Research Intelligence** | 5.1, 5.2, 5.3 | Medium | High | Phase 1 | Planned |
+| **6. Self-Improvement** | 6.1, 6.2, 6.3, 6.4 | Medium | Medium | Phases 2, 3 | Partial (Thompson Sampling weight learning in bandits.rs) |
+| **7. Full Autonomy** | 7.1, 7.2, 7.3, 7.4 | Large | **Strategic** | Phases 1-6 | Planned |
+| **8. Advanced AI** | 8.1, 8.2, 8.3 | Very Large | Strategic | All prior phases | Planned |
+| **9. Commercial Scheduling** | 9.1, 9.2, 9.3, 9.4, 9.5 | Large | **Strategic** | Phases 1-3, Path C platform | Planned |
 
 **Recommended implementation order:**
 
 ```
-Phase 1 (Task Runner)           ← START HERE, unblocks everything
+Phase 1 (Task Runner)           ✓ DONE — agent_daemon.rs
   ↓
-Phase 2 (Cost Calibration)      ← Needs real data from Phase 1
+Phase 2 (Cost Calibration)      ✓ DONE — cost_model.rs + ml/gp_cost.rs
   ↓
-Phase 3 + Phase 5 (parallel)    ← Workforce allocation + competitive intel
+Phase 3 (Workforce Allocation)  ✓ DONE — ml/node_intel.rs + ml/features.rs
   ↓
-Phase 4 (Sieve Optimization)    ← Most impactful engine gains
+Phase 4 (Sieve Optimization)    ✓ DONE — ml/bayesopt.rs
   ↓
-Phase 6 (Self-Improvement)      ← Needs data from Phases 3-5
+Phase 5 (Research Intelligence) ← NEXT — competitive awareness + research integration
+  ↓
+Phase 6 (Self-Improvement)      ← Partially done (bandits weight learning), needs analytics
   ↓
 Phase 7 (Full Autonomy)         ← Integration of all prior phases
   ↓

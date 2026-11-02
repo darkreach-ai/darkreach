@@ -21,6 +21,11 @@ Extending the 3-tier verification pipeline into a full classification, distribut
 - `verify` CLI subcommand + `/api/verify` dashboard endpoint
 - 48 unit tests covering parsers, all 3 tiers, quorum logic, and edge cases
 
+**Recent additions (Feb 2026):**
+- **Migration 053** (`browser_result_hash.sql`): Content-addressed result hashes on `work_blocks` — SHA-256 of `"{type}:{start}:{end}:{tested}:{primes_json}"` for cross-worker tamper detection
+- **Migration 054** (`hash_verification.sql`): Server-side hash verification (`hash_verified` boolean) and per-block `duration_ms` tracking for performance calibration
+- **Migration 055** (`adaptive_verification.sql`): BOINC-style adaptive verification methods — `hash_compare` (~0% cost), `spot_check` (~5% cost), `full_recomputation` (100%), with escalation chain and cost analytics view
+
 **What's missing:**
 - **No multi-classification**: each prime has a single `form` label assigned at discovery time. A factorial prime that's also palindromic is only tagged as "factorial".
 - **No form-specific invariant checks**: twin primes aren't verified to actually be a twin pair (p and p+2 both prime), Sophie Germain primes aren't checked for 2p+1 primality, palindromes aren't verified for structural symmetry.

@@ -4,6 +4,13 @@ Comprehensive guide to integrating GWNUM (direct FFI and subprocess) and FLINT f
 
 ---
 
+## Current Status (Feb 2026)
+
+- **GWNUM FFI wrapper**: Implemented in `src/gwnum.rs` (845 lines). Feature-gated (`--features gwnum`). Includes `GwContext` with Proth test, LLR test, Vrba-Reix for Wagstaff, Gerbicz error checking, PRP test. x86-64 only.
+- **FLINT integration**: Implemented in `src/flint.rs` (129 lines). Feature-gated (`--features flint`). RAII `Fmpz` wrapper, factorial and primorial acceleration via SIMD-vectorized NTTs.
+- **PFGW subprocess**: Production-ready in `src/pfgw.rs`. Used by all 12 forms.
+- **PRST subprocess**: Production-ready in `src/prst.rs`. Used for k*b^n+-1 forms with Gerbicz checking.
+
 ## Overview
 
 At frontier candidate sizes (1.5M-3.4M digits), GWNUM provides 50-100x speedup over GMP. Without it, several prime forms are computationally infeasible:

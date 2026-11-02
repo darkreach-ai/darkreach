@@ -122,7 +122,7 @@ The core prime-hunting library and CLI tool.
 The coordination, intelligence, and UX layer.
 
 - **Dashboard**: Next.js 16 + React 19, 17 pages, 50+ components, real-time WebSocket
-- **API server**: Axum REST API, 15 route modules, WebSocket push
+- **API server**: Axum REST API, 22 route modules, WebSocket push
 - **AI engine**: OODA decision loop, 7-component scoring, cost model fitting, weight learning
 - **Search management**: Create/stop/pause/resume searches, all 12 forms, presets, block generation
 - **Network coordination**: PostgreSQL-based work claiming, heartbeats, stale pruning, trust levels

@@ -8,7 +8,41 @@ Next.js dashboard: data exploration, visualization, search management, and docum
 
 ## Current State
 
-The webapp is a read-only dashboard: three stat cards, a paginated primes table, a search status indicator, and a docs viewer. Data flows one way — the CLI writes to SQLite, the dashboard reads it. The WebSocket pushes updates every 2 seconds.
+The dashboard has grown from a read-only viewer into a full-featured management UI with 21 pages, 72+ components, and 26 hooks. Data flows through the Axum REST API and WebSocket (2s push interval).
+
+### Page Inventory (21 pages)
+
+| Page | Route | Purpose |
+|------|-------|---------|
+| Dashboard | `/` | Root page with stat cards, discovery charts, form leaderboard |
+| Browse | `/browse` | Paginated primes table with filtering, sorting, export |
+| Login | `/login` | Authentication |
+| Account | `/account` | User profile management |
+| Agents | `/agents` | Agent tasks, budgets, memory, schedules, analytics |
+| Audit | `/audit` | Audit log viewer |
+| Contribute | `/contribute` | Browser-based compute contribution |
+| Docs | `/docs` | Documentation viewer |
+| Earnings | `/earnings` | Operator earnings dashboard |
+| Leaderboard | `/leaderboard` | Individual + team rankings |
+| Logs | `/logs` | System log viewer with level filtering |
+| Marketplace | `/marketplace` | Compute marketplace |
+| My Nodes | `/my-nodes` | Operator node management |
+| Network | `/network` | Node status, fleet overview |
+| Performance | `/performance` | Throughput, sieve effectiveness, resource utilization |
+| Prime | `/prime` | Prime detail permalink |
+| Projects | `/projects` | Project management (campaigns, phases, cost tracking) |
+| Releases | `/releases` | Worker release channels |
+| Searches | `/searches` | Active and completed searches |
+| Strategy | `/strategy` | AI strategy engine configuration and monitoring |
+| Verification | `/verification` | Prime verification queue |
+
+### Hooks (26 hooks)
+
+`use-agents`, `use-agent-tasks`, `use-agent-budgets`, `use-agent-memory`, `use-agent-schedules`, `use-audit-log`, `use-contribute-profile`, `use-distribution`, `use-earnings`, `use-form-leaderboard`, `use-logs`, `use-marketplace`, `use-mobile`, `use-notifications`, `use-operator-resources`, `use-polling`, `use-prime-realtime`, `use-primes`, `use-prime-verification`, `use-projects`, `use-records`, `use-stats`, `use-strategy`, `use-theme`, `use-timeline`, `use-websocket`
+
+### Components (72+ components)
+
+Including 16 UI primitives (button, badge, card, dialog, input, select, dropdown-menu, separator, tabs, tooltip, scroll-area, breadcrumb, sheet, skeleton, switch, sidebar, collapsible, textarea), 7 chart components (discovery-timeline, digit-distribution, throughput-gauge, sparkline, health-score, latency-percentiles, cost-history, tag-distribution), 4 agent components (activity-feed, budget-cards, memory-tab, schedules-tab, analytics-tab, task-card, helpers, new-task-dialog), 5 operator components (earnings-history-table, trust-progress, form-showcase-card, rate-table, earnings-chart), and 30+ domain components.
 
 ---
 

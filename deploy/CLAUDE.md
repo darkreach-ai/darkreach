@@ -2,13 +2,15 @@
 
 Deployment scripts, systemd units, Nginx config, Grafana dashboards, Helm charts, and Terraform infrastructure for the darkreach fleet.
 
+> **Primary deploy command:** `scripts/deploy` (unified, with rollback, health checks, parallel nodes, Vercel co-deploy). The legacy scripts below (`deploy.sh`, `production-deploy.sh`, `worker-deploy.sh`) are deprecated.
+
 ## Directory Structure
 
 ```
 deploy/
-├── deploy.sh                      # Quick SSH deployment (install deps, build, deploy)
-├── production-deploy.sh           # Full production setup (swap, UFW, kernel, nginx, systemd)
-├── worker-deploy.sh               # Worker-specific deployment script
+├── deploy.sh                      # DEPRECATED — use scripts/deploy
+├── production-deploy.sh           # DEPRECATED — use scripts/deploy
+├── worker-deploy.sh               # DEPRECATED — use scripts/deploy
 ├── pgo-build.sh                   # Profile-Guided Optimization build
 ├── nginx-darkreach.conf           # Nginx reverse proxy (rate limit, WebSocket, TLS)
 ├── darkreach-coordinator.service  # Systemd coordinator unit (port 7001, security-hardened)
@@ -40,9 +42,9 @@ deploy/
 
 | File | Purpose |
 |------|---------|
-| `deploy.sh` | Quick SSH deploy: install Rust/GMP, clone/update, build release, copy to `/usr/local/bin`, install systemd units |
-| `production-deploy.sh` | Full production: swap, UFW, kernel tuning, nginx, systemd, frontend deploy, search launch, verification |
-| `worker-deploy.sh` | Node deployment with coordinator URL config (legacy; new nodes use `darkreach run`) |
+| `deploy.sh` | DEPRECATED — use `scripts/deploy coordinator` |
+| `production-deploy.sh` | DEPRECATED — use `scripts/deploy all` |
+| `worker-deploy.sh` | DEPRECATED — use `scripts/deploy nodes` |
 | `pgo-build.sh` | PGO build: instrument → profile run → optimized build (5-15% speedup) |
 | `nginx-darkreach.conf` | Nginx: rate limiting, WebSocket upgrade, static caching, security headers, gzip |
 | `darkreach-coordinator.service` | Coordinator: port 7001, strict filesystem, no new privs, 512M memory limit, 65k fds |
@@ -50,6 +52,20 @@ deploy/
 
 ## Deployment Flow
 
+**Preferred:** `scripts/deploy` (unified command with rollback, health checks, parallel nodes)
+
+```bash
+scripts/deploy all              # Full deploy: coordinator + nodes + web
+scripts/deploy coordinator      # Coordinator only (with health check + auto-rollback)
+scripts/deploy nodes            # All worker nodes (parallel)
+scripts/deploy web              # Frontend + website (parallel Vercel deploys)
+scripts/deploy rollback         # Rollback coordinator to previous binary
+scripts/deploy status           # Show health of all services
+```
+
+Connection details are loaded from `secrets/infra.enc.yaml` via `scripts/load-infra.sh`.
+
+**Legacy flow (deprecated):**
 ```
 deploy.sh → SSH to target → install deps (Rust, GMP)
   → clone/pull repo → cargo build --release
@@ -154,6 +170,22 @@ helm install darkreach deploy/helm/darkreach/ -f deploy/helm/darkreach/values-pr
 - Release manifest: `deploy/releases/worker-manifest.json`
 - Nodes auto-update via release channel (see `src/db/releases.rs`)
 - Dashboard UI at `/releases` page
+
+## Website Deployment (Vercel)
+
+The marketing website at `darkreach.ai` is deployed via Vercel from the `website/` directory.
+
+- **Domain:** `darkreach.ai`
+- **Framework:** Next.js (static export with MDX content)
+- **Config:** `website/vercel.json`
+- **Deploy:** Automatic on push to `master` (Vercel GitHub integration)
+
+### deploy.sh Hardening
+
+The `deploy.sh` script includes the following safety measures:
+- Uses absolute `sudo` paths (`/usr/bin/sudo`) for security
+- Guards `.env` copy (skips when already in install directory)
+- Sources Cargo environment (`$HOME/.cargo/env`) before builds
 
 ## Roadmap
 

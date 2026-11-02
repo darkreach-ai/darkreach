@@ -32,6 +32,8 @@ ${BOLD}Usage:${NC}
   scripts/agent --clean               Remove worktrees with no uncommitted changes
   scripts/agent --pr <domain-ts>      Push branch and create PR from worktree
   scripts/agent --status              Show detailed status of all agent worktrees
+  scripts/agent --conflicts           Check for file conflicts across active worktrees
+  scripts/agent --summary             Show commits/changes per active worktree
 
 ${BOLD}Domains:${NC} $DOMAINS
 
@@ -39,6 +41,7 @@ ${BOLD}Examples:${NC}
   scripts/agent engine "optimize sieve depth for factorial form"
   scripts/agent frontend "add dark mode toggle to sidebar"
   scripts/agent --pr engine-20260222-1430
+  scripts/agent --conflicts
 EOF
 }
 
@@ -232,14 +235,21 @@ cmd_launch() {
     echo -e "${GREEN}Worktree ready.${NC}"
     echo ""
 
-    # Launch Claude Code or print instructions
+    # Launch Claude Code with native agent definition if available
     if command -v claude &>/dev/null; then
+        AGENT_FILE="$BASE_DIR/.claude/agents/${domain}.md"
+        AGENT_FLAG=""
+        if [ -f "$AGENT_FILE" ]; then
+            AGENT_FLAG="--agent $domain"
+            echo -e "Using agent definition: ${BLUE}$domain${NC}"
+        fi
+
         if [ -n "$prompt" ]; then
             echo -e "Launching Claude Code with prompt..."
-            cd "$wt_path" && exec claude "$prompt"
+            cd "$wt_path" && exec claude $AGENT_FLAG "$prompt"
         else
             echo -e "Launching Claude Code..."
-            cd "$wt_path" && exec claude
+            cd "$wt_path" && exec claude $AGENT_FLAG
         fi
     else
         echo "Claude Code CLI not found. To use the worktree manually:"
@@ -248,6 +258,83 @@ cmd_launch() {
         echo "When done, create a PR:"
         echo "  scripts/agent --pr ${domain}-${timestamp}"
     fi
+}
+
+# ── Check for file conflicts across worktrees ─────────────────
+cmd_conflicts() {
+    echo -e "${BOLD}Checking for file conflicts across worktrees...${NC}"
+    echo ""
+
+    if [ ! -d "$WORKTREE_DIR" ] || [ -z "$(ls -A "$WORKTREE_DIR" 2>/dev/null)" ]; then
+        echo "  No active agent worktrees."
+        return
+    fi
+
+    # Collect changed files per worktree
+    declare -A file_owners
+    local has_conflicts=false
+
+    for wt in "$WORKTREE_DIR"/*/; do
+        [ -d "$wt" ] || continue
+        local name
+        name=$(basename "$wt")
+        local branch
+        branch=$(git -C "$wt" branch --show-current 2>/dev/null || echo "")
+        local base
+        base=$(git -C "$wt" merge-base HEAD main 2>/dev/null || git -C "$wt" merge-base HEAD master 2>/dev/null || echo "HEAD~1")
+
+        while IFS= read -r file; do
+            [ -z "$file" ] && continue
+            if [ -n "${file_owners[$file]:-}" ]; then
+                has_conflicts=true
+                echo -e "  ${RED}CONFLICT${NC} $file"
+                echo "    Modified in: ${file_owners[$file]}, $name"
+            fi
+            file_owners[$file]="${file_owners[$file]:+${file_owners[$file]}, }$name"
+        done < <(git -C "$wt" diff --name-only "$base"..HEAD 2>/dev/null)
+    done
+
+    if [ "$has_conflicts" = false ]; then
+        echo -e "  ${GREEN}No conflicts detected${NC}"
+    fi
+}
+
+# ── Show commits/changes per worktree ─────────────────────────
+cmd_summary() {
+    echo -e "${BOLD}Worktree Summary${NC}"
+    echo ""
+
+    if [ ! -d "$WORKTREE_DIR" ] || [ -z "$(ls -A "$WORKTREE_DIR" 2>/dev/null)" ]; then
+        echo "  No active agent worktrees."
+        return
+    fi
+
+    for wt in "$WORKTREE_DIR"/*/; do
+        [ -d "$wt" ] || continue
+        local name
+        name=$(basename "$wt")
+        local branch
+        branch=$(git -C "$wt" branch --show-current 2>/dev/null || echo "unknown")
+        local base
+        base=$(git -C "$wt" merge-base HEAD main 2>/dev/null || git -C "$wt" merge-base HEAD master 2>/dev/null || echo "HEAD~1")
+        local commit_count
+        commit_count=$(git -C "$wt" rev-list --count "$base"..HEAD 2>/dev/null || echo "0")
+        local files_changed
+        files_changed=$(git -C "$wt" diff --name-only "$base"..HEAD 2>/dev/null | wc -l | tr -d ' ')
+        local uncommitted
+        uncommitted=$(git -C "$wt" status --porcelain 2>/dev/null | wc -l | tr -d ' ')
+
+        echo -e "  ${BLUE}$name${NC} ($branch)"
+        echo "    Commits: $commit_count | Files changed: $files_changed | Uncommitted: $uncommitted"
+
+        if [ "$commit_count" -gt 0 ]; then
+            echo "    Recent:"
+            git -C "$wt" log --oneline "$base"..HEAD 2>/dev/null | head -5 | while IFS= read -r line; do
+                echo "      $line"
+            done
+        fi
+        echo ""
+    done
 }
 
 # ── Main dispatch ─────────────────────────────────────────────
@@ -263,6 +350,12 @@ case "${1:-}" in
         ;;
     --clean)
         cmd_clean
+        ;;
+    --conflicts)
+        cmd_conflicts
+        ;;
+    --summary)
+        cmd_summary
         ;;
     --pr)
         [ -z "${2:-}" ] && { echo -e "${RED}Error:${NC} --pr requires a worktree name"; exit 1; }

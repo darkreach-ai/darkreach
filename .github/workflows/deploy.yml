@@ -1,0 +1,218 @@
+name: Deploy
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Deploy target'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - coordinator
+          - nodes
+          - frontend
+          - website
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # Gate on CI passing first
+  ci-check:
+    name: CI Check
+    uses: ./.github/workflows/ci.yml
+
+  deploy-coordinator:
+    name: Deploy Coordinator
+    runs-on: ubuntu-latest
+    needs: [ci-check]
+    if: >-
+      github.event_name == 'push' ||
+      (github.event_name == 'workflow_dispatch' &&
+       (inputs.target == 'all' || inputs.target == 'coordinator'))
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install GMP
+        run: sudo apt-get update && sudo apt-get install -y libgmp-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-deploy-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-deploy-
+
+      - name: Build release binary
+        run: RUSTFLAGS="-C target-cpu=x86-64-v2" cargo build --release
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.COORDINATOR_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Deploy binary
+        run: |
+          scp -i ~/.ssh/deploy_key target/release/darkreach \
+            deploy@${{ secrets.COORDINATOR_HOST }}:/tmp/darkreach
+
+          ssh -i ~/.ssh/deploy_key deploy@${{ secrets.COORDINATOR_HOST }} bash -s <<'REMOTE'
+          set -euo pipefail
+          BIN="/usr/local/bin/darkreach"
+          [ -f "$BIN" ] && sudo /usr/bin/cp "$BIN" "${BIN}.prev"
+          sudo /usr/bin/systemctl stop darkreach-coordinator 2>/dev/null || true
+          sudo /usr/bin/cp /tmp/darkreach "$BIN"
+          sudo chmod +x "$BIN"
+          rm -f /tmp/darkreach
+          sudo /usr/bin/systemctl start darkreach-coordinator
+          REMOTE
+
+      - name: Health check
+        run: |
+          for i in $(seq 1 15); do
+            if ssh -i ~/.ssh/deploy_key deploy@${{ secrets.COORDINATOR_HOST }} \
+              "curl -sf http://localhost:7001/api/health" &>/dev/null; then
+              echo "Health check passed (attempt $i)"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Health check failed — rolling back"
+          ssh -i ~/.ssh/deploy_key deploy@${{ secrets.COORDINATOR_HOST }} bash -s <<'ROLLBACK'
+          set -euo pipefail
+          BIN="/usr/local/bin/darkreach"
+          [ -f "${BIN}.prev" ] || exit 1
+          sudo /usr/bin/systemctl stop darkreach-coordinator 2>/dev/null || true
+          sudo /usr/bin/cp "${BIN}.prev" "$BIN"
+          sudo /usr/bin/systemctl start darkreach-coordinator
+          ROLLBACK
+          exit 1
+
+  deploy-nodes:
+    name: Deploy Nodes
+    runs-on: ubuntu-latest
+    needs: [ci-check]
+    if: >-
+      github.event_name == 'push' ||
+      (github.event_name == 'workflow_dispatch' &&
+       (inputs.target == 'all' || inputs.target == 'nodes'))
+    strategy:
+      matrix:
+        node: ${{ fromJSON(secrets.NODE_HOSTS_JSON || '[]') }}
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install GMP
+        run: sudo apt-get update && sudo apt-get install -y libgmp-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-deploy-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-deploy-
+
+      - name: Build release binary
+        run: RUSTFLAGS="-C target-cpu=x86-64-v2" cargo build --release
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ matrix.node }} >> ~/.ssh/known_hosts
+
+      - name: Deploy to node
+        run: |
+          scp -i ~/.ssh/deploy_key target/release/darkreach \
+            deploy@${{ matrix.node }}:/tmp/darkreach
+
+          ssh -i ~/.ssh/deploy_key deploy@${{ matrix.node }} bash -s <<'REMOTE'
+          set -euo pipefail
+          BIN="/usr/local/bin/darkreach"
+          [ -f "$BIN" ] && sudo /usr/bin/cp "$BIN" "${BIN}.prev"
+          sudo /usr/bin/systemctl stop 'darkreach-worker@*' 2>/dev/null || true
+          sudo /usr/bin/cp /tmp/darkreach "$BIN"
+          sudo chmod +x "$BIN"
+          rm -f /tmp/darkreach
+          sudo /usr/bin/systemctl start 'darkreach-worker@1'
+          REMOTE
+
+  deploy-frontend:
+    name: Deploy Frontend
+    runs-on: ubuntu-latest
+    needs: [ci-check]
+    if: >-
+      github.event_name == 'push' ||
+      (github.event_name == 'workflow_dispatch' &&
+       (inputs.target == 'all' || inputs.target == 'frontend'))
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci
+
+      - name: Deploy to Vercel
+        run: npx vercel --prod --token ${{ secrets.VERCEL_TOKEN }} --yes
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_FRONTEND_PROJECT_ID }}
+
+  deploy-website:
+    name: Deploy Website
+    runs-on: ubuntu-latest
+    needs: [ci-check]
+    if: >-
+      github.event_name == 'push' ||
+      (github.event_name == 'workflow_dispatch' &&
+       (inputs.target == 'all' || inputs.target == 'website'))
+    defaults:
+      run:
+        working-directory: website
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+
+      - run: npm ci
+
+      - name: Deploy to Vercel
+        run: npx vercel --prod --token ${{ secrets.VERCEL_TOKEN }} --yes
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_WEBSITE_PROJECT_ID }}

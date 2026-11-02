@@ -460,6 +460,12 @@ pub fn run_work_loop(
     rt_handle: &tokio::runtime::Handle,
     search_job_id: i64,
 ) -> Result<()> {
+    // Non-blocking update check before entering the work loop.
+    // Uses the coordinator URL from the database connection as a proxy.
+    if let Some(coordinator_url) = std::env::var("DARKREACH_COORDINATOR_URL").ok() {
+        let _ = darkreach::operator::check_for_updates(&coordinator_url);
+    }
+
     let worker_id = cli.worker_id.clone().unwrap_or_else(get_hostname);
 
     let job = rt_handle
@@ -1266,17 +1272,62 @@ pub fn run_project(cli: &Cli, action: &ProjectAction) -> Result<()> {
 // ── Operator Commands ───────────────────────────────────────────
 
 /// Register as an operator and receive an API key.
-pub fn run_register(server: &str, username: &str, email: &str) -> Result<()> {
+pub fn run_register(
+    server: &str,
+    username: &str,
+    email: &str,
+    name: Option<&str>,
+    forms: Option<&str>,
+    max_cpu: Option<u8>,
+) -> Result<()> {
     use darkreach::operator;
 
     info!(server, "Registering with coordinator");
-    let config = operator::register(server, username, email)?;
-    eprintln!("Registration successful!");
+
+    // Convert CLI form string (comma-separated) to Vec<String> slice.
+    let forms_vec: Vec<String> = forms
+        .map(|f| f.split(',').map(|s| s.trim().to_string()).collect())
+        .unwrap_or_default();
+    let forms_slice: Option<&[String]> = if forms_vec.is_empty() {
+        None
+    } else {
+        Some(&forms_vec)
+    };
+
+    let config = operator::register(
+        server,
+        username,
+        email,
+        name,
+        forms_slice,
+        max_cpu.map(|c| c as usize),
+    )?;
+
+    eprintln!();
+    eprintln!("  Registration successful!");
+    eprintln!();
     eprintln!("  Username:  {}", config.username);
     eprintln!("  API Key:   {}", config.api_key);
     eprintln!("  Worker ID: {}", config.worker_id);
-    eprintln!("\nConfig saved to ~/.darkreach/config.toml");
-    eprintln!("Run `darkreach run` to start contributing.");
+    if let Some(ref n) = name {
+        eprintln!("  Name:      {}", n);
+    }
+    if !forms_vec.is_empty() {
+        eprintln!("  Forms:     {}", forms_vec.join(", "));
+    } else {
+        eprintln!("  Forms:     all (no restriction)");
+    }
+    if let Some(cpu) = max_cpu {
+        eprintln!("  Max CPU:   {}%", cpu);
+    }
+    eprintln!();
+    eprintln!("  Config saved to ~/.darkreach/config.toml");
+    eprintln!();
+    eprintln!("  Next steps:");
+    eprintln!("    1. Run `darkreach run` to start contributing compute");
+    eprintln!("    2. Visit https://app.darkreach.ai to monitor your stats");
+    eprintln!("    3. Keep your API key safe -- rotate with `darkreach rotate-key` if compromised");
+    eprintln!();
     Ok(())
 }
 

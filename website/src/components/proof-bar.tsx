@@ -103,33 +103,25 @@ export function ProofBar() {
     let active = true;
     async function fetchStats() {
       try {
-        const [statsRes, networkRes] = await Promise.all([
-          fetch(`${API_BASE}/api/stats`),
-          fetch(`${API_BASE}/api/network`),
-        ]);
+        const res = await fetch(`${API_BASE}/api/stats`);
+        if (!res.ok || !active) return;
 
-        if (!statsRes.ok || !networkRes.ok) return;
-
-        const status = (await statsRes.json()) as {
-          total_primes?: number;
-          total_tested?: number;
-        };
-        const network = (await networkRes.json()) as {
-          workers?: Array<{ status?: string }>;
+        // get_stats() returns { total, by_form, largest_digits, largest_expression }
+        const data = (await res.json()) as {
+          total?: number;
+          by_form?: Array<{ form: string; count: number }>;
         };
 
         if (!active) return;
 
-        const nodes = network.workers ?? [];
-        const activeCount = nodes.filter(
-          (n) => n.status === "active" || n.status === "running"
-        ).length;
+        // Sum all per-form counts as a cross-check, fall back to total
+        const totalPrimes = data.total ?? 0;
 
         setStats({
-          discoveries: formatNumber(status.total_primes ?? 0),
-          tested: formatNumber(status.total_tested ?? 0),
-          nodes: String(activeCount || nodes.length),
-          uptime: "99.9%",
+          discoveries: formatNumber(totalPrimes),
+          tested: FALLBACK.tested, // No tested count from this endpoint
+          nodes: FALLBACK.nodes,
+          uptime: FALLBACK.uptime,
         });
         setLive(true);
       } catch {

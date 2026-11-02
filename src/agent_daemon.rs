@@ -180,18 +180,83 @@ pub async fn handle_completed_agent(completed: CompletedAgent, state: &AppState)
     // 4. Parent task cascading
     if let Ok(Some(completed_task)) = state.db.get_agent_task(completed.task_id).await {
         if let Some(parent_id) = completed_task.parent_task_id {
-            // On child failure, cancel pending siblings if policy says "fail"
+            // On child failure, apply the parent's on_child_failure policy
             if status_str == "failed" {
                 if let Ok(Some(parent)) = state.db.get_agent_task(parent_id).await {
-                    if parent.on_child_failure == "fail" {
-                        let cancelled = state
-                            .db
-                            .cancel_pending_siblings(parent_id)
-                            .await
-                            .unwrap_or(0);
-                        if cancelled > 0 {
-                            info!(parent_id, cancelled, "agent: cancelled pending siblings");
+                    match parent.on_child_failure.as_str() {
+                        "fail" => {
+                            // Cancel all pending siblings and let parent fail
+                            let cancelled = state
+                                .db
+                                .cancel_pending_siblings(parent_id)
+                                .await
+                                .unwrap_or(0);
+                            if cancelled > 0 {
+                                info!(parent_id, cancelled, "agent: cancelled pending siblings (fail policy)");
+                            }
                         }
+                        "retry" => {
+                            // Create a retry child task with same params (up to 3 retries)
+                            match state.db.retry_child_task(&completed_task).await {
+                                Ok(Some(new_id)) => {
+                                    info!(
+                                        parent_id,
+                                        failed_task_id = completed_task.id,
+                                        new_task_id = new_id,
+                                        retry = completed_task.retry_count + 1,
+                                        "agent: retrying failed child task"
+                                    );
+                                    let _ = state
+                                        .db
+                                        .insert_agent_event(
+                                            Some(parent_id),
+                                            "created",
+                                            Some("system"),
+                                            &format!(
+                                                "Retry #{} for '{}' (task {})",
+                                                completed_task.retry_count + 1,
+                                                completed_task.title,
+                                                new_id
+                                            ),
+                                            None,
+                                        )
+                                        .await;
+                                }
+                                Ok(None) => {
+                                    // Max retries reached — log and let parent complete naturally
+                                    info!(
+                                        parent_id,
+                                        task_id = completed_task.id,
+                                        retries = completed_task.retry_count,
+                                        "agent: max retries reached for child task"
+                                    );
+                                    let _ = state
+                                        .db
+                                        .insert_agent_event(
+                                            Some(parent_id),
+                                            "error",
+                                            Some("system"),
+                                            &format!(
+                                                "Max retries ({}) reached for '{}'",
+                                                completed_task.retry_count,
+                                                completed_task.title
+                                            ),
+                                            None,
+                                        )
+                                        .await;
+                                }
+                                Err(e) => {
+                                    warn!(
+                                        parent_id,
+                                        task_id = completed_task.id,
+                                        error = %e,
+                                        "agent: failed to create retry task"
+                                    );
+                                }
+                            }
+                        }
+                        // "continue" and "skip" — do nothing, let other siblings proceed
+                        _ => {}
                     }
                 }
             }

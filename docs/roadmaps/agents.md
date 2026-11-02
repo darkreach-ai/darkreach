@@ -8,23 +8,27 @@ AI agent architecture: autonomous task execution, tool integration, orchestratio
 
 ## Current State
 
-Foundation layer is in place:
-- **Schema:** `agent_tasks`, `agent_events`, `agent_budgets` tables in Supabase (migration 006)
-- **Backend:** REST API for CRUD on tasks/events/budgets, WebSocket push of active tasks and budget summaries
-- **Frontend:** Agents page with task list (filterable), activity feed (real-time), budget cards (editable), new task dialog
-- **Data flow:** Supabase Realtime for live updates, WebSocket for coordination summary
-
-What's missing: no agent actually runs. Tasks sit in `pending` and nothing picks them up. The entire execution layer — spawning agents, running tools, reporting progress, enforcing budgets — needs to be built.
+Foundation and execution layers are in place:
+- **Schema:** `agent_tasks`, `agent_events`, `agent_budgets`, `agent_memory`, `agent_roles`, `agent_templates`, `agent_schedules` tables (migrations 006-014, 051)
+- **Agent Daemon** (`src/agent_daemon.rs`): Background service with two-frequency loop (5s fast tick / 10s slow tick), subprocess management, budget enforcement, orphan recovery, schedule execution. Configurable via `DARKREACH_AGENT_*` env vars.
+- **Agent Manager** (`src/agent.rs`): Subprocess spawning, context injection, domain detection, 4 permission levels, output streaming, `AgentStatus` lifecycle.
+- **Schedule Executor** (`src/schedule.rs`): 5-field cron expression parser, event-driven triggers, double-fire prevention. 19 unit tests.
+- **Strategy Advisor role** (migration 061): `strategy-advisor` agent role for AI engine competitive intelligence gathering.
+- **Backend:** REST API for CRUD on tasks/events/budgets/memory/roles/schedules, WebSocket push of active tasks and budget summaries.
+- **Frontend:** Agents page with task list (filterable), activity feed (real-time), budget cards (editable), new task dialog, memory tab, schedules tab, analytics tab.
+- **Data flow:** WebSocket for coordination summary, REST API for queries.
 
 ---
 
-## Phase 1: Agent Execution Engine
+## Phase 1: Agent Execution Engine -- DONE
 
 The core runtime that picks up tasks and executes them.
 
+> **Status: COMPLETE.** Implemented in `src/agent_daemon.rs` (daemon loop) and `src/agent.rs` (subprocess management). The daemon uses `tokio::select!` on two interval timers: fast tick (5s) for polling completed agents, slow tick (10s) for budget enforcement and task claiming. Orphan recovery runs at startup and every 5 minutes via `Database::reclaim_stale_agent_tasks`. Configuration via `DARKREACH_AGENT_DAEMON`, `DARKREACH_AGENT_POLL_SECS`, `DARKREACH_AGENT_CLAIM_SECS`, `DARKREACH_AGENT_STALE_SECS` environment variables. 8 agent_daemon.rs tests + 35 agent.rs tests.
+
 ### Task Runner Daemon
 
-**Current:** Tasks are created via the UI but never executed.
+**Current:** ~~Tasks are created via the UI but never executed.~~ **DONE** -- The agent daemon runs as a background service.
 
 **Target:** Background service in the Rust dashboard process that polls for `pending` tasks, spawns agent processes, and manages their lifecycle.
 
@@ -303,9 +307,11 @@ Agents can `READ_MEMORY(category)` and `WRITE_MEMORY(key, value, category)` as t
 
 ---
 
-## Phase 6: Specialized Agent Roles
+## Phase 6: Specialized Agent Roles -- PARTIAL
 
 Purpose-built agent configurations for different domains.
+
+> **Status: PARTIAL.** Agent roles infrastructure exists (`agent_roles` table, migration 013). The `strategy-advisor` role has been added (migration 061) for AI engine competitive intelligence. Additional roles (engine, frontend, ops, research) are defined as templates but not yet fully specialized with domain-specific tool configurations.
 
 ### Engine Agent
 
@@ -357,13 +363,17 @@ Purpose-built agent configurations for different domains.
 
 ---
 
-## Phase 7: Scheduling & Automation
+## Phase 7: Scheduling & Automation -- DONE
 
 Move from manual task creation to automated, event-driven agent work.
 
+> **Status: COMPLETE.** Implemented in `src/schedule.rs` (cron parser + evaluator) and `src/agent_daemon.rs` (schedule executor). The daemon checks `agent_schedules` table on each slow tick, evaluates cron expressions, and creates agent tasks when schedules fire. 19 schedule.rs tests covering exact values, wildcards, step values, ranges, lists, and combined syntax. Frontend `schedules-tab.tsx` component provides UI for managing schedules.
+
 ### Cron-Style Scheduling
 
-**Target:** Recurring tasks that run on a schedule:
+**Current:** **DONE** -- `src/schedule.rs` implements a 5-field cron parser supporting exact values, wildcards (`*`), step values (`*/5`), ranges (`1-5`), lists (`0,15,30,45`), and combined syntax (`1-5/2`). Double-fire prevention ensures schedules don't fire twice in the same minute.
+
+**Target:** ~~Recurring tasks that run on a schedule:~~ Implemented.
 
 ```sql
 CREATE TABLE agent_schedules (
@@ -494,21 +504,21 @@ Scale the agent system beyond a single dashboard instance.
 
 ## Implementation Priority
 
-| Phase | Effort | Impact | Dependencies |
-|-------|--------|--------|-------------|
-| 1. Execution engine | Large | **Critical** | None (schema exists) |
-| 2. Tool & permissions | Medium | High | Phase 1 |
-| 3. Task decomposition | Large | High | Phase 1 |
-| 4. Cost control | Medium | **Critical** | Phase 1 |
-| 5. Context & memory | Medium | High | Phase 1 |
-| 6. Specialized roles | Medium | Medium | Phases 2, 3, 5 |
-| 7. Scheduling & automation | Medium | High | Phases 1, 3 |
-| 8. Observability | Medium | Medium | Phase 1 |
-| 9. Multi-instance | Large | Low (until network grows) | All |
+| Phase | Effort | Impact | Dependencies | Status |
+|-------|--------|--------|-------------|--------|
+| 1. Execution engine | Large | **Critical** | None (schema exists) | **DONE** |
+| 2. Tool & permissions | Medium | High | Phase 1 | Planned |
+| 3. Task decomposition | Large | High | Phase 1 | Planned |
+| 4. Cost control | Medium | **Critical** | Phase 1 | Partial (budget enforcement in daemon) |
+| 5. Context & memory | Medium | High | Phase 1 | Partial (memory table + hooks exist) |
+| 6. Specialized roles | Medium | Medium | Phases 2, 3, 5 | **Partial** (strategy-advisor role added) |
+| 7. Scheduling & automation | Medium | High | Phases 1, 3 | **DONE** |
+| 8. Observability | Medium | Medium | Phase 1 | Partial (agent events, analytics tab) |
+| 9. Multi-instance | Large | Low (until network grows) | All | Planned |
 
-**Recommended order:** 1 → 4 → 2 → 5 → 3 → 8 → 7 → 6 → 9
+**Recommended order:** ~~1 → 4 → 2 → 5 → 3 → 8 → 7 → 6 → 9~~
 
-Phase 1 and 4 are the critical path — nothing works without an execution engine, and nothing is safe without budget enforcement. Phase 2 (permissions) is essential before running agents on real code. Context injection (Phase 5) dramatically improves agent quality for minimal effort. Everything else builds on these foundations.
+Phases 1 and 7 are complete. Next priorities: 4 (full cost control) → 2 (permissions) → 5 (context/memory) → 3 (task decomposition) → 8 (observability) → 6 (remaining roles) → 9 (multi-instance).
 
 ---
 

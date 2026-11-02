@@ -442,7 +442,7 @@ pub(super) async fn handler_contribute_result(
                     .db
                     .grant_credit(
                         operator_id,
-                        payload.block_id as i32,
+                        payload.block_id,
                         1000,
                         "prime_discovered",
                     )
@@ -469,7 +469,7 @@ pub(super) async fn handler_contribute_result(
             .db
             .grant_credit(
                 operator_id,
-                payload.block_id as i32,
+                payload.block_id,
                 credit,
                 "browser_block_completed",
             )

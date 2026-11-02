@@ -202,6 +202,13 @@ impl Database {
         Ok(())
     }
 
+    /// Delete metric samples older than `days` days.
+    ///
+    /// **Superseded by partition maintenance** (migration 063): when
+    /// `metric_samples` is range-partitioned, retention is handled by
+    /// `maintain_metric_partitions()` which drops entire weekly partitions
+    /// instead of issuing expensive row-level DELETEs.  The dashboard
+    /// background loop skips this method when partitioning is active.
     pub async fn prune_metric_samples(&self, days: i64) -> Result<u64> {
         if Self::timescaledb_enabled() {
             return Ok(0);
@@ -212,6 +219,37 @@ impl Database {
                 .execute(&self.pool)
                 .await?;
         Ok(result.rows_affected())
+    }
+
+    /// Call the `maintain_metric_partitions()` SQL function to create upcoming
+    /// weekly partitions and drop expired ones.
+    ///
+    /// This replaces the old `prune_metric_samples()` DELETE for partitioned
+    /// deployments.  Should be called hourly from the dashboard background loop.
+    ///
+    /// Returns `true` if partitioning is active (the function exists), `false`
+    /// if it does not (pre-063 schema).
+    pub async fn maintain_metric_partitions(&self) -> Result<bool> {
+        // Check whether the maintenance function exists (i.e. migration 063 has run)
+        let exists: bool = sqlx::query_scalar(
+            "SELECT EXISTS (
+                SELECT 1 FROM pg_proc p
+                JOIN pg_namespace n ON n.oid = p.pronamespace
+                WHERE p.proname = 'maintain_metric_partitions'
+                  AND n.nspname = 'public'
+            )",
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        if !exists {
+            return Ok(false);
+        }
+
+        sqlx::query("SELECT maintain_metric_partitions()")
+            .execute(&self.pool)
+            .await?;
+        Ok(true)
     }
 
     pub async fn prune_metric_rollups(&self, days: i64) -> Result<u64> {

@@ -12,7 +12,7 @@ Team-facing AI orchestration: Discord dispatch, kanban tracking, multi-model rou
 
 - **AI Engine**: Fully operational OODA loop managing search campaigns autonomously
 - **Agent System**: `src/agent.rs` (1,387 lines) — Claude Code CLI subprocess spawning with budgets, permissions, task hierarchies
-- **Dashboard**: REST API with 15 route modules, WebSocket for live updates
+- **Dashboard**: REST API with 22 route modules, WebSocket for live updates
 - **No team orchestration layer**: No Discord integration, no kanban board, no multi-model routing, no automated web research
 
 ---

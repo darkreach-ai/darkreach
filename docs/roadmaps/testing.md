@@ -6,12 +6,57 @@ Phased plan to expand darkreach from 100 algorithm unit tests to a comprehensive
 
 | Phase | Focus | New Tests | Cumulative | Status |
 |-------|-------|-----------|------------|--------|
-| 0 | Quick wins — unit tests for untested modules | 77 | 177 | **Done** |
+| 0 | Quick wins -- unit tests for untested modules | 77 | 177 | **Done** |
 | 1 | Infrastructure unit tests + CI pipeline | 71 | 248 | **Done** |
 | 2 | Integration tests (DB, API, CLI) | 53 | 301 | **Done** |
 | 3 | Frontend test foundation | 86 | 387 | **Done** |
 | 4 | Property-based + benchmark tests | 29 | 416 | **Done** |
 | 5 | E2E tests + security tests | 39 | 455 | **Done** |
+
+### Actual Test Count (Feb 2026)
+
+The codebase has grown well beyond the original roadmap targets:
+
+| Category | `#[test]` count | Location |
+|----------|----------------|----------|
+| **Rust unit tests** (src/) | **1,230** | 71 files across engine, server, ML, project, DB modules |
+| **Rust integration tests** (tests/) | **115** | 10 test files (CLI, DB, API, operator, platform, property, security) |
+| **Total Rust tests** | **1,345** | -- |
+
+**Top contributors by test count:**
+- `src/verify.rs` -- 107 tests (3-tier verification pipeline)
+- `src/lib.rs` -- 58 tests (core utilities, MR pre-screening, Frobenius test)
+- `src/project/orchestration.rs` -- 54 tests (phase state machine, auto-strategy)
+- `src/ai_engine.rs` -- 49 tests (OODA loop, scoring model, drift detection)
+- `src/project/cost.rs` -- 45 tests (power-law cost estimation)
+- `src/sieve.rs` -- 39 tests (sieve, Montgomery multiplication, wheel factorization)
+- `src/project/config.rs` -- 38 tests (TOML configuration parsing)
+- `src/agent.rs` -- 35 tests (subprocess management, context injection)
+- `src/events.rs` -- 35 tests (event bus, notification system)
+- `src/p1.rs` -- 32 tests (Pollard P-1 factoring)
+- `src/project/tests.rs` -- 32 tests (project module integration)
+- `src/proof.rs` -- 30 tests (Pocklington, Morrison, BLS proofs)
+
+**ML Engine tests** (59 tests across `src/ml/`):
+- `src/ml/node_intel.rs` -- 13 tests (anomaly detection, affinity learning)
+- `src/ml/bandits.rs` -- 10 tests (Thompson Sampling form selection)
+- `src/ml/bayesopt.rs` -- 10 tests (Bayesian optimization for sieve/block tuning)
+- `src/ml/gp_cost.rs` -- 9 tests (Gaussian Process cost prediction)
+- `src/ml/mod.rs` -- 6 tests (ml_blend, MlEngine defaults)
+- `src/ml/registry.rs` -- 6 tests (shadow mode, model promotion)
+- `src/ml/features.rs` -- 5 tests (feature engineering, NodeClass)
+
+**Integration test files** (tests/):
+- `tests/cli_tests.rs` -- 16 tests (CLI binary execution)
+- `tests/platform_tests.rs` -- 28 tests (platform behavior)
+- `tests/operator_config_tests.rs` -- 24 tests (operator configuration)
+- `tests/operator_update_tests.rs` -- 28 tests (operator updates)
+- `tests/operator_integration_tests.rs` -- 8 tests (operator integration)
+- `tests/property_tests.rs` -- 10 tests (proptest invariants)
+- `tests/security_tests.rs` -- 1+ tests (SQL injection, CORS, body limits)
+- `tests/db_integration.rs` -- DB integration tests
+- `tests/api_integration.rs` -- API integration tests
+- `tests/mock_coordinator.rs` -- Test utility
 
 ---
 
@@ -585,19 +630,23 @@ frontend-e2e:
 
 ## Summary
 
-### Final Test Inventory (~289 tests)
+### Final Test Inventory (1,345+ Rust tests)
 
 | Category | Count |
 |----------|-------|
-| Rust unit tests (existing) | 100 |
-| Rust unit tests (new, Phase 0-1) | ~55 |
-| Rust integration tests (Phase 2) | ~55 |
-| Rust property tests (Phase 4) | ~10 |
-| Rust security tests (Phase 5) | ~5 |
-| Criterion benchmarks (Phase 4) | ~15 |
-| Frontend unit tests (Phase 3) | ~38 |
-| Frontend E2E tests (Phase 5) | ~10 |
-| **Total** | **~289** |
+| Rust unit tests (src/) | 1,230 |
+| Rust integration + property + security tests (tests/) | 115 |
+| Criterion benchmarks (benches/) | ~15 |
+| Frontend unit tests (vitest) | ~38 |
+| Frontend E2E tests (playwright) | ~10 |
+| **Total** | **~1,400+** |
+
+The test count has grown ~5x beyond the original roadmap target of 289. Major growth areas:
+- **AI engine** (49 tests) and **ML engine** (59 tests) added with Phases 1-4
+- **Verification pipeline** expanded to 107 tests
+- **Project module** grew to 125+ tests across config, cost, orchestration
+- **Operator/platform tests** added (80+ tests across 4 new test files)
+- **New engine modules** (ecm, batch_gcd, aurifeuillean, pietrzak, pipeline) added ~60+ tests
 
 ### Dependencies Added
 
@@ -614,8 +663,8 @@ frontend-e2e:
 
 ```
 test.yml
-├── rust-unit          # cargo test --lib (~155 tests, <2s)
-├── rust-integration   # cargo test --test '*' (~55 tests, postgres service)
+├── rust-unit          # cargo test --lib (~1,230 tests)
+├── rust-integration   # cargo test --test '*' (~115 tests, postgres service)
 ├── rust-clippy        # cargo clippy -- -D warnings
 ├── rust-fmt           # cargo fmt --check
 ├── rust-bench-check   # cargo bench --no-run

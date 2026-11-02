@@ -33,9 +33,9 @@
               ▼                  ▼                   ▼
      darkreach.ai       app.darkreach.ai     api.darkreach.ai
      ┌──────────┐       ┌──────────────┐     ┌──────────────┐
-     │  CDN /   │       │    Nginx     │     │    Nginx     │
-     │  Static  │       │  (reverse    │     │  (reverse    │
-     │  Export  │       │   proxy)     │     │   proxy)     │
+     │  Vercel  │       │    Nginx     │     │    Nginx     │
+     │  (Next.js│       │  (reverse    │     │  (reverse    │
+     │  website)│       │   proxy)     │     │   proxy)     │
      └──────────┘       └──────┬───────┘     └──────┬───────┘
                                │                     │
                                └──────┬──────────────┘
@@ -147,7 +147,7 @@ Developer machine
     │
     ├── cargo build --release          (engine + server)
     ├── cd frontend && npm run build   (dashboard)
-    └── cargo test                     (1,235 tests)
+    └── cargo test                     (1,325 tests, 19 ignored)
 ```
 
 ### CI (GitHub Actions)
@@ -445,6 +445,12 @@ Plus volunteer-contributed compute (free additional capacity).
 - [ ] Multi-region coordinator (for latency-sensitive operator API)
 - [ ] Database HA (hot standby or Supabase Pro multi-AZ)
 - [ ] SOC 2 compliance assessment (if institutional customers)
+
+---
+
+## Agent Daemon
+
+The `agent_daemon` (`src/agent_daemon.rs`) runs as a background service within the coordinator process. It executes scheduled agent tasks, manages agent budgets, and processes the agent task queue. Works in conjunction with `src/schedule.rs` (scheduled automation) and `src/service.rs` (service lifecycle management). Structured logging is provided by `src/log_layer.rs` (tracing integration).
 
 ---
 

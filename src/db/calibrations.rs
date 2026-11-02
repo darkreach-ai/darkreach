@@ -20,7 +20,7 @@ impl Database {
             "SELECT form, coeff_a, coeff_b, sample_count, avg_error_pct, fitted_at
              FROM cost_calibration ORDER BY form",
         )
-        .fetch_all(&self.pool)
+        .fetch_all(&self.read_pool)
         .await?;
         Ok(rows)
     }
@@ -32,7 +32,7 @@ impl Database {
              FROM cost_calibration WHERE form = $1",
         )
         .bind(form)
-        .fetch_optional(&self.pool)
+        .fetch_optional(&self.read_pool)
         .await?;
         Ok(row)
     }

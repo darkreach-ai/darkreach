@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# DEPRECATED: Use scripts/dev-caddy.sh instead (Caddy-based with hot-reload).
+echo "WARNING: scripts/dev-down.sh is deprecated. Use scripts/dev-caddy.sh instead." >&2
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

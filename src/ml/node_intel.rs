@@ -53,6 +53,8 @@ pub struct NodeProfile {
     pub throughput_var: HashMap<String, f64>,
     /// Per-form failure rate (failures / total blocks).
     pub failure_rate: HashMap<String, f64>,
+    /// Per-form block count (for correct online mean calculation).
+    pub form_block_count: HashMap<String, u64>,
     /// Total blocks completed across all forms.
     pub blocks_completed: u64,
 }
@@ -65,6 +67,7 @@ impl NodeProfile {
             avg_throughput: HashMap::new(),
             throughput_var: HashMap::new(),
             failure_rate: HashMap::new(),
+            form_block_count: HashMap::new(),
             blocks_completed: 0,
         }
     }
@@ -238,8 +241,15 @@ impl NodeIntelligence {
             .or_insert_with(|| NodeProfile::new(node_id));
         profile.blocks_completed += 1;
 
+        // Increment per-form block count (used for correct online mean below).
+        let form_count = profile
+            .form_block_count
+            .entry(form.to_string())
+            .or_insert(0);
+        *form_count += 1;
+
         // Update per-form average throughput (online mean)
-        let count = profile.blocks_completed as f64;
+        let count = *form_count as f64;
         let avg = profile
             .avg_throughput
             .entry(form.to_string())

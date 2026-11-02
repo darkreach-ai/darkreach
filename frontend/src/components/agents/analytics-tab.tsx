@@ -52,7 +52,7 @@ function DailyCostChart({ data }: { data: DailyCostRow[] }) {
           <XAxis dataKey="date" tick={{ fontSize: 10 }} />
           <YAxis tick={{ fontSize: 10 }} tickFormatter={(v: number) => `$${v.toFixed(2)}`} />
           <Tooltip
-            formatter={(value: number) => `$${Number(value).toFixed(4)}`}
+            formatter={(value: number | undefined) => `$${Number(value ?? 0).toFixed(4)}`}
             contentStyle={{ fontSize: 11 }}
           />
           <Legend wrapperStyle={{ fontSize: 11 }} />

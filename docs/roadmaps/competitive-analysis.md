@@ -145,7 +145,8 @@ GPU variants use OpenCL. Framework handles threading, I/O, factor reporting.
 - Web dashboard, WebSocket updates, search job management
 - AI agent system for autonomous search management
 - Primality certificates (JSONB) and 3-tier verification pipeline
-- ~443 tests passing
+- ~1325 tests passing (19 ignored)
+- ML engine: Thompson Sampling bandits, Gaussian Process cost model, Bayesian optimization, node intelligence (`src/ml/`)
 
 ### What darkreach is missing (ordered by impact)
 

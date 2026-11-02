@@ -48,15 +48,15 @@ darkreach hunts special-form prime numbers at scale. It combines GMP-powered arb
 │ 12 search    │ Axum REST    │ Next.js 16   │ N workers  │
 │ forms        │ API + WS     │ React 19     │ heartbeat  │
 │ GMP/rug      │ PostgreSQL   │ Tailwind 4   │ block      │
-│ rayon        │ (Supabase)   │ shadcn/ui    │ claiming   │
-│ PFGW/GWNUM   │ 15 route     │ Recharts     │ auto-      │
-│ proofs       │ modules      │ Realtime     │ restart    │
+│ rayon        │ 22 route     │ shadcn/ui    │ claiming   │
+│ PFGW/GWNUM   │ modules      │ Recharts     │ auto-      │
+│ proofs       │ ML engine    │ Realtime     │ restart    │
 └──────────────┴──────────────┴──────────────┴────────────┘
 ```
 
 **Engine** — Rust algorithms: sieve → parallel primality test → deterministic proof → log. Montgomery multiplication, wheel factorization, BSGS sieving, Pollard P−1 filtering. External tool acceleration via PFGW (50-100x speedup), GWNUM FFI, PRST, and FLINT.
 
-**Server** — Axum HTTP/WebSocket server with 15 route modules. PostgreSQL (Supabase) for prime records, fleet coordination, agent tasks, and project management. `FOR UPDATE SKIP LOCKED` work block claiming.
+**Server** — Axum HTTP/WebSocket server with 22 route modules. PostgreSQL for prime records, fleet coordination, agent tasks, and project management. `FOR UPDATE SKIP LOCKED` work block claiming.
 
 **Frontend** — Next.js static export with 14 pages, 50+ components, and 18 custom hooks. Supabase for data + auth + realtime notifications. WebSocket for fleet coordination.
 
@@ -136,13 +136,15 @@ darkreach --database-url $DATABASE_URL dashboard --port 7001 --static-dir fronte
 - **3-tier verification** — deterministic proof → BPSW + Miller-Rabin → PFGW cross-check
 - **Project campaigns** — multi-phase discovery campaigns with cost tracking and record comparison
 - **AI agent infrastructure** — autonomous search management with budgets and scheduling
+- **ML engine** — Thompson Sampling form selection, GP cost prediction, Bayesian search optimization, node intelligence
 - **Primality certificates** — machine-verifiable proof artifacts for each discovery
 - **Volunteer compute** — public worker registration with release channels and auto-update
+- **Public website** — darkreach.ai with docs, blog, research, leaderboard, operator onboarding
 
 ## Testing
 
 ```bash
-# Unit tests (449 passing)
+# Unit + integration tests (1325 passing, 19 ignored)
 cargo test
 
 # Integration tests (requires PostgreSQL)
@@ -160,12 +162,13 @@ cd frontend && npm run test:e2e      # Playwright
 ## Project Structure
 
 ```
-src/                    Rust engine + server (79 modules)
+src/                    Rust engine + server (90+ modules)
 ├── 12 search forms     factorial, palindromic, kbn, twin, ...
-├── core primitives     sieve, proof, verify, certificate, p1
+├── core primitives     sieve, proof, verify, certificate, p1, ecm, gerbicz, batch_gcd
 ├── external tools      pfgw, gwnum, prst, flint
-├── dashboard/          Axum web server (15 route modules)
-├── db/                 PostgreSQL layer (14 submodules)
+├── ML/AI               ai_engine, cost_model, calibration, strategy, agent_daemon
+├── dashboard/          Axum web server (22 route modules)
+├── db/                 PostgreSQL layer (24 submodules)
 └── project/            Campaign management (6 submodules)
 
 frontend/               Next.js 16 dashboard
@@ -180,11 +183,15 @@ deploy/                 Ops infrastructure
 ├── terraform/          Infrastructure-as-Code
 └── grafana/            Monitoring dashboard
 
+website/                Public website (darkreach.ai, Vercel)
+├── src/app/            ~22 pages (landing, docs, blog, research, operators)
+└── vercel.json         Deployment config
+
 supabase/               Database schema
-└── migrations/         24 PostgreSQL migrations
+└── migrations/         64 PostgreSQL migrations
 
 tests/                  Integration tests + benchmarks
-docs/                   Research + 14 domain roadmaps
+docs/                   Research + 20 domain roadmaps
 ```
 
 ## CI / CD

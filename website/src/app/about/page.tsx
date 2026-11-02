@@ -6,6 +6,7 @@ import { ValuesGrid } from "@/components/values-grid";
 import { WaitlistCTA } from "@/components/waitlist-cta";
 import { ScrollAnimate } from "@/components/scroll-animate";
 import { Github } from "lucide-react";
+import { techStack } from "@/lib/tech-stack";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -13,39 +14,6 @@ export const metadata: Metadata = {
   description:
     "The mission, timeline, and technology behind darkreach — the world's biggest supercomputer.",
 };
-
-const techStack = [
-  {
-    name: "Rust",
-    description:
-      "Zero-cost abstractions, memory safety, and fearless concurrency for the engine and server.",
-  },
-  {
-    name: "GMP (rug)",
-    description:
-      "GNU Multiple Precision Arithmetic — the gold standard for arbitrary-precision integer math.",
-  },
-  {
-    name: "PFGW / GWNUM",
-    description:
-      "Specialized number theory software for 50-100x acceleration on large primality tests.",
-  },
-  {
-    name: "PostgreSQL",
-    description:
-      "Relational database for primes, workers, jobs, and work distribution with row-level locking.",
-  },
-  {
-    name: "Axum",
-    description:
-      "Async Rust web framework for the coordinator REST API and WebSocket server.",
-  },
-  {
-    name: "Next.js",
-    description:
-      "React framework for the dashboard (app.darkreach.ai) and website (darkreach.ai).",
-  },
-];
 
 export default function AboutPage() {
   return (

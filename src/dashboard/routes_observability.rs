@@ -281,7 +281,11 @@ pub(super) async fn handler_logs(
                 Json(serde_json::json!({ "logs": rows })).into_response()
             }
         }
-        Err(e) => Json(serde_json::json!({ "error": e.to_string(), "logs": [] })).into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "error": e.to_string() })),
+        )
+            .into_response(),
     }
 }
 
@@ -446,8 +450,12 @@ pub(super) async fn handler_top_workers(
     let limit = q.limit.unwrap_or(10).clamp(1, 50);
     let window = q.window_minutes.unwrap_or(30).clamp(5, 240);
     match state.db.get_top_workers_by_rate(window, limit).await {
-        Ok(rows) => Json(serde_json::json!({ "workers": rows })),
-        Err(e) => Json(serde_json::json!({ "workers": [], "error": e.to_string() })),
+        Ok(rows) => Json(serde_json::json!({ "workers": rows })).into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "error": e.to_string() })),
+        )
+            .into_response(),
     }
 }
 

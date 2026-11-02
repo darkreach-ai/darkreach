@@ -2,6 +2,8 @@
 
 **Goal:** Extend darkreach's distributed compute model beyond CPU-only to support GPU compute, distributed storage, network relay, and commercial compute marketplace — all managed by the AI engine's OODA loop. See [Path C](path-c.md) for the hybrid platform strategy.
 
+> **Status (Feb 2026):** `src/resource.rs` exists with resource type definitions. `src/db/resources.rs` provides database queries for resource pooling. Route module `src/dashboard/routes_resources.rs` exposes the resource API. Migration 035 (`resource_pooling.sql`) and 043 (`resource_contributions.sql`) provide the DB schema. Phase 1 (resource model + extended registration) is in progress.
+
 ---
 
 ## Context

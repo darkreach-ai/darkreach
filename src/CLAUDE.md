@@ -28,8 +28,17 @@ src/
 ├── sieve.rs                   # Sieve, Montgomery mult, wheel factorization, BitSieve
 ├── proof.rs                   # Pocklington, Morrison, BLS proofs
 ├── verify.rs                  # 3-tier verification pipeline
+├── classify.rs                # Prime classification and form detection
 ├── certificate.rs             # PrimalityCertificate enum
 ├── p1.rs                      # Pollard P−1 factoring
+├── ecm.rs                     # Elliptic curve method factoring
+├── gerbicz.rs                 # Gerbicz error checking
+├── batch_gcd.rs               # Batch GCD for factor elimination
+├── bignum.rs                  # BigNum utilities
+├── aurifeuillean.rs           # Aurifeuillean factorizations
+├── pietrzak.rs                # Pietrzak VDF proofs
+├── pipeline.rs                # Multi-stage work block pipeline
+├── search_params.rs           # Search parameter types
 │
 ├── [External Tool Integrations]
 ├── pfgw.rs                    # PFGW subprocess (50-100x speedup)
@@ -38,39 +47,60 @@ src/
 ├── flint.rs                   # FLINT integration (feature-gated)
 │
 ├── [Server Infrastructure]
-├── dashboard/                 # Axum web server (15 route modules + WebSocket)
+├── dashboard/                 # Axum web server (22 route modules + WebSocket)
 │   ├── mod.rs                 # Router setup, AppState, middleware, static file serving
+│   ├── middleware_auth.rs     # Authentication middleware
+│   ├── openapi.rs             # OpenAPI spec generation
+│   ├── response.rs            # Standardized API responses
 │   ├── websocket.rs           # WebSocket handler (2s push interval)
 │   ├── routes_agents.rs       # /api/agents/* — agent tasks, budgets, templates
+│   ├── routes_audit.rs        # /api/audit/* — audit log
+│   ├── routes_auth.rs         # /api/auth/* — authentication
+│   ├── routes_contribute.rs   # /api/contribute/* — contribution management
 │   ├── routes_docs.rs         # /api/docs/* — documentation serving
-│   ├── routes_fleet.rs        # /api/fleet/* — fleet overview
+│   ├── routes_fleet.rs        # /api/fleet/* — fleet overview (backward-compat)
 │   ├── routes_health.rs       # /api/health — health check, readiness
 │   ├── routes_jobs.rs         # /api/search_jobs/* — job CRUD, work blocks
 │   ├── routes_notifications.rs # /api/notifications/* — push notifications
 │   ├── routes_observability.rs # /api/observability/* — metrics, logs, charts
+│   ├── routes_operator.rs     # /api/v1/operators/*, /api/v1/nodes/* — operator API
+│   ├── routes_prime_verification.rs # /api/prime-verification/* — verification queue
+│   ├── routes_primes.rs       # /api/primes/* — prime record queries
 │   ├── routes_projects.rs     # /api/projects/* — project management
 │   ├── routes_releases.rs     # /api/releases/* — worker release channels
+│   ├── routes_resources.rs    # /api/resources/* — resource pool management
+│   ├── routes_schedules.rs    # /api/schedules/* — scheduled tasks
 │   ├── routes_searches.rs     # /api/searches/* — search management
+│   ├── routes_sieve.rs        # /api/sieve/* — shared sieve data
 │   ├── routes_status.rs       # /api/status — coordinator status
-│   ├── routes_verify.rs       # /api/verify — prime re-verification
-│   ├── routes_operator.rs     # /api/v1/operators/*, /api/v1/nodes/* — operator API
-│   └── routes_workers.rs      # /api/workers/* — worker heartbeat, registration
+│   ├── routes_strategy.rs     # /api/strategy/* — AI strategy engine
+│   └── routes_verify.rs       # /api/verify — prime re-verification
 │
-├── db/                        # PostgreSQL via sqlx
+├── db/                        # PostgreSQL via sqlx (23 submodules)
 │   ├── mod.rs                 # Database struct, connection pool, PrimeRecord types
 │   ├── primes.rs              # Prime record CRUD (insert, query, filter, verify)
 │   ├── workers.rs             # Worker heartbeat, registration, pruning
 │   ├── jobs.rs                # Search job lifecycle, work block coordination
 │   ├── agents.rs              # Agent tasks, events, budgets, templates
-│   ├── memory.rs              # Agent memory key-value store
-│   ├── roles.rs               # Agent role configuration
-│   ├── schedules.rs           # Agent schedule automation
-│   ├── projects.rs            # Multi-phase project management
+│   ├── ai_engine.rs           # AI engine state, decisions, snapshots
+│   ├── audit.rs               # Audit log entries
+│   ├── badges.rs              # Operator badge management
 │   ├── calibrations.rs        # Cost model calibration coefficients
-│   ├── records.rs             # World record tracking
+│   ├── commands.rs            # Node command queue
+│   ├── memory.rs              # Agent memory key-value store
 │   ├── observability.rs       # Metrics, logs, worker rates
+│   ├── operators.rs           # Operator account management, node registration
+│   ├── prime_verification.rs  # Verification queue management
+│   ├── projects.rs            # Multi-phase project management
+│   ├── records.rs             # World record tracking
 │   ├── releases.rs            # Worker release channels, adoption tracking
-│   └── operators.rs           # Operator account management, node registration
+│   ├── resources.rs           # Resource pool management
+│   ├── roles.rs               # Agent role configuration
+│   ├── schedules.rs           # Agent/task schedule automation
+│   ├── sieves.rs              # Shared sieve data
+│   ├── strategy.rs            # Strategy engine state
+│   ├── trust.rs               # Operator trust scoring
+│   └── user_profiles.rs       # User profile management
 │
 ├── project/                   # Campaign-style discovery management
 │   ├── mod.rs                 # Module re-exports
@@ -81,10 +111,24 @@ src/
 │   ├── records.rs             # World record tracking via t5k.org scraping
 │   └── tests.rs               # Unit tests for project module
 │
+├── ml/                        # ML engine
+│   ├── mod.rs                 # Module re-exports
+│   ├── bandits.rs             # Thompson Sampling multi-armed bandits
+│   ├── gp_cost.rs             # Gaussian Process cost model
+│   ├── bayesopt.rs            # Bayesian optimization for sieve/block tuning
+│   ├── node_intel.rs          # Node intelligence: affinity, capability profiling
+│   ├── registry.rs            # Model registry with shadow mode
+│   └── features.rs            # Feature extraction from search telemetry
+│
 ├── [Other Server Modules]
 ├── checkpoint.rs              # JSON checkpoint save/load (all 12 form variants)
 ├── search_manager.rs          # Search job lifecycle, block generation
 ├── agent.rs                   # AI agent infrastructure
+├── agent_daemon.rs            # Background agent daemon for autonomous operation
+├── ai_engine.rs               # Unified OODA decision loop
+├── strategy.rs                # Strategy engine for search optimization
+├── calibration.rs             # Runtime calibration for node capabilities
+├── cost_model.rs              # Data-fitted cost estimation
 ├── fleet.rs                   # In-memory worker registry (60s stale timeout)
 ├── pg_worker.rs               # PostgreSQL work claiming (FOR UPDATE SKIP LOCKED)
 ├── worker_client.rs           # HTTP client for workers → coordinator
@@ -93,6 +137,10 @@ src/
 ├── metrics.rs                 # System metrics (CPU, memory, disk)
 ├── prom_metrics.rs            # Prometheus metric export
 ├── operator.rs                # Operator node management
+├── resource.rs                # Resource management and allocation
+├── schedule.rs                # Cron-like scheduling for recurring tasks
+├── service.rs                 # Service lifecycle management
+├── log_layer.rs               # Structured logging layer
 └── progress.rs                # Atomic counters, background 30s reporter
 ```
 
@@ -158,18 +206,26 @@ Dashboard runs on configurable port (default 7001). Route modules are organized 
 |-------------|-----------|---------------|
 | `routes_health` | `/api/health` | Health check, readiness |
 | `routes_status` | `/api/status` | Coordinator status summary |
-| `routes_workers` | `/api/workers` | Worker CRUD, heartbeat, list |
-| `routes_fleet` | `/api/fleet` | Fleet overview (workers + searches) |
+| `routes_auth` | `/api/auth` | Authentication (login, session) |
+| `routes_primes` | `/api/primes` | Prime record queries |
+| `routes_fleet` | `/api/fleet` | Fleet overview (backward-compat) |
 | `routes_jobs` | `/api/search_jobs` | Job CRUD, work blocks, status |
 | `routes_searches` | `/api/searches` | Search management |
 | `routes_verify` | `/api/verify` | Prime re-verification |
+| `routes_prime_verification` | `/api/prime-verification` | Verification queue |
 | `routes_agents` | `/api/agents` | Agent tasks, budgets, memory, roles |
 | `routes_projects` | `/api/projects` | Project CRUD, phases, events |
 | `routes_docs` | `/api/docs` | Documentation list + content |
 | `routes_notifications` | `/api/notifications` | Push notification management |
 | `routes_observability` | `/api/observability` | Metrics, logs, charts |
 | `routes_releases` | `/api/releases` | Worker release channels |
-| `routes_volunteer` | `/api/volunteer` | Volunteer worker management |
+| `routes_operator` | `/api/v1/operators`, `/api/v1/nodes` | Operator + node management |
+| `routes_contribute` | `/api/contribute` | Contribution management |
+| `routes_resources` | `/api/resources` | Resource pool management |
+| `routes_schedules` | `/api/schedules` | Scheduled tasks |
+| `routes_sieve` | `/api/sieve` | Shared sieve data |
+| `routes_strategy` | `/api/strategy` | AI strategy engine |
+| `routes_audit` | `/api/audit` | Audit log |
 | `websocket` | `/ws` | Real-time push (2s interval) |
 
 ### Database (db/)

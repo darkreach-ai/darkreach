@@ -452,6 +452,45 @@ fn template_files_parse() {
 }
 
 #[test]
+fn campaign_files_parse() {
+    let campaigns_dir = std::path::Path::new("projects/campaigns");
+    if !campaigns_dir.exists() {
+        return; // skip if campaigns not yet created
+    }
+    for entry in std::fs::read_dir(campaigns_dir).unwrap() {
+        let path = entry.unwrap().path();
+        if path.extension().map_or(false, |e| e == "toml") {
+            let content = std::fs::read_to_string(&path).unwrap();
+            let result = parse_toml(&content);
+            assert!(
+                result.is_ok(),
+                "Campaign {:?} failed to parse: {:?}",
+                path.file_name().unwrap(),
+                result.err()
+            );
+            let config = result.unwrap();
+            assert!(!config.project.name.is_empty());
+            assert!(!config.project.form.is_empty());
+            // Campaign files should have explicit phases (not auto_strategy)
+            assert!(
+                !config.strategy.phases.is_empty(),
+                "Campaign {:?} should have explicit phases",
+                path.file_name().unwrap()
+            );
+            // Each phase should have search_params with search_type
+            for phase in &config.strategy.phases {
+                assert!(
+                    phase.search_params.get("search_type").is_some(),
+                    "Phase '{}' in {:?} missing search_type",
+                    phase.name,
+                    path.file_name().unwrap()
+                );
+            }
+        }
+    }
+}
+
+#[test]
 fn extract_range_from_params_variants() {
     let params = serde_json::json!({"start": 100, "end": 500});
     assert_eq!(extract_range_from_params(&params), (100, 500));

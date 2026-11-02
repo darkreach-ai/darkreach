@@ -37,7 +37,7 @@ pub(super) async fn handler_api_agent_tasks(
     State(state): State<Arc<AppState>>,
     Query(params): Query<AgentTasksQuery>,
 ) -> impl IntoResponse {
-    let limit = params.limit.unwrap_or(100);
+    let limit = params.limit.unwrap_or(100).min(1000);
     match state
         .db
         .get_agent_tasks(params.status.as_deref(), limit)
@@ -219,7 +219,7 @@ pub(super) async fn handler_api_agent_events(
     State(state): State<Arc<AppState>>,
     Query(params): Query<AgentEventsQuery>,
 ) -> impl IntoResponse {
-    let limit = params.limit.unwrap_or(100);
+    let limit = params.limit.unwrap_or(100).min(1000);
     match state.db.get_agent_events(params.task_id, limit).await {
         Ok(events) => Json(serde_json::json!({ "events": events })).into_response(),
         Err(e) => (
@@ -518,6 +518,236 @@ pub(super) async fn handler_api_agent_task_children(
 ) -> impl IntoResponse {
     match state.db.get_child_tasks(id).await {
         Ok(children) => Json(serde_json::json!(children)).into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": e.to_string()})),
+        )
+            .into_response(),
+    }
+}
+
+// --- Subtask endpoints ---
+
+#[derive(Deserialize, utoipa::ToSchema)]
+pub(super) struct CreateSubtaskPayload {
+    title: String,
+    #[serde(default)]
+    description: String,
+    #[serde(default = "default_subtask_priority")]
+    priority: i32,
+    #[serde(default = "default_subtask_model")]
+    agent_model: String,
+}
+
+fn default_subtask_priority() -> i32 {
+    2
+}
+
+fn default_subtask_model() -> String {
+    "claude-sonnet-4-20250514".to_string()
+}
+
+#[utoipa::path(post, path = "/api/agents/tasks/{id}/subtasks", tag = "agents", security(("bearer_jwt" = [])),
+    params(("id" = i64, Path, description = "Parent task ID")),
+    request_body = serde_json::Value,
+    responses(
+        (status = 201, description = "Child task created"),
+        (status = 401, description = "Authentication required"),
+        (status = 404, description = "Parent task not found"),
+        (status = 500, description = "Internal server error"),
+    )
+)]
+/// POST /api/agents/tasks/{id}/subtasks -- Create a child task under the given parent.
+pub(super) async fn handler_api_agent_task_create_subtask(
+    _admin: RequireAdmin,
+    State(state): State<Arc<AppState>>,
+    AxumPath(parent_id): AxumPath<i64>,
+    Json(payload): Json<CreateSubtaskPayload>,
+) -> impl IntoResponse {
+    // First verify the parent task exists (avoids fragile string matching on errors)
+    match state.db.get_agent_task(parent_id).await {
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(serde_json::json!({"error": format!("Parent task {} not found", parent_id)})),
+            )
+                .into_response();
+        }
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": e.to_string()})),
+            )
+                .into_response();
+        }
+        Ok(Some(_)) => {} // Parent exists, proceed
+    }
+
+    match state
+        .db
+        .create_child_task(
+            parent_id,
+            &payload.title,
+            &payload.description,
+            payload.priority,
+            &payload.agent_model,
+        )
+        .await
+    {
+        Ok(child_id) => {
+            let _ = state
+                .db
+                .insert_agent_event(
+                    Some(child_id),
+                    "created",
+                    None,
+                    &format!("Subtask created under parent {}", parent_id),
+                    None,
+                )
+                .await;
+            (
+                StatusCode::CREATED,
+                Json(serde_json::json!({"ok": true, "task_id": child_id, "parent_task_id": parent_id})),
+            )
+                .into_response()
+        }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": e.to_string()})),
+        )
+            .into_response(),
+    }
+}
+
+#[utoipa::path(get, path = "/api/agents/tasks/{id}/subtasks", tag = "agents", security(("bearer_jwt" = [])),
+    params(("id" = i64, Path, description = "Parent task ID")),
+    responses(
+        (status = 200, description = "List of child tasks"),
+        (status = 401, description = "Authentication required"),
+        (status = 500, description = "Internal server error"),
+    )
+)]
+/// GET /api/agents/tasks/{id}/subtasks -- List all child tasks of a parent.
+pub(super) async fn handler_api_agent_task_list_subtasks(
+    _admin: RequireAdmin,
+    State(state): State<Arc<AppState>>,
+    AxumPath(parent_id): AxumPath<i64>,
+) -> impl IntoResponse {
+    match state.db.get_child_tasks(parent_id).await {
+        Ok(children) => {
+            Json(serde_json::json!({"subtasks": children, "parent_task_id": parent_id}))
+                .into_response()
+        }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": e.to_string()})),
+        )
+            .into_response(),
+    }
+}
+
+#[derive(Deserialize, utoipa::ToSchema)]
+pub(super) struct CreateFromTemplatePayload {
+    template_name: String,
+    parent_task_id: Option<i64>,
+    #[serde(default = "default_template_variables")]
+    variables: serde_json::Value,
+}
+
+fn default_template_variables() -> serde_json::Value {
+    serde_json::json!({})
+}
+
+#[utoipa::path(post, path = "/api/agents/tasks/from-template", tag = "agents", security(("bearer_jwt" = [])),
+    request_body = serde_json::Value,
+    responses(
+        (status = 201, description = "Tasks created from template"),
+        (status = 400, description = "Template not found or invalid"),
+        (status = 401, description = "Authentication required"),
+        (status = 500, description = "Internal server error"),
+    )
+)]
+/// POST /api/agents/tasks/from-template -- Create tasks from a named template.
+pub(super) async fn handler_api_agent_tasks_from_template(
+    _admin: RequireAdmin,
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<CreateFromTemplatePayload>,
+) -> impl IntoResponse {
+    // First verify the template exists (avoids fragile string matching on errors)
+    match state.db.get_template_by_name(&payload.template_name).await {
+        Ok(None) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": format!("Template '{}' not found", payload.template_name)})),
+            )
+                .into_response();
+        }
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": e.to_string()})),
+            )
+                .into_response();
+        }
+        Ok(Some(_)) => {} // Template exists, proceed
+    }
+
+    // If a parent_task_id is provided, verify it exists too
+    if let Some(pid) = payload.parent_task_id {
+        match state.db.get_agent_task(pid).await {
+            Ok(None) => {
+                return (
+                    StatusCode::NOT_FOUND,
+                    Json(serde_json::json!({"error": format!("Parent task {} not found", pid)})),
+                )
+                    .into_response();
+            }
+            Err(e) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({"error": e.to_string()})),
+                )
+                    .into_response();
+            }
+            Ok(Some(_)) => {}
+        }
+    }
+
+    match state
+        .db
+        .create_tasks_from_template(
+            &payload.template_name,
+            payload.parent_task_id,
+            &payload.variables,
+        )
+        .await
+    {
+        Ok(task_ids) => {
+            let _ = state
+                .db
+                .insert_agent_event(
+                    payload.parent_task_id,
+                    "created",
+                    None,
+                    &format!(
+                        "Template '{}' instantiated: {} tasks created",
+                        payload.template_name,
+                        task_ids.len()
+                    ),
+                    None,
+                )
+                .await;
+            (
+                StatusCode::CREATED,
+                Json(serde_json::json!({
+                    "ok": true,
+                    "template_name": payload.template_name,
+                    "task_ids": task_ids,
+                    "parent_task_id": payload.parent_task_id,
+                })),
+            )
+                .into_response()
+        }
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({"error": e.to_string()})),

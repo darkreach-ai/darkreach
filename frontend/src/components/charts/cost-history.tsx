@@ -121,13 +121,12 @@ export function CostHistoryChart({ slug, apiBase }: CostHistoryChartProps) {
               border: "1px solid var(--border)",
               borderRadius: 6,
             }}
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            formatter={(value: any, name: any) => {
-              const v = Number(value);
+            formatter={(value: number | undefined, name: string | undefined) => {
+              const v = Number(value ?? 0);
               if (name === "cost") return [`$${v.toFixed(2)}`, "Cost"];
               return [`${v.toFixed(1)} hrs`, "Core-hours"];
             }}
-            labelFormatter={(label: any) => String(label)}
+            labelFormatter={(label) => String(label)}
           />
           <Area
             type="monotone"

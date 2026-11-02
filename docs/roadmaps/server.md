@@ -2,7 +2,9 @@
 
 Backend infrastructure: work pipeline, checkpoints, distributed coordination, verification.
 
-**Key files:** `src/{dashboard,db,checkpoint,progress,network,operator_client,main}.rs`
+**Key files:** `src/{dashboard,db,checkpoint,progress,fleet,pg_worker,main}.rs`
+
+> **Status (Feb 2026):** The dashboard now has 22 route modules (up from 15). New server modules include `agent_daemon.rs` (background agent task runner), `schedule.rs` (scheduled automation), `service.rs` (service lifecycle), and `log_layer.rs` (structured logging via tracing). The DB layer has 24 submodules in `src/db/`. There are 64 PostgreSQL migrations.
 
 > **Architecture note (Feb 2026):** SearchManager has been replaced by PG-backed search jobs (`search_jobs` + `work_blocks` tables). DeploymentManager has been removed (deployment via SSH removed). All coordination is now PG-only — no in-memory fleet, no HTTP coordinator heartbeat.
 

@@ -1,16 +1,11 @@
 import { notFound } from "next/navigation";
-import { blogPosts } from "@/lib/blog-posts";
+import { getAllPosts, getPostBySlug } from "@/lib/blog-posts";
 import { BlogPostLayout } from "@/components/blog-post-layout";
+import { MDXRemote } from "next-mdx-remote/rsc";
 import type { Metadata } from "next";
 
-const mdxModules: Record<string, () => Promise<{ default: React.ComponentType }>> = {
-  "announcing-darkreach": () => import("@content/blog/announcing-darkreach.mdx"),
-  "prime-discovery-initiative": () => import("@content/blog/prime-discovery-initiative.mdx"),
-  "why-open-source": () => import("@content/blog/why-open-source.mdx"),
-};
-
 export function generateStaticParams() {
-  return blogPosts.map((post) => ({ slug: post.slug }));
+  return getAllPosts().map((post) => ({ slug: post.slug }));
 }
 
 export async function generateMetadata({
@@ -19,7 +14,7 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const post = blogPosts.find((p) => p.slug === slug);
+  const post = getPostBySlug(slug);
   if (!post) return {};
 
   return {
@@ -40,17 +35,15 @@ export default async function BlogPostPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const post = blogPosts.find((p) => p.slug === slug);
+  const post = getPostBySlug(slug);
 
-  if (!post || !mdxModules[slug]) {
+  if (!post) {
     notFound();
   }
 
-  const { default: MDXContent } = await mdxModules[slug]();
-
   return (
     <BlogPostLayout post={post}>
-      <MDXContent />
+      <MDXRemote source={post.content} />
     </BlogPostLayout>
   );
 }

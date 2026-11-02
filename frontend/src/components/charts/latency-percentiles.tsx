@@ -68,11 +68,10 @@ export function LatencyPercentiles({
         />
         <Tooltip
           labelFormatter={(v) => formatTime(v)}
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          formatter={((v: number, name: string) => [
-            `${(v ?? 0).toFixed(1)}${unit}`,
-            name,
-          ]) as any}
+          formatter={(v: number | undefined, name: string | undefined) => [
+            `${(Number(v ?? 0)).toFixed(1)}${unit}`,
+            name ?? "",
+          ]}
           contentStyle={{
             backgroundColor: "var(--card)",
             border: "1px solid var(--border)",

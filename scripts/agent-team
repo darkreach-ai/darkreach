@@ -1,0 +1,113 @@
+#!/usr/bin/env bash
+# Launch Claude Code with agent teams enabled for multi-agent coordination.
+#
+# The Claude Code session acts as team lead, spawning teammates from .claude/agents/.
+#
+# Usage:
+#   scripts/agent-team "refactor cost model across engine and frontend"
+#   scripts/agent-team --domains engine,frontend "add new search form"
+#   scripts/agent-team                              # interactive session
+#
+# Install: chmod +x scripts/agent-team
+
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+DOMAINS=""
+PROMPT=""
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --domains)
+            DOMAINS="$2"
+            shift 2
+            ;;
+        -h|--help)
+            cat <<EOF
+${BOLD}scripts/agent-team${NC} — Multi-agent coordination for darkreach
+
+${BOLD}Usage:${NC}
+  scripts/agent-team [--domains <list>] [prompt]
+
+${BOLD}Options:${NC}
+  --domains <list>    Comma-separated agent domains to pre-specify
+                      Available: engine, frontend, server, ops, database, researcher
+
+${BOLD}Examples:${NC}
+  scripts/agent-team "refactor cost model across engine and frontend"
+  scripts/agent-team --domains engine,frontend "add operator badges"
+  scripts/agent-team                           # interactive team session
+
+${BOLD}Available Agents:${NC}
+EOF
+            for agent_file in "$ROOT"/.claude/agents/*.md; do
+                [ -f "$agent_file" ] || continue
+                name=$(basename "$agent_file" .md)
+                desc=$(grep "^description:" "$agent_file" | head -1 | sed 's/description: *//')
+                echo -e "  ${BLUE}$name${NC}: $desc"
+            done
+            exit 0
+            ;;
+        *)
+            PROMPT="$PROMPT $1"
+            shift
+            ;;
+    esac
+done
+
+PROMPT="${PROMPT## }"
+
+# Check for Claude Code
+if ! command -v claude &>/dev/null; then
+    echo -e "${RED}Error:${NC} Claude Code CLI not found."
+    echo "Install it from https://claude.com/claude-code"
+    exit 1
+fi
+
+# Show available agents
+echo -e "${BOLD}Agent Team Mode${NC}"
+echo ""
+echo -e "Available agents:"
+for agent_file in "$ROOT"/.claude/agents/*.md; do
+    [ -f "$agent_file" ] || continue
+    name=$(basename "$agent_file" .md)
+    desc=$(grep "^description:" "$agent_file" | head -1 | sed 's/description: *//')
+    echo -e "  ${BLUE}$name${NC}: $desc"
+done
+echo ""
+
+if [ -n "$DOMAINS" ]; then
+    echo -e "Pre-specified domains: ${GREEN}$DOMAINS${NC}"
+fi
+
+if [ -n "$PROMPT" ]; then
+    echo -e "Task: ${GREEN}$PROMPT${NC}"
+fi
+echo ""
+
+# Build the team context prompt
+TEAM_CONTEXT="You are the team lead for a multi-agent darkreach session."
+
+if [ -n "$DOMAINS" ]; then
+    TEAM_CONTEXT="$TEAM_CONTEXT The user wants to coordinate work across these domains: $DOMAINS."
+    TEAM_CONTEXT="$TEAM_CONTEXT Use the Task tool with the appropriate agent types from .claude/agents/ to spawn teammates for each domain."
+fi
+
+if [ -n "$PROMPT" ]; then
+    FULL_PROMPT="$TEAM_CONTEXT
+
+Task: $PROMPT"
+    echo -e "Launching team session..."
+    cd "$ROOT" && exec claude "$FULL_PROMPT"
+else
+    echo -e "Launching interactive team session..."
+    cd "$ROOT" && exec claude
+fi

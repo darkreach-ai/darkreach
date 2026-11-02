@@ -83,7 +83,7 @@ export function InitiativePreview() {
                   {entry.digits.toLocaleString()}d
                 </span>
                 <span className="text-xs text-muted-foreground/60 flex-shrink-0">
-                  {timeAgo(entry.discovered_at)}
+                  {timeAgo(entry.found_at)}
                 </span>
               </div>
             ))}

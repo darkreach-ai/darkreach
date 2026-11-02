@@ -53,10 +53,11 @@ Frontend (Next.js static export)
 
 ```
 src/
-├── app/                           # Next.js pages (14 routes)
+├── app/                           # Next.js pages (20 routes)
 │   ├── layout.tsx                 # Root: AuthProvider, WebSocketProvider, ThemeProvider
 │   ├── page.tsx                   # Main dashboard (stats, primes table, charts)
 │   ├── login/page.tsx             # Email/password login (Supabase Auth)
+│   ├── account/page.tsx           # User account settings
 │   ├── browse/page.tsx            # Primes browser (filter, paginate, detail dialog)
 │   ├── searches/page.tsx          # Search job management
 │   ├── network/page.tsx           # Network monitoring (nodes, health)
@@ -67,19 +68,30 @@ src/
 │   ├── logs/page.tsx              # System logs viewer
 │   ├── releases/page.tsx          # Worker release management
 │   ├── prime/page.tsx             # Single prime detail (permalink)
-│   └── docs/page.tsx              # Documentation viewer (markdown + KaTeX)
+│   ├── docs/page.tsx              # Documentation viewer (markdown + KaTeX)
+│   ├── audit/page.tsx             # Audit log viewer
+│   ├── contribute/page.tsx        # Contribution onboarding
+│   ├── earnings/page.tsx          # Operator earnings dashboard
+│   ├── marketplace/page.tsx       # Compute marketplace
+│   ├── my-nodes/page.tsx          # Node management for operators
+│   ├── strategy/page.tsx          # AI strategy viewer
+│   └── verification/page.tsx      # Prime verification queue
 │
 ├── components/
-│   ├── ui/                        # shadcn/ui primitives (17 components)
-│   │   ├── badge, breadcrumb, button, card, dialog, dropdown-menu
-│   │   ├── input, scroll-area, select, separator, sheet, skeleton
+│   ├── ui/                        # shadcn/ui primitives (19 components)
+│   │   ├── badge, breadcrumb, button, card, collapsible, dialog, dropdown-menu
+│   │   ├── input, scroll-area, select, separator, sheet, sidebar, skeleton
 │   │   └── switch, table, tabs, textarea, tooltip
 │   │
-│   ├── charts/                    # Recharts visualizations
+│   ├── charts/                    # Recharts visualizations (8 components)
 │   │   ├── discovery-timeline.tsx # Prime discoveries over time
 │   │   ├── digit-distribution.tsx # Digit count histogram
 │   │   ├── throughput-gauge.tsx   # Tests/sec gauge
-│   │   └── cost-history.tsx       # Cost tracking chart
+│   │   ├── cost-history.tsx       # Cost tracking chart
+│   │   ├── health-score.tsx       # Node health score gauge
+│   │   ├── latency-percentiles.tsx # Latency percentile chart
+│   │   ├── sparkline.tsx          # Compact inline sparkline
+│   │   └── tag-distribution.tsx   # Prime tag distribution chart
 │   │
 │   ├── agents/                    # Agent management components
 │   │   ├── activity-feed.tsx      # Agent activity stream
@@ -91,8 +103,17 @@ src/
 │   │   ├── schedules-tab.tsx      # Agent schedules
 │   │   └── task-card.tsx          # Individual task card
 │   │
+│   ├── operators/                 # Operator-facing components
+│   │   ├── earnings-chart.tsx     # Earnings over time chart
+│   │   ├── earnings-history-table.tsx # Earnings history table
+│   │   ├── form-showcase-card.tsx # Form showcase card
+│   │   ├── rate-table.tsx         # Contribution rate table
+│   │   └── trust-progress.tsx     # Trust level progress indicator
+│   │
 │   ├── [Domain Components]
-│   ├── app-header.tsx             # Navigation header (all page links)
+│   ├── app-sidebar.tsx            # Navigation sidebar (all page links)
+│   ├── breadcrumb-nav.tsx         # Breadcrumb navigation
+│   ├── top-bar.tsx                # Top bar with search and user menu
 │   ├── primes-table.tsx           # Paginated primes table
 │   ├── prime-detail-dialog.tsx    # Full prime details modal
 │   ├── prime-notifier.tsx         # WebSocket toast notifications
@@ -104,7 +125,8 @@ src/
 │   ├── new-project-dialog.tsx     # Create project dialog
 │   ├── phase-timeline.tsx         # Project phase timeline
 │   ├── host-node-card.tsx         # Host/node status card
-│   ├── worker-detail-dialog.tsx   # Worker details modal
+│   ├── node-detail-dialog.tsx     # Node details modal
+│   ├── worker-detail-dialog.tsx   # Worker details modal (legacy)
 │   ├── service-status-card.tsx    # Service status indicator
 │   ├── process-row.tsx            # Worker process row
 │   ├── add-server-dialog.tsx      # Add server dialog
@@ -114,17 +136,21 @@ src/
 │   ├── cost-tracker.tsx           # Cost tracking display
 │   ├── insight-cards.tsx          # Analytics insight cards
 │   ├── metrics-bar.tsx            # Metrics status bar
+│   ├── log-level-chart.tsx        # Log level distribution chart
+│   ├── log-summary-cards.tsx      # Log summary stat cards
 │   ├── activity-feed.tsx          # Global activity feed
 │   ├── view-header.tsx            # Page view header
 │   ├── json-block.tsx             # JSON display block
+│   ├── tag-chip.tsx               # Tag display chip
 │   ├── empty-state.tsx            # Empty state placeholder
 │   └── darkreach-logo.tsx         # Brand logo component
 │
 ├── contexts/
 │   ├── auth-context.tsx           # Supabase Auth (AuthProvider, AuthGuard, useAuth)
-│   └── websocket-context.tsx      # WebSocket (coordination data only)
+│   ├── websocket-context.tsx      # WebSocket (coordination data only)
+│   └── worker-context.tsx         # Worker state management
 │
-├── hooks/                         # Custom hooks (18 total)
+├── hooks/                         # Custom hooks (26 total)
 │   ├── [Supabase Data Hooks]
 │   ├── use-primes.ts              # Prime records (PrimeRecord, PrimeFilter, PrimeDetail)
 │   ├── use-stats.ts               # Dashboard stats via RPC
@@ -133,6 +159,7 @@ src/
 │   ├── use-form-leaderboard.ts    # Form rankings via RPC
 │   ├── use-records.ts             # World record data
 │   ├── use-prime-realtime.ts      # Realtime INSERT subscription
+│   ├── use-prime-verification.ts  # Prime verification queue
 │   │
 │   ├── [WebSocket Hooks]
 │   ├── use-websocket.ts           # Fleet, searches, deployments, status
@@ -143,6 +170,15 @@ src/
 │   ├── use-agent-budgets.ts       # Agent budget tracking
 │   ├── use-agent-memory.ts        # Agent memory KV store
 │   ├── use-agent-schedules.ts     # Agent schedule config
+│   │
+│   ├── [Operator Hooks]
+│   ├── use-contribute-profile.ts  # Contribution profile data
+│   ├── use-earnings.ts            # Operator earnings data
+│   ├── use-marketplace.ts         # Marketplace listings
+│   ├── use-operator-resources.ts  # Operator resource management
+│   ├── use-strategy.ts            # AI strategy data
+│   ├── use-audit-log.ts           # Audit log entries
+│   ├── use-logs.ts                # System log viewer
 │   │
 │   ├── [UI Hooks]
 │   ├── use-theme.ts               # Dark/light toggle (localStorage: darkreach-theme)
@@ -157,7 +193,9 @@ src/
 │   └── utils.ts                   # Utility functions (cn class merger)
 │
 ├── __tests__/                     # Vitest unit tests
+│   ├── app/                       # App-level tests
 │   ├── components/                # Component tests
+│   ├── contexts/                  # Context tests
 │   ├── hooks/                     # Hook tests
 │   ├── lib/                       # Utility tests
 │   ├── pages/                     # Page tests
@@ -238,18 +276,26 @@ The frontend calls these Rust backend endpoints (via WebSocket and REST):
 | `/ws` | WS | Real-time coordination (2s push) |
 | `/api/health` | GET | Health check |
 | `/api/status` | GET | Coordinator status |
-| `/api/workers` | GET/POST | Worker list, heartbeat |
-| `/api/fleet` | GET | Fleet overview |
+| `/api/auth/*` | GET/POST | Authentication |
+| `/api/primes/*` | GET | Prime record queries |
+| `/api/fleet` | GET | Fleet overview (backward-compat) |
 | `/api/search_jobs` | GET/POST/PUT | Job CRUD |
 | `/api/searches` | GET/POST | Search management |
 | `/api/agents/*` | GET/POST/PUT | Agent tasks, budgets, memory |
 | `/api/projects/*` | GET/POST/PUT | Project campaigns |
 | `/api/verify` | POST | Prime re-verification |
+| `/api/prime-verification/*` | GET/POST | Verification queue |
 | `/api/docs/*` | GET | Documentation content |
 | `/api/observability/*` | GET | Metrics, logs, charts |
 | `/api/releases/*` | GET/POST | Release channels |
 | `/api/v1/operators/*` | GET/POST | Operator management |
 | `/api/v1/nodes/*` | GET/POST | Node management |
+| `/api/contribute/*` | GET/POST | Contribution management |
+| `/api/resources/*` | GET/POST | Resource pool management |
+| `/api/schedules/*` | GET/POST | Scheduled tasks |
+| `/api/sieve/*` | GET | Shared sieve data |
+| `/api/strategy/*` | GET/POST | AI strategy engine |
+| `/api/audit/*` | GET | Audit log |
 | `/api/notifications/*` | GET/POST | Push notifications |
 
 ## Roadmap

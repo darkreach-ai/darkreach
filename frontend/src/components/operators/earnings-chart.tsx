@@ -63,9 +63,8 @@ export function EarningsChart({ earnings }: EarningsChartProps) {
             border: "1px solid var(--border)",
             borderRadius: 6,
           }}
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          formatter={(value: any, name: any) => {
-            const v = Number(value);
+          formatter={(value: number | undefined, name: string | undefined) => {
+            const v = Number(value ?? 0);
             if (name === "credits")
               return [formatCredits(v), "Credits"];
             return [v.toLocaleString(), "Blocks"];

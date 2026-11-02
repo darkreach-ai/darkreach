@@ -4,6 +4,7 @@
 //! has been removed — all coordination is now PostgreSQL-backed.
 
 use axum::extract::{Path as AxumPath, State};
+use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::Json;
 use serde::Serialize;
@@ -148,12 +149,17 @@ pub(super) async fn handler_fleet_worker_command(
 
 /// List pending commands for a worker.
 pub(super) async fn handler_fleet_worker_commands(
+    _admin: RequireAdmin,
     State(state): State<Arc<AppState>>,
     AxumPath(worker_id): AxumPath<String>,
 ) -> impl IntoResponse {
     match state.db.get_node_commands(&worker_id, 50).await {
-        Ok(cmds) => Json(serde_json::json!({"commands": cmds})),
-        Err(e) => Json(serde_json::json!({"error": format!("{}", e)})),
+        Ok(cmds) => Json(serde_json::json!({"commands": cmds})).into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": format!("{}", e)})),
+        )
+            .into_response(),
     }
 }
 
@@ -164,9 +170,80 @@ pub(super) async fn handler_fleet_command_cancel(
     AxumPath(command_id): AxumPath<i64>,
 ) -> impl IntoResponse {
     match state.db.cancel_node_command(command_id).await {
-        Ok(_) => Json(serde_json::json!({"ok": true, "command_id": command_id})),
-        Err(e) => Json(serde_json::json!({"error": format!("{}", e)})),
+        Ok(_) => Json(serde_json::json!({"ok": true, "command_id": command_id})).into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": format!("{}", e)})),
+        )
+            .into_response(),
     }
+}
+
+/// Public-safe summary of a single worker node, exposing only status and
+/// core count. No hostnames, IPs, or worker IDs are included.
+#[derive(Serialize)]
+pub(super) struct PublicWorkerSummary {
+    status: String,
+    cores: usize,
+}
+
+/// Aggregate network data for the public `/api/network` endpoint.
+///
+/// Provides high-level statistics about the compute network without
+/// exposing sensitive worker details (hostnames, IPs, worker IDs).
+#[derive(Serialize)]
+pub(super) struct PublicNetworkData {
+    total_nodes: usize,
+    active_nodes: usize,
+    total_cores: usize,
+    total_tested: u64,
+    total_found: u64,
+    workers: Vec<PublicWorkerSummary>,
+}
+
+/// Stale threshold in seconds. Workers whose last heartbeat exceeds this
+/// are classified as "stale" rather than "active".
+const STALE_THRESHOLD_SECS: u64 = 60;
+
+#[utoipa::path(get, path = "/api/network", tag = "network",
+    responses((status = 200, description = "Public aggregate network statistics"))
+)]
+/// `GET /api/network` — Public network overview.
+///
+/// Returns aggregate compute network statistics without requiring
+/// authentication. No sensitive information (hostnames, IPs, worker IDs)
+/// is exposed. Each worker is summarized as status + core count only.
+pub(super) async fn handler_api_network(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    let workers = state.get_workers_from_pg().await;
+
+    let summaries: Vec<PublicWorkerSummary> = workers
+        .iter()
+        .map(|w| {
+            let status = if w.last_heartbeat_secs_ago > STALE_THRESHOLD_SECS {
+                "stale"
+            } else {
+                "active"
+            };
+            PublicWorkerSummary {
+                status: status.to_string(),
+                cores: w.cores,
+            }
+        })
+        .collect();
+
+    let active_nodes = summaries.iter().filter(|s| s.status == "active").count();
+    let total_cores = workers.iter().map(|w| w.cores).sum();
+    let total_tested = workers.iter().map(|w| w.tested).sum();
+    let total_found = workers.iter().map(|w| w.found).sum();
+
+    Json(PublicNetworkData {
+        total_nodes: workers.len(),
+        active_nodes,
+        total_cores,
+        total_tested,
+        total_found,
+        workers: summaries,
+    })
 }
 
 fn lock_or_recover<T>(mutex: &std::sync::Mutex<T>) -> std::sync::MutexGuard<'_, T> {

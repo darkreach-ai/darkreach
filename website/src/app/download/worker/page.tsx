@@ -12,25 +12,68 @@ git clone https://github.com/darkreach-ai/darkreach.git
 cd darkreach
 cargo build --release`;
 
-const runWorker = `# Connect to a coordinator and start searching
-./target/release/darkreach \\
-  --coordinator http://COORDINATOR:7001 \\
-  --worker-id my-worker \\
-  --checkpoint darkreach.checkpoint \\
-  kbn --k 3 --base 2 --min-n 100000 --max-n 500000`;
+const registerAndRun = `# 1. Register with the coordinator
+./target/release/darkreach register \\
+  --server https://api.darkreach.ai \\
+  --username your-name \\
+  --email you@example.com
+
+# 2. Start the operator node (claims work automatically)
+./target/release/darkreach run`;
+
+const dockerQuickStart = `# Pull and run the node image
+docker run -d --name darkreach-node \\
+  -e DATABASE_URL=postgres://user:pass@host:5432/darkreach \\
+  -e DARKREACH_SERVER=https://api.darkreach.ai \\
+  -e DARKREACH_API_KEY=dk_your_api_key \\
+  -e DARKREACH_USERNAME=your-name \\
+  --restart unless-stopped \\
+  ghcr.io/darkreach-ai/darkreach-node:latest`;
+
+const composeSnippet = `# docker-compose.operator.yml
+services:
+  node:
+    image: ghcr.io/darkreach-ai/darkreach-node:latest
+    environment:
+      DATABASE_URL: \${DATABASE_URL}
+      DARKREACH_SERVER: \${DARKREACH_SERVER:-https://api.darkreach.ai}
+      DARKREACH_API_KEY: \${DARKREACH_API_KEY}
+      DARKREACH_USERNAME: \${DARKREACH_USERNAME}
+      DARKREACH_LOG_FORMAT: json
+    volumes:
+      - \${HOME:-.}/.darkreach:/root/.darkreach:ro
+      - node-checkpoints:/app
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+volumes:
+  node-checkpoints:`;
+
+const composeCommands = `# Start with Docker Compose
+docker compose -f docker-compose.operator.yml up -d
+
+# View logs
+docker compose -f docker-compose.operator.yml logs -f
+
+# Stop
+docker compose -f docker-compose.operator.yml down`;
 
 const systemdTemplate = `[Unit]
-Description=Darkreach Worker (%i)
+Description=Darkreach Operator Node
 After=network.target
 
 [Service]
 Type=simple
 EnvironmentFile=/opt/darkreach/.env
-ExecStart=/usr/local/bin/darkreach \\
-  --coordinator http://COORDINATOR:7001 \\
-  --worker-id %H-%i \\
-  --checkpoint /opt/darkreach/darkreach-%i.checkpoint \\
-  kbn --k 3 --base 2 --min-n 1000 --max-n 100000
+ExecStart=/usr/local/bin/darkreach run
 WorkingDirectory=/opt/darkreach
 Restart=on-failure
 RestartSec=10
@@ -38,17 +81,17 @@ RestartSec=10
 [Install]
 WantedBy=multi-user.target`;
 
-const scalingCommands = `# Install worker template
-sudo cp deploy/darkreach-worker@.service /etc/systemd/system/
+const scalingCommands = `# Install operator service
+sudo cp deploy/darkreach-operator.service /etc/systemd/system/
 sudo systemctl daemon-reload
 
-# Start 4 worker instances
-sudo systemctl enable --now darkreach-worker@{1..4}
+# Start the operator node
+sudo systemctl enable --now darkreach-operator
 
 # Check status
-sudo systemctl status 'darkreach-worker@*'`;
+sudo systemctl status darkreach-operator`;
 
-export default function WorkerPage() {
+export default function NodeDeploymentPage() {
   return (
     <>
       <Section>
@@ -57,16 +100,17 @@ export default function WorkerPage() {
             Download
           </Link>
           <span className="mx-2">/</span>
-          <span className="text-foreground">Worker Deployment</span>
+          <span className="text-foreground">Node Deployment</span>
         </nav>
 
         <h1 className="text-4xl font-bold text-foreground mb-4">
-          Worker Deployment
+          Node Deployment
         </h1>
         <p className="text-muted-foreground max-w-3xl mb-12">
-          Workers are the compute nodes that run prime searches. They connect to
-          a coordinator, claim work blocks, run sieves and primality tests, and
-          report results. Each worker can handle any of the 12 prime forms.
+          Operator nodes are the compute engines that run prime searches. They
+          connect to the coordinator, claim work blocks, run sieves and
+          primality tests, and report results. Each node can handle any of the
+          12 prime forms.
         </p>
 
         <div className="space-y-12">
@@ -75,41 +119,72 @@ export default function WorkerPage() {
               Prerequisites
             </h2>
             <ul className="list-disc list-inside text-muted-foreground space-y-1">
-              <li>Rust toolchain (1.75+)</li>
-              <li>GMP library</li>
+              <li>Rust toolchain (1.75+) or Docker</li>
+              <li>GMP library (for native builds)</li>
               <li>Network access to the coordinator</li>
             </ul>
           </div>
 
           <div>
             <h2 className="text-2xl font-semibold text-foreground mb-2">
-              1. Build from source
+              Option A: Build from source
             </h2>
             <CodeBlock language="bash">{buildCommands}</CodeBlock>
+            <p className="text-sm text-muted-foreground mt-4 mb-4">
+              Register as an operator, then start the node daemon:
+            </p>
+            <CodeBlock language="bash">{registerAndRun}</CodeBlock>
+            <p className="text-sm text-muted-foreground mt-3">
+              The node will register with the coordinator, appear in the
+              network dashboard, and start claiming work blocks automatically.
+            </p>
           </div>
 
           <div>
             <h2 className="text-2xl font-semibold text-foreground mb-2">
-              2. Run a worker
+              Option B: Docker (recommended)
             </h2>
             <p className="text-muted-foreground mb-4">
-              Point the worker at your coordinator and specify a search form with
-              its parameters.
+              The node image is published to GHCR for both amd64 and arm64.
+              No Rust toolchain required.
             </p>
-            <CodeBlock language="bash">{runWorker}</CodeBlock>
+            <CodeBlock language="bash">{dockerQuickStart}</CodeBlock>
             <p className="text-sm text-muted-foreground mt-3">
-              The worker will register with the coordinator, appear in the fleet
-              dashboard, and start claiming work blocks automatically.
+              View the image on{" "}
+              <a
+                href="https://github.com/darkreach-ai/darkreach/pkgs/container/darkreach-node"
+                className="text-primary hover:underline"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                GitHub Container Registry
+              </a>
+              .
             </p>
           </div>
 
           <div>
             <h2 className="text-2xl font-semibold text-foreground mb-2">
-              3. Verify heartbeat
+              Docker Compose
+            </h2>
+            <p className="text-muted-foreground mb-4">
+              Use the provided compose file for a managed deployment with
+              log rotation and resource limits:
+            </p>
+            <CodeBlock language="yaml">{composeSnippet}</CodeBlock>
+            <p className="text-sm text-muted-foreground mt-4 mb-4">
+              Run:
+            </p>
+            <CodeBlock language="bash">{composeCommands}</CodeBlock>
+          </div>
+
+          <div>
+            <h2 className="text-2xl font-semibold text-foreground mb-2">
+              Verify heartbeat
             </h2>
             <p className="text-muted-foreground">
-              Once the worker is running, verify it appears in the coordinator
-              dashboard under the Fleet tab. Workers send heartbeats every 30
+              Once the node is running, verify it appears in the coordinator
+              dashboard under the Network tab. Nodes send heartbeats every 30
               seconds. You can also check the coordinator logs for registration
               events.
             </p>
@@ -117,16 +192,16 @@ export default function WorkerPage() {
 
           <div>
             <h2 className="text-2xl font-semibold text-foreground mb-2">
-              4. Scaling with systemd
+              Systemd (bare metal)
             </h2>
             <p className="text-muted-foreground mb-4">
-              Use systemd template units to run multiple worker instances on the
-              same machine. Each instance gets its own checkpoint file and worker
-              ID.
+              For bare-metal deployments, use a systemd service unit.
+              Register first with <code className="text-sm bg-muted px-1 rounded">darkreach register</code>,
+              then install the service:
             </p>
             <CodeBlock language="ini">{systemdTemplate}</CodeBlock>
             <p className="text-sm text-muted-foreground mt-4 mb-4">
-              Deploy and scale:
+              Deploy:
             </p>
             <CodeBlock language="bash">{scalingCommands}</CodeBlock>
           </div>
@@ -136,14 +211,14 @@ export default function WorkerPage() {
               Monitoring
             </h2>
             <p className="text-muted-foreground">
-              Worker status, throughput, and prime discoveries are visible in the{" "}
+              Node status, throughput, and prime discoveries are visible in the{" "}
               <a
                 href="https://app.darkreach.ai"
                 className="text-primary hover:underline"
               >
                 dashboard
               </a>
-              . The Fleet tab shows all connected workers with their current
+              . The Network tab shows all connected nodes with their current
               search form, candidates tested, and last heartbeat time.
             </p>
           </div>

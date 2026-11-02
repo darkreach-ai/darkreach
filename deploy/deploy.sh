@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# DEPRECATED: Use scripts/deploy instead (unified deploy with rollback, health checks, parallel nodes).
+echo "WARNING: deploy/deploy.sh is deprecated. Use scripts/deploy instead." >&2
 set -euo pipefail
 
 # Deploy darkreach to a remote server.

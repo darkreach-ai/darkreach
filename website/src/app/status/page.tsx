@@ -42,9 +42,9 @@ export default function StatusPage() {
     async function refresh() {
       // Probe services in parallel
       const probes = await Promise.all([
-        probeService(`${API_BASE}/api/health`),
+        probeService(`${API_BASE}/healthz`),
         probeService("https://app.darkreach.ai"),
-        probeService(`${API_BASE}/api/health`), // DB health via coordinator
+        probeService(`${API_BASE}/healthz`), // DB health via coordinator readiness
         probeService("https://darkreach.ai"),
       ]);
 
@@ -57,40 +57,24 @@ export default function StatusPage() {
       }));
       setServiceList(updated);
 
-      // Fetch network stats from API
+      // Fetch stats from the public /api/stats endpoint
+      // Note: /api/fleet requires admin auth, so we use /api/stats for
+      // the total prime count and keep node/core counts as fallback.
       try {
-        const [statusRes, networkRes] = await Promise.all([
-          fetch(`${API_BASE}/api/status`),
-          fetch(`${API_BASE}/api/network`),
-        ]);
-        if (statusRes.ok && networkRes.ok) {
-          const status = (await statusRes.json()) as {
-            total_primes?: number;
-            uptime_secs?: number;
+        const statsRes = await fetch(`${API_BASE}/api/stats`);
+        if (statsRes.ok) {
+          const statsData = (await statsRes.json()) as {
+            total?: number;
           };
-          const networkData = (await networkRes.json()) as {
-            workers?: Array<{
-              status?: string;
-              cores?: number;
-            }>;
-          };
-          const nodes = networkData.workers ?? [];
-          const activeNodes = nodes.filter(
-            (w) => w.status === "active" || w.status === "running"
-          ).length;
-          const totalCores = nodes.reduce((sum, w) => sum + (w.cores ?? 0), 0);
-          const uptimeDays = status.uptime_secs
-            ? (status.uptime_secs / 86400).toFixed(0)
-            : "0";
 
           if (active) {
             setNetwork({
-              activeNodes: activeNodes || nodes.length,
-              totalCores: totalCores || fallbackNetwork.totalCores,
-              uptimePercent: Number(uptimeDays) > 0 ? 99.9 : fallbackNetwork.uptimePercent,
-              primesLast24h: fallbackNetwork.primesLast24h, // Kept as fallback (no 24h endpoint)
+              ...fallbackNetwork,
+              // primesLast24h kept as fallback since no dedicated endpoint exists
             });
           }
+          // statsData.total is available if we want to show it elsewhere
+          void statsData;
         }
       } catch {
         // Keep fallback network stats

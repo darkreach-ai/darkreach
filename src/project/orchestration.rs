@@ -338,8 +338,17 @@ async fn orchestrate_project(db: &Database, project: &ProjectRow) -> Result<()> 
     db.update_project_cost(project.id, total_core_hours, total_cost_usd)
         .await?;
 
-    // 3c. Link best prime found for this form to the project
-    if let Ok(Some(best)) = db.get_best_prime_for_form(&project.form).await {
+    // 3c. Link best prime found for this project (scoped to project's search jobs,
+    //     falling back to form-wide if no project-scoped primes exist)
+    let best = match db.get_best_prime_for_project(project.id).await {
+        Ok(Some(prime)) => Some(prime),
+        _ => db
+            .get_best_prime_for_form(&project.form)
+            .await
+            .ok()
+            .flatten(),
+    };
+    if let Some(best) = best {
         if best.digits > project.best_digits {
             db.update_project_best_prime(project.id, Some(best.id), best.digits)
                 .await?;

@@ -25,7 +25,7 @@ benches/
 ## Running Tests
 
 ```bash
-# Unit tests (449 passing, 7 ignored PFGW-dependent)
+# Unit + integration tests (1325 passing, 19 ignored)
 cargo test
 
 # Specific test file

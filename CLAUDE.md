@@ -26,6 +26,7 @@
 | **Verification** | `src/verify.rs`, `src/classify.rs` | `src/CLAUDE.md` | `docs/roadmaps/verification.md` |
 | **Resources** | `src/resource.rs`, `src/db/operators.rs` | `src/CLAUDE.md` | `docs/roadmaps/resources.md` |
 | **Technology Vision** | Protocol architecture | — | `docs/roadmaps/technology-vision.md` |
+| **Website** | `website/` | — | `docs/roadmaps/website.md` |
 | **OpenClaw** | `deploy/docker-compose.openclaw.yml` | `docs/internal/openclaw.md` | `docs/roadmaps/openclaw.md` |
 
 ## Slash Commands
@@ -78,6 +79,15 @@ cd frontend && npm install && npm run build
 - `src/verify.rs` — 3-tier verification pipeline (deterministic → BPSW+MR → PFGW)
 - `src/certificate.rs` — PrimalityCertificate enum
 - `src/p1.rs` — Pollard P−1 factoring for deep composite elimination
+- `src/classify.rs` — Prime classification and form detection
+- `src/pipeline.rs` — Multi-stage work block pipeline
+- `src/search_params.rs` — Search parameter types
+- `src/ecm.rs` — Elliptic curve method factoring
+- `src/gerbicz.rs` — Gerbicz error checking
+- `src/batch_gcd.rs` — Batch GCD for factor elimination
+- `src/bignum.rs` — BigNum utilities
+- `src/aurifeuillean.rs` — Aurifeuillean factorizations
+- `src/pietrzak.rs` — Pietrzak VDF proofs
 
 **External tool integrations:**
 - `src/pfgw.rs` — PFGW subprocess (50-100x acceleration for large candidates)
@@ -96,10 +106,18 @@ cd frontend && npm install && npm run build
 - Safety checks: budget gates, concurrency limits, stall penalties
 - Decision audit trail: `ai_engine_decisions` table with reasoning, confidence, outcome tracking
 
+### ML Engine (`src/ml/`)
+- Thompson Sampling multi-armed bandits for form/parameter selection
+- Gaussian Process cost model with power-law fallback
+- Bayesian optimization for sieve depth and block size tuning
+- Node intelligence: affinity scoring, capability profiling
+- Model registry with shadow mode for safe rollouts
+- Feature extraction from search telemetry
+
 ### Server (modular directories)
 - `src/main.rs` + `src/cli.rs` — CLI routing with clap (12 search + dashboard/verify/deploy/work/project)
-- `src/dashboard/` — Axum web server (15 route modules + WebSocket), REST API, fleet coordination
-- `src/db/` — PostgreSQL via sqlx (15 submodules: primes, jobs, workers, agents, projects, records, ai_engine, etc.)
+- `src/dashboard/` — Axum web server (22 route modules + WebSocket), REST API, fleet coordination
+- `src/db/` — PostgreSQL via sqlx (23 submodules: primes, jobs, workers, agents, projects, records, ai_engine, operators, resources, etc.)
 - `src/project/` — Campaign management (config, cost, orchestration, records, types)
 - `src/checkpoint.rs` — JSON checkpoint save/load (all 12 form variants), atomic writes
 - `src/search_manager.rs` — Search job lifecycle, block generation, work distribution
@@ -112,6 +130,13 @@ cd frontend && npm install && npm run build
 - `src/metrics.rs` + `src/prom_metrics.rs` — System metrics + Prometheus export
 - `src/operator.rs` — Operator node management
 - `src/progress.rs` — Atomic counters + background 30s status reporter
+- `src/agent_daemon.rs` — Background agent daemon for autonomous operation
+- `src/calibration.rs` — Runtime calibration for node capabilities
+- `src/cost_model.rs` — Data-fitted cost estimation
+- `src/resource.rs` — Resource management and allocation
+- `src/schedule.rs` — Cron-like scheduling for recurring tasks
+- `src/service.rs` — Service lifecycle management
+- `src/log_layer.rs` — Structured logging layer
 
 ### Frontend (`frontend/`)
 - Next.js 16 + React 19 + Tailwind 4 + shadcn/ui + Recharts + Supabase Auth
@@ -119,11 +144,11 @@ cd frontend && npm install && npm run build
 - **REST API** for prime data (queries, stats, charts), **Supabase Auth** for login
 - **WebSocket** for live prime notifications
 - **WebSocket** for coordination data only (fleet, searches, deployments, status)
-- 14 pages, 50+ components, 17+ custom hooks
+- 20 pages, 70+ components, 26 custom hooks
 
 ### Database (`supabase/`)
-- 24 PostgreSQL migrations (Supabase)
-- Tables: primes, search_jobs, work_blocks, workers, agent_tasks, projects, etc.
+- 64 PostgreSQL migrations (Supabase)
+- Tables: primes, search_jobs, work_blocks, workers, agent_tasks, projects, ml_models, operator_badges, waitlist, etc.
 - See `supabase/CLAUDE.md` for schema details
 
 ### Deployment (`deploy/`)
@@ -144,7 +169,7 @@ cd frontend && npm install && npm run build
 ## Testing
 
 ```bash
-# Unit tests (449 passing, 7 ignored PFGW)
+# Unit + integration tests (1325 passing, 19 ignored)
 cargo test
 
 # Integration tests
@@ -234,3 +259,59 @@ When working autonomously on this codebase, read the domain-specific CLAUDE.md b
 2. Create `supabase/migrations/NNN_<description>.sql` (next sequence number)
 3. Add corresponding Rust types/queries in `src/db/*.rs`
 4. Run migration via Supabase CLI or direct SQL
+
+## Agentic Coding
+
+### Subagents
+
+Native agent definitions live in `.claude/agents/`. Each has a model, isolation level, and domain-specific context.
+
+| Agent | Model | Isolation | Domain |
+|-------|-------|-----------|--------|
+| `engine` | opus | worktree | `src/*.rs` algorithm files |
+| `frontend` | sonnet | worktree | `frontend/` |
+| `server` | sonnet | worktree | `src/dashboard/`, `src/db/` |
+| `ops` | sonnet | none | `deploy/`, `.github/`, `scripts/` |
+| `database` | sonnet | worktree | `supabase/`, `src/db/` |
+| `researcher` | haiku | none | Read-only exploration |
+
+### Agent Worktrees
+
+```bash
+scripts/agent engine "optimize sieve depth"    # Launch agent in isolated worktree
+scripts/agent --list                           # List active agent worktrees
+scripts/agent --status                         # Detailed status per worktree
+scripts/agent --conflicts                      # Check for file conflicts across worktrees
+scripts/agent --summary                        # Show commits/changes per worktree
+scripts/agent --pr engine-20260222-1430        # Create PR from worktree
+scripts/agent --clean                          # Remove finished worktrees
+```
+
+### Agent Teams
+
+```bash
+scripts/agent-team "refactor cost model across engine and frontend"
+scripts/agent-team --domains engine,frontend "add new search form"
+```
+
+The team leader session spawns teammates from `.claude/agents/` and coordinates via the task list.
+
+### Deployment
+
+```bash
+scripts/deploy all              # Full deploy: coordinator + nodes + web
+scripts/deploy coordinator      # Coordinator only (with health check + auto-rollback)
+scripts/deploy nodes            # All worker nodes (parallel)
+scripts/deploy web              # Frontend + website (parallel Vercel deploys)
+scripts/deploy rollback         # Rollback coordinator to previous binary
+scripts/deploy status           # Show health of all services
+```
+
+### Safety Rules
+
+- `.claude/settings.json` defines allowed/denied/ask tool permissions
+- `.claude/hooks/guard-master-push.sh` blocks direct pushes to master/main
+- `.claude/hooks/post-edit-lint.sh` runs linters after file edits (async)
+- Deploy scripts source `scripts/load-infra.sh` for SOPS-encrypted connection details
+- Pre-commit runs `cargo fmt --check` + `cargo check` + secret leak detection (~10s)
+- Pre-push runs `cargo test` + `cargo clippy` + frontend tests (only changed files)

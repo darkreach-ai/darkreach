@@ -22,7 +22,7 @@ impl Database {
                     fire_count, last_fired_at, last_checked_at, created_at, updated_at
              FROM agent_schedules ORDER BY name",
         )
-        .fetch_all(&self.pool)
+        .fetch_all(&self.read_pool)
         .await?;
         Ok(rows)
     }
@@ -36,7 +36,7 @@ impl Database {
                     fire_count, last_fired_at, last_checked_at, created_at, updated_at
              FROM agent_schedules WHERE enabled = true ORDER BY name",
         )
-        .fetch_all(&self.pool)
+        .fetch_all(&self.read_pool)
         .await?;
         Ok(rows)
     }

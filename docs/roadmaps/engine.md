@@ -4,6 +4,18 @@ Prime-hunting algorithms, sieving, and primality testing improvements.
 
 **Key files:** `src/{factorial,palindromic,kbn,sieve,lib}.rs`
 
+> **Status (Feb 2026):** All 12 search forms implemented. New engine modules added:
+> - `src/ecm.rs` — Elliptic Curve Method factoring (Edwards curves)
+> - `src/gerbicz.rs` — Gerbicz-Li error checking for long PRP tests
+> - `src/batch_gcd.rs` — Bernstein batch GCD / product tree smoothness detection
+> - `src/bignum.rs` — Bignum utilities and helpers
+> - `src/aurifeuillean.rs` — Aurifeuillean factorization for special-form composites
+> - `src/pipeline.rs` — Multi-stage work block pipeline (sieve -> screen -> test -> prove)
+> - `src/pietrzak.rs` — Pietrzak VDF proof generation for PRP results
+> - `src/calibration.rs` — Runtime calibration for sieve/test crossover
+> - `src/cost_model.rs` — Power-law cost estimation with OLS fitting
+> - `src/search_params.rs` — Search parameter validation and normalization
+
 ---
 
 ## Tier 1: Quick Wins (high impact, low effort)

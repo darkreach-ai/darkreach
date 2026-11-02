@@ -324,7 +324,6 @@ pub fn bls_near_repdigit_proof(
     // For each prime factor q, find P with Jacobi(P²-4, N) = -1 such that:
     //   1. V_{N+1}(P,1) ≡ 2 (mod N)
     //   2. gcd(V_{(N+1)/q}(P,1) - 2, N) = 1
-    let n_plus_1 = Integer::from(candidate + 1u32);
     let mut factor_satisfied = vec![false; all_factors.len()];
 
     for p_candidate in 3..1003u32 {

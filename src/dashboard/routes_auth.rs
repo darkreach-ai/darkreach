@@ -17,7 +17,7 @@ pub(super) struct ProfileQuery {
 
 #[utoipa::path(get, path = "/api/auth/profile", tag = "auth", security(("bearer_jwt" = [])),
     params(("user_id" = String, Query, description = "User UUID")),
-    responses((status = 200, description = "User profile"), (status = 401, description = "Authentication required"), (status = 500, description = "Internal server error"))
+    responses((status = 200, description = "User profile"), (status = 401, description = "Authentication required"), (status = 403, description = "Cannot view other users' profiles"), (status = 500, description = "Internal server error"))
 )]
 /// GET /api/auth/profile?user_id=<uuid>
 /// Returns the user's profile including role and operator_id.
@@ -25,8 +25,18 @@ pub(super) struct ProfileQuery {
 /// admins can query any user's profile.
 pub(super) async fn handler_api_profile(
     State(state): State<Arc<AppState>>,
+    RequireAuth(auth_user): RequireAuth,
     Query(params): Query<ProfileQuery>,
 ) -> impl IntoResponse {
+    // Non-admin users can only query their own profile
+    if auth_user.role != "admin" && auth_user.user_id != params.user_id {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(serde_json::json!({"error": "Cannot view other users' profiles"})),
+        )
+            .into_response();
+    }
+
     match state.db.get_user_profile(&params.user_id).await {
         Ok(Some(profile)) => Json(serde_json::json!(profile)).into_response(),
         Ok(None) => Json(serde_json::json!({

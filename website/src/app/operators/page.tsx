@@ -1,5 +1,4 @@
-"use client";
-
+import type { Metadata } from "next";
 import { PageHero } from "@/components/page-hero";
 import { Section } from "@/components/ui/section";
 import { Card } from "@/components/ui/card";
@@ -9,6 +8,11 @@ import { ScrollAnimate } from "@/components/scroll-animate";
 import { systemRequirements } from "@/lib/install-commands";
 import { Trophy, Award, Code, Server, Monitor, ArrowRight } from "lucide-react";
 import Link from "next/link";
+
+export const metadata: Metadata = {
+  title: "Operators — darkreach",
+  description: "Join the darkreach operator network. Contribute compute power and earn credit for prime discoveries.",
+};
 
 const reasons = [
   {

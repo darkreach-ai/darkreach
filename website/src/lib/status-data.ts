@@ -58,17 +58,31 @@ export interface UptimeDay {
   status: ServiceStatus;
 }
 
+/**
+ * Generates deterministic uptime day data using a seeded hash.
+ * Uses a simple FNV-1a-style hash of the date string to avoid
+ * Math.random() which causes SSR/hydration mismatches in static export.
+ */
 export function generateUptimeDays(days: number): UptimeDay[] {
   const result: UptimeDay[] = [];
   const now = new Date();
   for (let i = days - 1; i >= 0; i--) {
     const date = new Date(now);
     date.setDate(date.getDate() - i);
-    const rand = Math.random();
+    const dateStr = date.toISOString().split("T")[0];
+
+    // Deterministic hash from date string (FNV-1a inspired)
+    let hash = 2166136261;
+    for (let j = 0; j < dateStr.length; j++) {
+      hash ^= dateStr.charCodeAt(j);
+      hash = (hash * 16777619) >>> 0;
+    }
+    const normalized = (hash % 1000) / 1000;
+
     let status: ServiceStatus = "operational";
-    if (rand < 0.02) status = "down";
-    else if (rand < 0.06) status = "degraded";
-    result.push({ date: date.toISOString().split("T")[0], status });
+    if (normalized < 0.02) status = "down";
+    else if (normalized < 0.06) status = "degraded";
+    result.push({ date: dateStr, status });
   }
   return result;
 }

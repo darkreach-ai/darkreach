@@ -15,7 +15,7 @@ impl Database {
             "SELECT id, key, value, category, created_by_task, created_at, updated_at
              FROM agent_memory ORDER BY category, key",
         )
-        .fetch_all(&self.pool)
+        .fetch_all(&self.read_pool)
         .await?;
         Ok(rows)
     }
@@ -30,7 +30,7 @@ impl Database {
              FROM agent_memory WHERE category = $1 ORDER BY key",
         )
         .bind(category)
-        .fetch_all(&self.pool)
+        .fetch_all(&self.read_pool)
         .await?;
         Ok(rows)
     }

@@ -14,8 +14,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import type { AgentTask } from "./use-agent-tasks";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
+import { API_BASE } from "@/lib/format";
 
 export interface AgentBudget {
   id: number;

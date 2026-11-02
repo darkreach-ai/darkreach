@@ -14,9 +14,9 @@ import { API_BASE } from "@/lib/api";
 
 const LIVE_FEED_FALLBACK: PrimeEntry[] = [
   ...FALLBACK_ENTRIES,
-  { id: 4, form: "palindromic", expression: "10^498 + R(497)^rev + 1", digits: 499, discovered_at: "2026-02-17T22:15:00Z" },
-  { id: 5, form: "kbn", expression: "3 \u00b7 2^59887 + 1", digits: 18029, discovered_at: "2026-02-17T19:40:00Z" },
-  { id: 6, form: "kbn", expression: "3 \u00b7 2^59851 - 1", digits: 18018, discovered_at: "2026-02-17T16:10:00Z" },
+  { id: 4, form: "palindromic", expression: "10^498 + R(497)^rev + 1", digits: 499, found_at: "2026-02-17T22:15:00Z" },
+  { id: 5, form: "kbn", expression: "3 \u00b7 2^59887 + 1", digits: 18029, found_at: "2026-02-17T19:40:00Z" },
+  { id: 6, form: "kbn", expression: "3 \u00b7 2^59851 - 1", digits: 18018, found_at: "2026-02-17T16:10:00Z" },
 ];
 
 export function LiveFeed() {
@@ -77,7 +77,7 @@ export function LiveFeed() {
         <div className="mb-3 p-5 rounded-xl border border-accent-purple/20 bg-accent-purple/[0.03]">
           <div className="flex items-center gap-2 mb-3">
             <span className="text-[11px] font-medium text-accent-purple/70 uppercase tracking-wider">Latest</span>
-            <span className="text-xs text-muted-foreground/50">{timeAgo(entries[0].discovered_at)}</span>
+            <span className="text-xs text-muted-foreground/50">{timeAgo(entries[0].found_at)}</span>
           </div>
           <div className="flex items-center gap-3 flex-wrap">
             <span className={`inline-flex px-2.5 py-1 rounded-md text-[11px] font-medium border flex-shrink-0 ${formColor(entries[0].form)}`}>
@@ -112,7 +112,7 @@ export function LiveFeed() {
               <span className="text-muted-foreground/60 ml-0.5">d</span>
             </span>
             <span className="text-xs text-muted-foreground/60 flex-shrink-0 w-14 text-right tabular-nums">
-              {timeAgo(entry.discovered_at)}
+              {timeAgo(entry.found_at)}
             </span>
           </div>
         ))}

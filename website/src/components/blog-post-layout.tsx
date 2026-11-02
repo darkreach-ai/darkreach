@@ -10,9 +10,9 @@ interface BlogPostLayoutProps {
 }
 
 export function BlogPostLayout({ post, children }: BlogPostLayoutProps) {
-  const formattedDate = new Date(post.date + "T00:00:00").toLocaleDateString(
+  const formattedDate = new Date(post.date + "T00:00:00Z").toLocaleDateString(
     "en-US",
-    { year: "numeric", month: "long", day: "numeric" }
+    { year: "numeric", month: "long", day: "numeric", timeZone: "UTC" }
   );
 
   return (
@@ -28,7 +28,7 @@ export function BlogPostLayout({ post, children }: BlogPostLayoutProps) {
 
         <header className="mb-10">
           <div className="flex items-center gap-2 text-sm text-muted-foreground mb-4">
-            <time>{formattedDate}</time>
+            <time dateTime={post.date}>{formattedDate}</time>
             <span>·</span>
             <span>{post.author}</span>
             {post.readingTime && (

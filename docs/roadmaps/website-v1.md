@@ -426,7 +426,7 @@ These stay as files but are removed from homepage, used only on `/research/prime
 
 ### Phase 1: Foundation — Design System + Navigation + Homepage
 
-**Status: TODO**
+**Status: COMPLETE**
 
 **Goal:** New navigation, new homepage, design system updates. This is the critical path — everything else builds on it.
 
@@ -475,7 +475,7 @@ These stay as files but are removed from homepage, used only on `/research/prime
 
 ### Phase 2: New Pages — Platform, Research, Operators, About
 
-**Status: TODO**
+**Status: COMPLETE**
 
 **Goal:** All new marketing pages live. Visitors can navigate the full site.
 
@@ -514,7 +514,7 @@ These stay as files but are removed from homepage, used only on `/research/prime
 
 ### Phase 3: Blog System
 
-**Status: TODO**
+**Status: COMPLETE**
 
 **Goal:** MDX blog with 3 launch posts, replacing hardcoded blog array.
 
@@ -551,7 +551,7 @@ These stay as files but are removed from homepage, used only on `/research/prime
 
 ### Phase 4: Updates & Polish
 
-**Status: TODO**
+**Status: IN PROGRESS**
 
 **Goal:** Terminology updates on existing pages, docs reorganization, animations, responsive QA, SEO.
 
@@ -597,7 +597,7 @@ These stay as files but are removed from homepage, used only on `/research/prime
 
 ### Phase 5: Live Integration
 
-**Status: TODO**
+**Status: TODO** (depends on Phase 4 completion)
 
 **Goal:** Connect waitlist form to backend, verify live data feeds, deploy.
 

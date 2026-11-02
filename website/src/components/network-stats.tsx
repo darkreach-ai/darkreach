@@ -20,24 +20,16 @@ export function NetworkStats() {
 
     async function fetchStats() {
       try {
-        const networkRes = await fetch(`${API_BASE}/api/network`);
+        // Probe the healthz endpoint to confirm the coordinator is up
+        const healthRes = await fetch(`${API_BASE}/healthz`, {
+          signal: AbortSignal.timeout(5000),
+        });
         if (cancelled) return;
 
-        if (networkRes.ok) {
-          const data = await networkRes.json();
-          const workers = data.workers ?? [];
-          const activeNodes = workers.filter(
-            (w: { status?: string }) => w.status === "active" || w.status === "running"
-          ).length;
-          const totalCores = workers.reduce(
-            (sum: number, w: { cores?: number }) => sum + (w.cores ?? 0),
-            0
-          );
-          setStats({
-            nodes: activeNodes || workers.length || FALLBACK.nodes,
-            cores: totalCores || FALLBACK.cores,
-            uptime: FALLBACK.uptime,
-          });
+        if (healthRes.ok) {
+          // The coordinator is online; mark as live but keep fallback
+          // node/core counts since /api/fleet requires admin auth and
+          // no public network stats endpoint exists yet.
           setLive(true);
         }
       } catch {

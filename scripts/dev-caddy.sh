@@ -128,10 +128,18 @@ info "Caddy running (pid $CADDY_PID)"
 
 # ── Start Rust backend ──────────────────────────────────────────────
 if [[ "$MODE" == "local" ]]; then
-  info "Starting Rust backend on :7001 (first build may take a few minutes)..."
-  (cd "$ROOT" && cargo run -- dashboard --port 7001) \
-    > >(while IFS= read -r line; do echo -e "${CYAN}[api]${NC} $line"; done) \
-    2> >(while IFS= read -r line; do echo -e "${CYAN}[api]${NC} $line"; done >&2) &
+  if command -v cargo-watch &>/dev/null; then
+    info "Starting Rust backend on :7001 with hot-reload (cargo-watch)..."
+    (cd "$ROOT" && cargo watch -x 'run -- dashboard --port 7001' \
+      -w src/ -w Cargo.toml -i '*.checkpoint' -i '.dev/') \
+      > >(while IFS= read -r line; do echo -e "${CYAN}[api]${NC} $line"; done) \
+      2> >(while IFS= read -r line; do echo -e "${CYAN}[api]${NC} $line"; done >&2) &
+  else
+    info "Starting Rust backend on :7001 (install cargo-watch for hot-reload)..."
+    (cd "$ROOT" && cargo run -- dashboard --port 7001) \
+      > >(while IFS= read -r line; do echo -e "${CYAN}[api]${NC} $line"; done) \
+      2> >(while IFS= read -r line; do echo -e "${CYAN}[api]${NC} $line"; done >&2) &
+  fi
   API_PID=$!
 
   # Wait for backend (up to 3 minutes for cold compile)

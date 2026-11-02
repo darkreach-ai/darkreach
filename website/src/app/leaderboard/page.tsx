@@ -7,6 +7,7 @@ import {
   leaderboardStats,
 } from "@/lib/leaderboard-data";
 import { WaitlistCTA } from "@/components/waitlist-cta";
+import { OperatorLeaderboard } from "@/components/operator-leaderboard";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -100,6 +101,17 @@ export default function LeaderboardPage() {
       </Section>
 
       <Section secondary>
+        <h2 className="text-2xl font-bold text-foreground mb-4">
+          Operator Rankings
+        </h2>
+        <p className="text-muted-foreground mb-6">
+          Live operator rankings fetched from the darkreach API, ranked by
+          compute credit. Trust levels reflect verification history.
+        </p>
+        <OperatorLeaderboard />
+      </Section>
+
+      <Section>
         <h2 className="text-2xl font-bold text-foreground mb-4">Team Standings</h2>
         <div className="overflow-x-auto rounded-lg border border-border">
           <table className="w-full text-sm">

@@ -24,8 +24,7 @@
  */
 
 import { useEffect, useState, useCallback } from "react";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
+import { API_BASE } from "@/lib/format";
 
 /** Summary of a prime-hunting project (maps to `projects` table row). */
 export interface ProjectSummary {

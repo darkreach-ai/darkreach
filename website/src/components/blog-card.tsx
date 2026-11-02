@@ -9,7 +9,7 @@ export function BlogCard({ post }: { post: BlogPost }) {
     <Link href={`/blog/${post.slug}`}>
       <Card hover className="group">
         <div className="flex items-center gap-2 text-xs text-muted-foreground mb-3">
-          <time>{post.date}</time>
+          <time dateTime={post.date}>{post.date}</time>
           <span>·</span>
           <span>{post.author}</span>
           {post.readingTime && (

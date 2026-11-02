@@ -1,0 +1,105 @@
+# Riesel conjecture base 3 — Conjectures 'R Us (CRUS)
+#
+# Problem: Find primes of the form k*3^n-1 for specific k-values to help
+# prove the Riesel conjecture for base 3.
+#
+# The conjectured smallest Riesel number for base 3 is k = 63064644938.
+# To prove this, we must find at least one prime k*3^n-1 for every even k
+# below this bound that is not excluded by covering sets or algebraic factors.
+# As of 2025, approximately 6739 k-values remain without a known prime
+# (searched to n >= 25K for k <= 1.5G).
+#
+# This campaign targets a selection of small remaining k-values where a prime
+# discovery is most tractable. The kbn engine tests both k*b^n+1 and k*b^n-1
+# but discoveries of the -1 form are what advance the Riesel conjecture.
+#
+# For base 3 with k <= 500, the known remaining k-values without a prime
+# for k*3^n-1 include: k = 119, 313, 357 (from the extended Riesel problem).
+# Note that 357 = 119*3, so its prime would be equivalent to k=119's.
+#
+# Reference: http://www.noprimeleftbehind.net/crus/Riesel-conjectures.htm
+
+[project]
+name = "crus-riesel-base3"
+description = "Search for primes k*3^n-1 to advance the Riesel base-3 conjecture (CRUS)"
+objective = "survey"
+form = "kbn"
+tags = ["riesel", "crus", "non-base-2", "base-3"]
+
+[target]
+target_digits = 100000
+range_start = 25000
+range_end = 500000
+
+[competitive]
+current_record_holder = "CRUS / SRBase"
+reference_urls = [
+    "http://www.noprimeleftbehind.net/crus/Riesel-conjectures.htm",
+    "https://www.rieselprime.de/Others/CRUS_tab.htm",
+]
+
+# Each phase searches a different remaining k-value across a shared n-range.
+# The kbn engine tests both +1 and -1 forms; Riesel primes are k*3^n-1.
+[strategy]
+auto_strategy = false
+
+[[strategy.phases]]
+name = "k119-sweep"
+description = "Search k=119, base=3, n=25000..250000 for k*3^n-1 prime"
+search_params = { search_type = "kbn", k = 119, base = 3, min_n = 25000, max_n = 250000 }
+block_size = 50000
+completion = "first_prime_found"
+
+[[strategy.phases]]
+name = "k119-extend"
+description = "Extend k=119 search to n=500000 if no prime found"
+search_params = { search_type = "kbn", k = 119, base = 3, min_n = 250001, max_n = 500000 }
+block_size = 50000
+depends_on = ["k119-sweep"]
+activation_condition = "previous_phase_found_zero"
+completion = "all_blocks_done"
+
+[[strategy.phases]]
+name = "k313-sweep"
+description = "Search k=313, base=3, n=25000..250000 for k*3^n-1 prime"
+search_params = { search_type = "kbn", k = 313, base = 3, min_n = 25000, max_n = 250000 }
+block_size = 50000
+completion = "first_prime_found"
+
+[[strategy.phases]]
+name = "k313-extend"
+description = "Extend k=313 search to n=500000 if no prime found"
+search_params = { search_type = "kbn", k = 313, base = 3, min_n = 250001, max_n = 500000 }
+block_size = 50000
+depends_on = ["k313-sweep"]
+activation_condition = "previous_phase_found_zero"
+completion = "all_blocks_done"
+
+[[strategy.phases]]
+name = "k357-sweep"
+description = "Search k=357, base=3, n=25000..250000 for k*3^n-1 prime (note: 357=119*3)"
+search_params = { search_type = "kbn", k = 357, base = 3, min_n = 25000, max_n = 250000 }
+block_size = 50000
+completion = "first_prime_found"
+
+[[strategy.phases]]
+name = "k357-extend"
+description = "Extend k=357 search to n=500000 if no prime found"
+search_params = { search_type = "kbn", k = 357, base = 3, min_n = 250001, max_n = 500000 }
+block_size = 50000
+depends_on = ["k357-sweep"]
+activation_condition = "previous_phase_found_zero"
+completion = "all_blocks_done"
+
+[infrastructure]
+min_cores = 4
+recommended_cores = 8
+
+[budget]
+max_cost_usd = 100.0
+cost_alert_threshold_usd = 50.0
+cloud_rate_usd_per_core_hour = 0.04
+
+[workers]
+min_workers = 1
+recommended_workers = 4

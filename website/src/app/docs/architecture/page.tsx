@@ -181,7 +181,7 @@ export default function ArchitecturePage() {
         <tbody>
           <tr>
             <td><code>routes_health.rs</code></td>
-            <td>/api/health</td>
+            <td>/healthz, /readyz</td>
             <td>Health check, readiness probes</td>
           </tr>
           <tr>

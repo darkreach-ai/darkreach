@@ -349,8 +349,11 @@ pub enum Decision {
         reasoning: String,
         confidence: f64,
     },
-    PauseProject {
-        project_id: i64,
+    /// Pause a stalled search job. This is a job-level action (not project-level).
+    /// Triggered by the drift detector when a job has been running >30 min with 0
+    /// candidates tested, indicating a stuck worker or misconfigured search.
+    PauseStalledJob {
+        job_id: i64,
         reason: String,
     },
     ExtendProject {
@@ -407,18 +410,44 @@ struct SafetyLimits {
     min_budget_for_project: f64,
 }
 
+/// Check whether a decision passes safety constraints.
+///
+/// Every decision type has an explicit branch. The previous catch-all
+/// `_ => true` silently bypassed safety for `ExtendProject`,
+/// `RebalanceFleet`, `VerifyResult`, and `RequestAgentIntel`.
 fn safety_check(decision: &Decision, limits: &SafetyLimits) -> bool {
     match decision {
         Decision::CreateProject { budget_usd, .. } => {
+            // Must have enough remaining budget to justify a new project.
             limits.budget_remaining >= limits.min_budget_for_project
                 && *budget_usd <= limits.budget_remaining
         }
+        Decision::ExtendProject { .. } => {
+            // Extending a project costs more compute. Block if budget is
+            // below the minimum threshold needed for a meaningful extension.
+            limits.budget_remaining >= limits.min_budget_for_project * 0.25
+        }
         Decision::AbandonProject { .. } => {
-            // Abandoning requires careful review — only allow if no primes found
+            // Always allow — abandoning frees resources.
             true
         }
+        Decision::RebalanceFleet { moves, .. } => {
+            // Block empty rebalance moves (no-op decisions that add noise).
+            !moves.is_empty()
+        }
+        Decision::PauseStalledJob { .. } => {
+            // Pausing stalled jobs is always allowed — it's a safety action.
+            true
+        }
+        Decision::VerifyResult { .. } => {
+            // Verification is cheap and important — always allowed.
+            true
+        }
+        Decision::RequestAgentIntel { .. } => {
+            // Agent tasks consume budget. Require minimum remaining budget.
+            limits.budget_remaining >= limits.min_budget_for_project * 0.1
+        }
         Decision::NoAction { .. } => true,
-        _ => true,
     }
 }
 
@@ -568,13 +597,37 @@ impl AiEngine {
             db.get_monthly_strategy_spend(),
         );
 
-        let records = records.unwrap_or_default();
-        let workers = workers.unwrap_or_default();
-        let active_jobs = active_jobs.unwrap_or_default();
-        let active_projects = active_projects.unwrap_or_default();
-        let yield_rates = yield_rates.unwrap_or_default();
-        let calibrations = calibrations.unwrap_or_default();
-        let monthly_spend = monthly_spend.unwrap_or(0.0);
+        // Unwrap parallel query results, logging warnings for failures.
+        // The snapshot degrades gracefully (empty data) rather than aborting the
+        // entire tick, but operators should know about persistent query failures.
+        let records = records.unwrap_or_else(|e| {
+            warn!(error = %e, "ai_engine/observe: failed to load records");
+            vec![]
+        });
+        let workers = workers.unwrap_or_else(|e| {
+            warn!(error = %e, "ai_engine/observe: failed to load workers");
+            vec![]
+        });
+        let active_jobs = active_jobs.unwrap_or_else(|e| {
+            warn!(error = %e, "ai_engine/observe: failed to load search jobs");
+            vec![]
+        });
+        let active_projects = active_projects.unwrap_or_else(|e| {
+            warn!(error = %e, "ai_engine/observe: failed to load projects");
+            vec![]
+        });
+        let yield_rates = yield_rates.unwrap_or_else(|e| {
+            warn!(error = %e, "ai_engine/observe: failed to load yield rates");
+            vec![]
+        });
+        let calibrations = calibrations.unwrap_or_else(|e| {
+            warn!(error = %e, "ai_engine/observe: failed to load calibrations");
+            vec![]
+        });
+        let monthly_spend = monthly_spend.unwrap_or_else(|e| {
+            warn!(error = %e, "ai_engine/observe: failed to load monthly spend");
+            0.0
+        });
 
         let worker_count = workers.len() as u32;
         let total_cores: u32 = workers.iter().map(|w| w.cores as u32).sum();
@@ -745,12 +798,24 @@ impl AiEngine {
 
             // 7. Competition: penalty for forms with active external searches
             // Populated from agent memory (category=competitive_intel, key=competitive_intel:{form})
-            let competition = snapshot
+            let competition = match snapshot
                 .competition_intel
                 .iter()
                 .find(|m| m.key == format!("competitive_intel:{}", form))
-                .and_then(|m| m.value.parse::<f64>().ok())
-                .unwrap_or(0.5); // neutral default when no intel available
+            {
+                Some(m) => match m.value.parse::<f64>() {
+                    Ok(v) => v.clamp(0.0, 1.0),
+                    Err(_) => {
+                        warn!(
+                            form,
+                            value = %m.value,
+                            "ai_engine: unparseable competition score, using neutral 0.5"
+                        );
+                        0.5
+                    }
+                },
+                None => 0.5, // neutral default when no intel available
+            };
 
             // Weighted composite score
             let w = &self.scoring_weights;
@@ -858,8 +923,8 @@ impl AiEngine {
         // 1. Handle stalled jobs
         for &job_id in &analysis.drift.stalled_jobs {
             if let Some(job) = snapshot.active_jobs.iter().find(|j| j.id == job_id) {
-                decisions.push(Decision::PauseProject {
-                    project_id: job_id,
+                decisions.push(Decision::PauseStalledJob {
+                    job_id,
                     reason: format!(
                         "Job {} ({}) stalled: running >30min with 0 tested",
                         job_id, job.search_type
@@ -1154,23 +1219,19 @@ impl AiEngine {
                         scores,
                     )
                 }
-                Decision::PauseProject { project_id, reason } => {
-                    // Try pausing as a search job first (stalled jobs use job_id)
-                    if let Err(e) = db
-                        .update_search_job_status(*project_id, "paused", None)
-                        .await
-                    {
-                        warn!(id = project_id, error = %e, "ai_engine: failed to pause job");
+                Decision::PauseStalledJob { job_id, reason } => {
+                    if let Err(e) = db.update_search_job_status(*job_id, "paused", None).await {
+                        warn!(job_id, error = %e, "ai_engine: failed to pause stalled job");
                     } else {
-                        info!(id = project_id, "ai_engine: paused stalled job");
+                        info!(job_id, "ai_engine: paused stalled job");
                     }
                     (
-                        "pause_project",
+                        "pause_stalled_job",
                         None,
                         "executed",
                         reason.as_str(),
                         0.8,
-                        Some(serde_json::json!({"project_id": project_id})),
+                        Some(serde_json::json!({"job_id": job_id})),
                         None,
                     )
                 }

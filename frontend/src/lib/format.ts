@@ -71,10 +71,6 @@ export const formLabels: Record<string, string> = {
 };
 
 /**
- * Formats an ISO timestamp as a human-readable relative time string.
- * Produces compact output: "just now", "3m ago", "2h 15m ago", "5d ago", "2mo ago".
- */
-/**
  * Formats a credit amount as a compact human-readable string.
  * Uses K/M suffixes for large values (e.g., 1500 -> "1.5K", 2000000 -> "2.0M").
  * Small values are formatted with locale-specific thousand separators.
@@ -85,6 +81,10 @@ export function formatCredits(credits: number): string {
   return credits.toLocaleString();
 }
 
+/**
+ * Formats an ISO timestamp as a human-readable relative time string.
+ * Produces compact output: "just now", "3m ago", "2h 15m ago", "5d ago", "2mo ago".
+ */
 export function relativeTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
   const mins = Math.floor(diff / 60000);

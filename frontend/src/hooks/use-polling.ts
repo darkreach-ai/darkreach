@@ -89,7 +89,7 @@ export function usePolling(): WsData {
     return () => clearInterval(intervalRef.current);
   }, [poll]);
 
-  const sendMessage = useCallback(() => {
+  const sendMessage = useCallback((_msg: object) => {
     // no-op: polling mode is read-only
   }, []);
 

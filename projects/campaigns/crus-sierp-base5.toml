@@ -1,0 +1,122 @@
+# Sierpinski conjecture base 5 — Conjectures 'R Us (CRUS)
+#
+# Problem: Find primes of the form k*5^n+1 for specific even k-values to help
+# prove the Sierpinski conjecture for base 5.
+#
+# The conjectured smallest even Sierpinski number for base 5 is k = 159986.
+# To prove this, we must find at least one prime k*5^n+1 for every even k
+# below this bound. As of 2025, approximately 45 even k-values remain.
+#
+# Known remaining k-values (even) from PrimeGrid / CRUS:
+#   6436, 7528, 10918, 26798, 31712, 36412, 41738, 44348, 44738, 45748,
+#   58642, 60394, 62698, 64258, 67612, 67748, 71492, 74632, 76724, 83936,
+#   84284, 90056, 92906, 93484, 105464, 126134, 139196, 152588
+# (some may have been eliminated since the last public status update)
+#
+# This campaign targets the smallest remaining k-values where a prime is
+# most likely to be found at lower n-values. The kbn engine tests both
+# k*b^n+1 and k*b^n-1; discoveries of the +1 form advance the conjecture.
+#
+# Reference: https://primegrid.fandom.com/wiki/Sierpinski/Riesel_Base_5_Problem
+
+[project]
+name = "crus-sierp-base5"
+description = "Search for primes k*5^n+1 to advance the Sierpinski base-5 conjecture (CRUS)"
+objective = "survey"
+form = "kbn"
+tags = ["sierpinski", "crus", "non-base-2", "base-5"]
+
+[target]
+target_digits = 100000
+range_start = 25000
+range_end = 500000
+
+[competitive]
+current_record_holder = "CRUS / PrimeGrid"
+reference_urls = [
+    "http://www.noprimeleftbehind.net/crus/Sierp-conjectures.htm",
+    "https://primegrid.fandom.com/wiki/Sierpinski/Riesel_Base_5_Problem",
+    "https://www.rieselprime.de/Others/CRUS_tab.htm",
+]
+
+# Each phase searches a different remaining even k-value.
+# Phases are independent — they can run in parallel on different workers.
+[strategy]
+auto_strategy = false
+
+[[strategy.phases]]
+name = "k6436-sweep"
+description = "Search k=6436, base=5, n=25000..250000 for k*5^n+1 prime"
+search_params = { search_type = "kbn", k = 6436, base = 5, min_n = 25000, max_n = 250000 }
+block_size = 50000
+completion = "first_prime_found"
+
+[[strategy.phases]]
+name = "k6436-extend"
+description = "Extend k=6436 search to n=500000 if no prime found"
+search_params = { search_type = "kbn", k = 6436, base = 5, min_n = 250001, max_n = 500000 }
+block_size = 50000
+depends_on = ["k6436-sweep"]
+activation_condition = "previous_phase_found_zero"
+completion = "all_blocks_done"
+
+[[strategy.phases]]
+name = "k7528-sweep"
+description = "Search k=7528, base=5, n=25000..250000 for k*5^n+1 prime"
+search_params = { search_type = "kbn", k = 7528, base = 5, min_n = 25000, max_n = 250000 }
+block_size = 50000
+completion = "first_prime_found"
+
+[[strategy.phases]]
+name = "k7528-extend"
+description = "Extend k=7528 search to n=500000 if no prime found"
+search_params = { search_type = "kbn", k = 7528, base = 5, min_n = 250001, max_n = 500000 }
+block_size = 50000
+depends_on = ["k7528-sweep"]
+activation_condition = "previous_phase_found_zero"
+completion = "all_blocks_done"
+
+[[strategy.phases]]
+name = "k10918-sweep"
+description = "Search k=10918, base=5, n=25000..250000 for k*5^n+1 prime"
+search_params = { search_type = "kbn", k = 10918, base = 5, min_n = 25000, max_n = 250000 }
+block_size = 50000
+completion = "first_prime_found"
+
+[[strategy.phases]]
+name = "k10918-extend"
+description = "Extend k=10918 search to n=500000 if no prime found"
+search_params = { search_type = "kbn", k = 10918, base = 5, min_n = 250001, max_n = 500000 }
+block_size = 50000
+depends_on = ["k10918-sweep"]
+activation_condition = "previous_phase_found_zero"
+completion = "all_blocks_done"
+
+[[strategy.phases]]
+name = "k26798-sweep"
+description = "Search k=26798, base=5, n=25000..250000 for k*5^n+1 prime"
+search_params = { search_type = "kbn", k = 26798, base = 5, min_n = 25000, max_n = 250000 }
+block_size = 50000
+completion = "first_prime_found"
+
+[[strategy.phases]]
+name = "k26798-extend"
+description = "Extend k=26798 search to n=500000 if no prime found"
+search_params = { search_type = "kbn", k = 26798, base = 5, min_n = 250001, max_n = 500000 }
+block_size = 50000
+depends_on = ["k26798-sweep"]
+activation_condition = "previous_phase_found_zero"
+completion = "all_blocks_done"
+
+[infrastructure]
+min_cores = 4
+recommended_cores = 8
+
+[budget]
+max_cost_usd = 100.0
+cost_alert_threshold_usd = 50.0
+cloud_rate_usd_per_core_hour = 0.04
+
+[workers]
+min_workers = 1
+recommended_workers = 4

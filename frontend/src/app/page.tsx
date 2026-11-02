@@ -15,7 +15,7 @@
  * Data sources: Supabase (stats, primes, charts) + WebSocket (fleet).
  */
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useWs } from "@/contexts/websocket-context";
 import { useStats } from "@/hooks/use-stats";
 import { usePrimes } from "@/hooks/use-primes";
@@ -43,7 +43,7 @@ import { HostNodeCard, type HostNode } from "@/components/host-node-card";
 import { ServiceStatusCard } from "@/components/service-status-card";
 import { AgentControllerCard } from "@/components/agent-controller-card";
 import { numberWithCommas } from "@/lib/format";
-import type { WorkerStatus, ManagedSearch, Deployment, HardwareMetrics } from "@/hooks/use-websocket";
+import type { WorkerStatus, ManagedSearch, Deployment, HardwareMetrics, Status } from "@/hooks/use-websocket";
 import { MetricsBar } from "@/components/metrics-bar";
 import { WorkerDetailDialog } from "@/components/worker-detail-dialog";
 import { PrimesTable } from "@/components/primes-table";
@@ -127,6 +127,25 @@ function groupByHost(
   return nodes;
 }
 
+/**
+ * Compute search progress percentage from a checkpoint. Returns null if
+ * progress cannot be determined (unknown form or missing range fields).
+ */
+function checkpointProgress(status: Status | null): number | null {
+  const cp = status?.checkpoint;
+  if (!cp || !status?.active) return null;
+  let pct: number | null = null;
+  if (cp.type === "Factorial" && cp.start != null && cp.end != null && cp.last_n != null) {
+    pct = ((cp.last_n - cp.start) / (cp.end - cp.start)) * 100;
+  } else if (cp.type === "Kbn" && cp.min_n != null && cp.max_n != null && cp.last_n != null) {
+    pct = ((cp.last_n - cp.min_n) / (cp.max_n - cp.min_n)) * 100;
+  } else if (cp.type === "Palindromic" && cp.min_digits != null && cp.max_digits != null && cp.digit_count != null) {
+    pct = ((cp.digit_count - cp.min_digits) / (cp.max_digits - cp.min_digits)) * 100;
+  }
+  if (pct == null) return null;
+  return Math.min(100, Math.max(0, pct));
+}
+
 export default function Dashboard() {
   // Coordination data from WebSocket
   const {
@@ -162,6 +181,7 @@ export default function Dashboard() {
   // Infrastructure grouping
   const hostNodes = groupByHost(fleet, coordinator, searches, deployments);
   const serverCount = hostNodes.filter((n) => n.workers.length > 0 || n.isCoordinator).length;
+  const progressPct = useMemo(() => checkpointProgress(status), [status]);
 
   function scrollToSection(id: string) {
     const section = document.getElementById(id);
@@ -257,48 +277,20 @@ export default function Dashboard() {
                 </>
               )}
             </span>
-            {(() => {
-              const cp = status?.checkpoint;
-              if (!cp || !status?.active) return null;
-              let pct: number | null = null;
-              if (cp.type === "Factorial" && cp.start != null && cp.end != null && cp.last_n != null) {
-                pct = ((cp.last_n - cp.start) / (cp.end - cp.start)) * 100;
-              } else if (cp.type === "Kbn" && cp.min_n != null && cp.max_n != null && cp.last_n != null) {
-                pct = ((cp.last_n - cp.min_n) / (cp.max_n - cp.min_n)) * 100;
-              } else if (cp.type === "Palindromic" && cp.min_digits != null && cp.max_digits != null && cp.digit_count != null) {
-                pct = ((cp.digit_count - cp.min_digits) / (cp.max_digits - cp.min_digits)) * 100;
-              }
-              if (pct == null) return null;
-              pct = Math.min(100, Math.max(0, pct));
-              return (
-                <span className="text-xs text-muted-foreground tabular-nums">
-                  {pct.toFixed(1)}%
-                </span>
-              );
-            })()}
+            {progressPct != null && (
+              <span className="text-xs text-muted-foreground tabular-nums">
+                {progressPct.toFixed(1)}%
+              </span>
+            )}
           </div>
-          {(() => {
-            const cp = status?.checkpoint;
-            if (!cp || !status?.active) return null;
-            let pct: number | null = null;
-            if (cp.type === "Factorial" && cp.start != null && cp.end != null && cp.last_n != null) {
-              pct = ((cp.last_n - cp.start) / (cp.end - cp.start)) * 100;
-            } else if (cp.type === "Kbn" && cp.min_n != null && cp.max_n != null && cp.last_n != null) {
-              pct = ((cp.last_n - cp.min_n) / (cp.max_n - cp.min_n)) * 100;
-            } else if (cp.type === "Palindromic" && cp.min_digits != null && cp.max_digits != null && cp.digit_count != null) {
-              pct = ((cp.digit_count - cp.min_digits) / (cp.max_digits - cp.min_digits)) * 100;
-            }
-            if (pct == null) return null;
-            pct = Math.min(100, Math.max(0, pct));
-            return (
-              <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-green-500 rounded-full transition-all duration-1000"
-                  style={{ width: `${pct}%` }}
-                />
-              </div>
-            );
-          })()}
+          {progressPct != null && (
+            <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+              <div
+                className="h-full bg-green-500 rounded-full transition-all duration-1000"
+                style={{ width: `${progressPct}%` }}
+              />
+            </div>
+          )}
         </CardContent>
       </Card>
 

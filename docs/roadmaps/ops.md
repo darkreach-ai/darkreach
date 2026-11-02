@@ -4,6 +4,12 @@ Deployment, build optimization, network management, and hardware-specific tuning
 
 **Key files:** `deploy/`
 
+> **Status (Feb 2026):**
+> - **Production running:** Coordinator (CX22) + ML engine live on Hetzner. AI engine OODA loop active.
+> - **deploy.sh hardening:** Uses `sudo` for apt and systemctl operations, guards `.env` copy when already in install directory, supports non-root deploy user.
+> - **Website:** `website/` directory deployed to Vercel (`website/vercel.json`), serving `darkreach.ai` with ~22 pages (landing, docs, blog, research, operators, download, leaderboard, status, about, platform).
+> - **ML engine:** Migration 059 added Thompson Sampling bandits, GP cost model, Bayesian optimization, and node intelligence tables.
+
 ---
 
 ## Apple Silicon Optimization

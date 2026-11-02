@@ -32,14 +32,14 @@ const groups: EndpointGroup[] = [
       "form": "factorial",
       "expression": "147855! + 1",
       "digits": 636919,
-      "proof_type": "pocklington",
-      "certificate": { ... },
-      "discovered_at": "2026-02-14T12:00:00Z"
+      "found_at": "2026-02-14T12:00:00Z",
+      "proof_method": "pocklington",
+      "tags": ["verified-tier-1"]
     }
   ],
   "total": 2847,
-  "page": 1,
-  "per_page": 50
+  "limit": 50,
+  "offset": 0
 }`,
       },
       {
@@ -50,13 +50,15 @@ const groups: EndpointGroup[] = [
       {
         method: "GET",
         path: "/api/stats",
-        description: "Aggregate statistics: total primes, candidates tested, active workers.",
+        description: "Aggregate statistics: total primes, per-form counts, and largest prime.",
         response: `{
-  "total_primes": 2847,
-  "candidates_tested": 14200000000,
-  "active_workers": 38,
-  "compute_hours": 127000,
-  "search_forms": 12
+  "total": 2847,
+  "by_form": [
+    { "form": "kbn", "count": 1200 },
+    { "form": "palindromic", "count": 800 }
+  ],
+  "largest_digits": 636919,
+  "largest_expression": "147855! + 1"
 }`,
       },
     ],
@@ -414,21 +416,35 @@ const groups: EndpointGroup[] = [
     endpoints: [
       {
         method: "GET",
-        path: "/api/health",
-        description: "Health check and readiness probe.",
+        path: "/healthz",
+        description: "Liveness probe: returns 200 if the process is running.",
+      },
+      {
+        method: "GET",
+        path: "/readyz",
+        description: "Readiness probe: checks database, read replica, and Redis connectivity.",
+      },
+      {
+        method: "GET",
+        path: "/healthz/deep",
+        description: "Deep health check with per-component status (database, disk, memory, checkpoint).",
+        response: `{
+  "status": "ok",
+  "checks": {
+    "database": { "status": "ok", "latency_ms": 3 },
+    "disk": { "status": "ok", "free_gb": 42.1 },
+    "memory": { "status": "ok", "usage_percent": 54.2 },
+    "checkpoint": { "status": "ok", "age_seconds": 45 }
+  }
+}`,
       },
       {
         method: "GET",
         path: "/api/status",
-        description: "Coordinator status with uptime, version, and worker count.",
+        description: "Coordinator status with active flag and checkpoint data.",
         response: `{
-  "status": "healthy",
-  "version": "0.1.0",
-  "uptime_seconds": 86400,
-  "database": "connected",
-  "workers_online": 38,
-  "active_searches": 5,
-  "ai_engine": "running"
+  "active": true,
+  "checkpoint": { ... }
 }`,
       },
     ],

@@ -276,6 +276,7 @@ pub struct AgentTaskRow {
     pub template_name: Option<String>,
     pub on_child_failure: String,
     pub role_name: Option<String>,
+    pub retry_count: i32,
 }
 
 #[derive(Serialize, Deserialize, sqlx::FromRow)]
